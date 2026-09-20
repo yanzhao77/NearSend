@@ -32,6 +32,7 @@ import 'package:nearsend/core/storage/commit_window.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/storage_schema.dart';
+import 'package:nearsend/core/storage/write_fence.dart';
 
 /// Whether a chunk's bytes are durably committed.
 enum ChunkState {
@@ -187,9 +188,16 @@ class FrozenFileRegistration {
 
 /// Reads and writes resumable progress for one database.
 class ChunkRepository {
-  ChunkRepository(this.database);
+  /// [fence] may be supplied so a caller that already has one keeps a single view of who is
+  /// writing. Owning it here rather than letting each caller make its own matters: two
+  /// fences would each believe they arbitrate the same file, which is the same as none.
+  ChunkRepository(this.database, {WriteFence? fence})
+    : fence = fence ?? WriteFence();
 
   final NearSendDatabase database;
+
+  /// §8's per-file write serialisation and resume hand-over.
+  final WriteFence fence;
 
   /// §8's checkpoint counter, on `tasks` because that is where its partner `lease_epoch`
   /// lives.
@@ -380,13 +388,70 @@ class ChunkRepository {
     return readChunk(fileId, index);
   }
 
+  /// §8's write order for one chunk, including the file lock.
+  ///
+  /// §8 puts the file lock immediately after authentication and before any byte is written,
+  /// and it is not optional: without it two writers interleave their bytes into one staging
+  /// file, and the loser's are already on disk by the time its commit is refused. This is
+  /// the method endpoint code should call; [writeChunkThroughWindow] is the inner layer and
+  /// deliberately does not take the lock, so that the lock can be tested on its own.
+  Future<ChunkWriteOutcome> writeChunkWithFileLock({
+    required String taskId,
+    required String fileId,
+    required int index,
+    required Uint8List bytes,
+    required int leaseEpoch,
+    required DurableChunkSink sink,
+    required ChunkCommitWindow window,
+    int? nowMillis,
+    bool atBoundary = false,
+  }) => fence.withFileWrite<ChunkWriteOutcome>(
+    taskId: taskId,
+    fileId: fileId,
+    leaseEpoch: leaseEpoch,
+    write: () => writeChunkThroughWindow(
+      taskId: taskId,
+      fileId: fileId,
+      index: index,
+      bytes: bytes,
+      leaseEpoch: leaseEpoch,
+      sink: sink,
+      window: window,
+      nowMillis: nowMillis,
+      atBoundary: atBoundary,
+    ),
+  );
+
+  /// §8's resume hand-over, in the order the protocol states it: revoke the current
+  /// session, **wait for its writes to stop**, then allocate the next generation.
+  ///
+  /// Offered as one call because the order is the guarantee. Advancing the generation first
+  /// would let a write that is already inside `writeVerifyAndSync` keep writing into the
+  /// file the new generation is about to use, which is precisely what "等待旧写入停止"
+  /// exists to prevent.
+  ///
+  /// The caller still has to verify the existing data (§8's next step) before trusting it.
+  /// A [timeout] that expires throws rather than allocating the generation; see
+  /// [WriteFence.revokeAndDrain].
+  Future<int> revokeAndAdvanceLeaseAfterWritesStop({
+    required String taskId,
+    required int currentLeaseEpoch,
+    Duration? timeout,
+  }) async {
+    await fence.revokeAndDrain(
+      taskId: taskId,
+      leaseEpoch: currentLeaseEpoch,
+      timeout: timeout,
+    );
+    return revokeAndAdvanceLease(taskId);
+  }
+
   /// Writes, verifies and durably syncs one chunk, then checkpoints the window if §8
   /// requires it.
   ///
-  /// This is §8's write path minus the two steps that belong to the endpoint layer:
-  /// authentication/authorization and the per-file lock ("认证和授权→文件锁→再次检查 epoch→
-  /// 写入并验证长度/块摘要→受控待提交队列→syncData→SQLite 事务提交块标志和 checkpointSeq→
-  /// 发布 committed").
+  /// This is §8's write path minus the steps that belong to the endpoint layer:
+  /// authentication/authorization and the per-file lock. Use [writeChunkWithFileLock] unless
+  /// the caller is already holding the file's slot.
   ///
   /// The answer distinguishes §8's two states honestly. A chunk whose bytes are synced but
   /// whose checkpoint has not run yet is `verified_pending`: §8 says that state "只证明本次块
