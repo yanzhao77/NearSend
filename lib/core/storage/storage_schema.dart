@@ -1,0 +1,150 @@
+/// The receiver's SQLite schema, `docs/architecture/SYSTEM_ARCHITECTURE.md` §8.
+///
+/// ## Why the schema is written out rather than generated
+///
+/// The tables encode the project's core storage guarantees, and each one is deliberate:
+///
+/// * `chunks` is the **sole authority** for resumable progress. `AGENTS.md` §2 rule 5
+///   forbids deriving recovery from a byte counter, so there is deliberately no
+///   `received_bytes` or `written_bytes` column that a recovery path could reach for.
+/// * `chunks.state` distinguishes an uncommitted block from a committed one, because a
+///   block that was written but not durably committed must be re-sent rather than
+///   trusted.
+/// * `idempotency` is keyed by task, operation and credential fingerprint, matching the
+///   scope from protocol §9, so a request id from before a re-pairing cannot collide
+///   with one after it.
+/// * `tasks.lease_epoch` is the write generation; a commit that does not present the
+///   current generation is refused.
+///
+/// Nothing here stores recovery secrets, keys or tokens: `AGENTS.md` §5 keeps those in
+/// platform secure storage. The schema keeps only a credential *fingerprint*.
+library;
+
+import 'package:sqlite3/sqlite3.dart';
+
+/// The schema definition and its version.
+abstract final class StorageSchema {
+  /// The version this build writes and understands.
+  ///
+  /// Monotonic. A database whose stored version is **higher** than this is refused
+  /// rather than migrated downwards, because a newer build may have written structures
+  /// this one would corrupt by ignoring.
+  static const int currentVersion = 1;
+
+  /// The table holding the single row of schema metadata.
+  static const String metaTable = 'schema_info';
+
+  /// Statement that creates the metadata table, which must exist before versioning.
+  static const String createMetaTable =
+      '''
+CREATE TABLE IF NOT EXISTS $metaTable (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  version    INTEGER NOT NULL,
+  applied_at INTEGER NOT NULL
+);''';
+
+  /// Every table this schema version defines, in creation order.
+  ///
+  /// Exposed as data so tests can assert the set of tables without duplicating SQL.
+  static const Map<String, String> tables = <String, String>{
+    'tasks': '''
+CREATE TABLE tasks (
+  task_id          TEXT    PRIMARY KEY,
+  role             TEXT    NOT NULL,
+  direction        TEXT    NOT NULL,
+  state            TEXT    NOT NULL,
+  protocol_major   INTEGER NOT NULL,
+  protocol_minor   INTEGER NOT NULL,
+  lease_epoch      INTEGER NOT NULL DEFAULT 0,
+  manifest_digest  TEXT,
+  created_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL
+);''',
+
+    'files': '''
+CREATE TABLE files (
+  file_id                TEXT    PRIMARY KEY,
+  task_id                TEXT    NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+  relative_path          TEXT    NOT NULL,
+  size_bytes             INTEGER NOT NULL,
+  chunk_size_bytes       INTEGER NOT NULL,
+  chunk_count            INTEGER NOT NULL,
+  file_sha256            TEXT    NOT NULL,
+  chunk_manifest_digest  TEXT    NOT NULL,
+  export_state           TEXT    NOT NULL,
+  created_at             INTEGER NOT NULL
+);''',
+
+    // The authority table. `state` is missing/committed only; there is no third
+    // "written" state, because "written but not synced" is not progress.
+    'chunks': '''
+CREATE TABLE chunks (
+  file_id       TEXT    NOT NULL REFERENCES files(file_id) ON DELETE CASCADE,
+  idx           INTEGER NOT NULL,
+  offset_bytes  INTEGER NOT NULL,
+  length_bytes  INTEGER NOT NULL,
+  sha256        TEXT    NOT NULL,
+  state         TEXT    NOT NULL CHECK (state IN ('missing', 'committed')),
+  committed_at  INTEGER,
+  PRIMARY KEY (file_id, idx)
+);''',
+
+    'peers': '''
+CREATE TABLE peers (
+  peer_id              TEXT PRIMARY KEY,
+  display_name         TEXT,
+  identity_fingerprint TEXT NOT NULL,
+  authorized           INTEGER NOT NULL DEFAULT 0,
+  last_seen_at         INTEGER
+);''',
+
+    'idempotency': '''
+CREATE TABLE idempotency (
+  transfer_id            TEXT    NOT NULL,
+  operation              TEXT    NOT NULL,
+  credential_fingerprint TEXT    NOT NULL,
+  request_id             TEXT    NOT NULL,
+  request_digest         TEXT    NOT NULL,
+  state                  TEXT    NOT NULL CHECK (state IN ('in_flight', 'completed')),
+  lease_epoch            INTEGER NOT NULL,
+  result_json            TEXT,
+  created_at             INTEGER NOT NULL,
+  expires_at             INTEGER,
+  PRIMARY KEY (transfer_id, operation, credential_fingerprint, request_id)
+);''',
+
+    'exports': '''
+CREATE TABLE exports (
+  file_id       TEXT    PRIMARY KEY REFERENCES files(file_id) ON DELETE CASCADE,
+  target_uri    TEXT    NOT NULL,
+  result        TEXT    NOT NULL,
+  recorded_at   INTEGER NOT NULL
+);''',
+  };
+
+  /// Indexes this schema version defines.
+  static const Map<String, String> indexes = <String, String>{
+    'chunks_missing':
+        'CREATE INDEX chunks_file_state ON chunks (file_id, state);',
+    'files_by_task': 'CREATE INDEX files_task ON files (task_id);',
+    'idempotency_expiry':
+        'CREATE INDEX idempotency_expires ON idempotency (expires_at);',
+  };
+
+  /// Applies schema version 1 to [db].
+  ///
+  /// Called only by the migration framework, inside a transaction it controls, so that
+  /// a failure part way through leaves the database untouched.
+  static void applyVersion1(Database db) {
+    db.execute(createMetaTable);
+    for (final String ddl in tables.values) {
+      db.execute(ddl);
+    }
+    for (final String ddl in indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
+  /// The names of every table in this schema version, including the metadata table.
+  static Set<String> get tableNames => <String>{metaTable, ...tables.keys};
+}
