@@ -80,7 +80,7 @@
 | --- | --- | --- | --- |
 | T01-01 Flutter 工程基线 | 无 | 已完成 | Android/Windows 启动同一壳应用，版本可追踪 |
 | T01-02 CI 与检查 | T01-01 | 已完成 | format/analyze/test/build 可重复运行 |
-| T02-01 Dart canonical manifest | T01-01、D03/D04 | 待验证（PR 待合并） | 固定向量正反例一致，不复制 Python 实现逻辑 |
+| T02-01 Dart canonical manifest | T01-01、D03/D04 | 已完成 | 固定向量正反例一致，不复制 Python 实现逻辑 |
 | T02-02 状态/错误/版本模型 | T01-01、D03 | 就绪（依赖 T01-01 工程） | 模型和序列化测试通过，未知字段规则明确 |
 | T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 待澄清 | durable 提交顺序、迁移和故障测试通过 |
 | T03-01 同网二维码配对 | T01-01/T02-02/B02 | 阻塞 | pin 先于令牌，正负例和目标端网络绑定通过 |
@@ -232,5 +232,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | 记录一条过程教训：仓库级检查只扫描已跟踪文件，因此**本地通过不代表覆盖工作区**。检查器现在会列出未跟踪的 Markdown 并打印 `NOT CHECKED` | T01-02 运行汇总 §6、`ci-run-35521877748-repository-checks-FAILED.log` |
 | 2026-09-20 | T02-01 待验证：Dart 独立实现 LFTM1/LFTC1，三个固定向量逐字节一致；新增 `crypto` 依赖（ADR-0002）；登记非 NFC 路径强制缺口 | [T02-01](tasks/T02-01.md)、[运行汇总](testing/evidence/2026-09-20/t02-01-01/summary.md)、[ADR-0002](decisions/ADR-0002-crypto依赖与SHA256.md) |
 | 2026-09-20 | D04 由「待 Dart/原生独立比对」更新为「已有 Dart 独立比对」；T02 说明补充 Dart 实现已一致 | 本台账 §2、§4 |
+| 2026-09-20 | T01-02 经 PR #6（合并提交 `9d784a4`）与 PR #7（合并提交 `11d4304`）合并入 `master`；CI 在 `master` 上同样全部通过（run 35522441321） | [PR #6](https://github.com/yanzhao77/NearSend/pull/6)、[PR #7](https://github.com/yanzhao77/NearSend/pull/7) |
+| 2026-09-20 | T02-01 经 PR #8 合并入 `master`（合并提交 `214f519`），任务状态由「待验证」转为「已完成」 | [PR #8](https://github.com/yanzhao77/NearSend/pull/8)、合并提交 `214f519` |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
