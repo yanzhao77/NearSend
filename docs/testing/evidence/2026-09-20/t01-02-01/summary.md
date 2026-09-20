@@ -97,12 +97,65 @@ CI workflow invariants                → 全部成立
 执行 `git add --renormalize .` 后**只有本任务自己修改的文件被暂存**，没有任何既有文件内容变化，
 说明仓库本就以 LF 存储，本文件不引入历史改写。
 
-## 6. 已知限制与未执行项
+## 6. GitHub Actions 真实运行结果
+
+门禁不能只在本地看起来正确。本任务推送后由 GitHub 实际执行了工作流：
+
+### 第一次运行：失败（记录保留，未覆盖）
+
+| 项 | 值 |
+| --- | --- |
+| run | [35521877748](https://github.com/yanzhao77/NearSend/actions/runs/35521877748) |
+| 结论 | **failure** |
+| 通过 | Build Windows application、Format/analyze/test、Build Android APKs |
+| 失败 | Repository checks → `Markdown relative links` |
+| 原始日志 | `ci-run-35521877748-repository-checks-FAILED.log`（完整保留） |
+
+**这次失败暴露了两个真实问题：**
+
+1. `tooling/checks/README.md` 里用行内代码给出了链接语法示例，检查脚本把**示例**当成了真实链接。
+   文档为了举例而写出链接语法是合理的，检查器应当跳过代码块与行内代码。
+2. 更重要的过程问题：本地那次「通过」只看了 **26** 个 Markdown，而 CI 看到 **29** 个——
+   差额正是当时**尚未 `git add`** 的新文档。检查器只扫描已跟踪文件（对 CI 是正确的范围），
+   所以本地的「通过」并不覆盖工作区。
+
+修复内容：提取链接前先移除代码围栏、行内代码与 HTML 注释；并**显式列出未跟踪的 Markdown**
+并打印 `NOT CHECKED`，避免本地通过被误读为覆盖了工作区。同时验证了**真实坏链接仍会被抓到**
+（见 `negative-tests.log` 第 1 项），所以这次放宽没有削弱检查。
+
+### 第二次运行：全部通过
+
+| 项 | 值 |
+| --- | --- |
+| run | [35522211411](https://github.com/yanzhao77/NearSend/actions/runs/35522211411) |
+| 提交 | `eb8c4d9` |
+| 结论 | **success** |
+| 结构化记录 | `ci-run-35522211411-SUCCESS.json` |
+
+| 作业 | 结论 | 耗时 | runner |
+| --- | --- | --- | --- |
+| Repository checks（向量、链接、敏感信息、锁文件） | success | 5s | ubuntu-latest |
+| Format, analyze and test | success | 53s | ubuntu-latest |
+| Build Android APKs（debug + release） | success | 247s | ubuntu-latest |
+| Build Windows application | success | 143s | windows-latest |
+
+这同时验证了几件本地无法验证的事：
+
+- `tooling/ci/install_flutter.sh` 在 **Linux** 上按固定版本下载、校验 SHA-256 并成功安装；
+  Windows 作业走同一脚本的 Windows 分支，同样通过。
+- `tooling/scripts/build.ps1` 在 **Linux** 上通过 `pwsh` 成功构建 Android（跨平台改造有效），
+  并在 windows-latest 上构建 Windows；本地与 CI 用的是同一份构建逻辑。
+- Dart 格式检查在 Linux 与 Windows 检出上都不报差异，说明 `.gitattributes` 行尾策略有效。
+
+## 7. 已知限制与未执行项
 
 - 本机没有 `pwsh`（只有 Windows PowerShell 5.1），因此 `check.ps1` 在本机以
-  `powershell -NoProfile -ExecutionPolicy Bypass` 运行；CI 的 ubuntu runner 使用 `pwsh` 运行
-  `build.ps1`。两条路径的脚本同一份，但**`build.ps1` 在 Linux 上的首次真实运行由 CI 完成**。
+  `powershell -NoProfile -ExecutionPolicy Bypass` 运行；CI 的 ubuntu runner 使用 `pwsh`。
+  两条路径的脚本是同一份，且**两条路径都已真实执行过**。
 - 本任务不涉及签名、发布与密钥托管：CI 只读，签名材料与商店凭证属于 T10。
-- 未在本机验证 macOS runner（iOS 构建仍阻塞于 Apple 硬件，见 B06/T09）。
-- 首次 CI 的 Android 作业可能需要额外下载 Flutter 默认 `ndkVersion`（28.2.13676358），
-  耗时较长；若超时会改为显式安装并记录。
+- 未验证 macOS runner（iOS 构建仍阻塞于 Apple 硬件，见 B06/T09）。
+- Android 作业首次运行耗时 247s（含 Flutter SDK 与 Android 依赖准备）；Flutter SDK 已用
+  `actions/cache` 缓存，但 pub/Gradle 依赖尚未缓存，后续可优化，当前未做以免扩大范围。
+- CI 目前只对 `master` 推送与所有 PR 生效，未配置定时（夜间）运行；集成测试与真机证据
+  仍按 `QUALITY_AND_ACCEPTANCE.md` §2 由里程碑任务承担。
+
