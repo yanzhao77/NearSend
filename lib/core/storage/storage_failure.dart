@@ -34,7 +34,18 @@ enum StorageFailureCode {
   commitFailed('NS-STORAGE-006', 'storage.commitFailed'),
 
   /// The stored data does not match the frozen manifest.
-  manifestMismatch('NS-STORAGE-007', 'storage.manifestMismatch');
+  manifestMismatch('NS-STORAGE-007', 'storage.manifestMismatch'),
+
+  /// The database could not grow because its volume is out of space.
+  ///
+  /// Deliberately **not** [commitFailed]. SQLite reports both through the same throw
+  /// site (`SQLITE_FULL` arrives as an exception from a statement the commit path also
+  /// uses), but the remedies differ: a failed commit may succeed on a retry, whereas a
+  /// retry against a full volume cannot. §11 answers `SPACE_INSUFFICIENT` with "free
+  /// space or change location, then retry" and marks it **not** retryable, so treating
+  /// exhaustion as an auto-retryable commit failure would produce an unbounded retry
+  /// loop that also hides the one action the user has to take.
+  spaceInsufficient('NS-STORAGE-008', 'storage.spaceInsufficient');
 
   const StorageFailureCode(this.code, this.messageKey);
 
@@ -50,8 +61,10 @@ enum StorageFailureCode {
   /// The protocol error this maps to when it can appear in a response, else null.
   ///
   /// `staleLease` maps to `STALE_LEASE`; `commitFailed` to `DB_COMMIT_FAILED`, which §11
-  /// says must not acknowledge the commit and must leave the state recoverable. The rest
-  /// are local-only and have no honest wire equivalent.
+  /// says must not acknowledge the commit and must leave the state recoverable;
+  /// `spaceInsufficient` to `SPACE_INSUFFICIENT` (507), whose prescribed remedy is the
+  /// user freeing space or choosing another location. The rest are local-only and have
+  /// no honest wire equivalent.
   ProtocolErrorCode? get protocolCode {
     switch (this) {
       case StorageFailureCode.staleLease:
@@ -60,6 +73,8 @@ enum StorageFailureCode {
         return ProtocolErrorCode.dbCommitFailed;
       case StorageFailureCode.manifestMismatch:
         return ProtocolErrorCode.manifestMismatch;
+      case StorageFailureCode.spaceInsufficient:
+        return ProtocolErrorCode.spaceInsufficient;
       case StorageFailureCode.schemaTooNew:
       case StorageFailureCode.migrationFailed:
       case StorageFailureCode.backupFailed:
@@ -71,8 +86,9 @@ enum StorageFailureCode {
   /// Whether retrying the same operation could succeed.
   ///
   /// Only a failed commit is retryable: §11 keeps the state recoverable in that case.
-  /// A schema refusal will not improve by retrying, and a receipt mismatch means the
-  /// caller's ordering was wrong, which retrying would repeat.
+  /// A schema refusal will not improve by retrying, a receipt mismatch means the
+  /// caller's ordering was wrong so retrying would repeat it, and an exhausted volume
+  /// stays exhausted until something is deleted.
   bool get retryable => this == StorageFailureCode.commitFailed;
 }
 

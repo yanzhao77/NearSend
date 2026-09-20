@@ -104,11 +104,7 @@ class NearSendDatabase {
       if (error is StorageException || error is ProtocolViolation) {
         rethrow;
       }
-      throw StorageException(
-        StorageFailureCode.commitFailed,
-        'transaction rolled back',
-        cause: error,
-      );
+      throw _classify(error, 'transaction');
     }
   }
 
@@ -124,13 +120,38 @@ class NearSendDatabase {
       if (error is StorageException || error is ProtocolViolation) {
         rethrow;
       }
-      throw StorageException(
-        StorageFailureCode.commitFailed,
-        'read transaction rolled back',
+      throw _classify(error, 'read transaction');
+    }
+  }
+
+  /// Turns an unexpected error into a storage failure with an honest code.
+  ///
+  /// `SQLITE_FULL` is singled out because it is the one engine error whose remedy is not
+  /// "try again": §11 gives `SPACE_INSUFFICIENT` the remedy "free space or change
+  /// location, then retry" and marks it not retryable. Reporting exhaustion as
+  /// [StorageFailureCode.commitFailed] would set `retryable: true` and let a client
+  /// retry forever against a volume that cannot accept the write.
+  ///
+  /// Only the primary result code is compared. SQLite's extended codes pack the primary
+  /// code in the low byte, so `resultCode` already matches for every `SQLITE_FULL`
+  /// variant, and no code is mapped that a test has not actually produced.
+  static StorageException _classify(Object error, String context) {
+    if (error is SqliteException && error.resultCode == _sqliteFull) {
+      return StorageException(
+        StorageFailureCode.spaceInsufficient,
+        'the database could not grow: the volume is out of space',
         cause: error,
       );
     }
+    return StorageException(
+      StorageFailureCode.commitFailed,
+      '$context rolled back',
+      cause: error,
+    );
   }
+
+  /// SQLite's primary result code for "database or disk is full".
+  static const int _sqliteFull = 13;
 
   void _rollbackQuietly() {
     try {
