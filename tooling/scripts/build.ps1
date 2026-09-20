@@ -61,8 +61,12 @@ function Get-GitStamp {
         # Evidence logs are rewritten by the very run doing the building, so counting
         # them would mark every recorded build as dirty and make the stamp useless for
         # release traceability. Source and configuration still count.
-        $statusLines = @(& git status --porcelain) |
-            Where-Object { $_ -notmatch 'docs/testing/evidence/' }
+        # The outer @() matters: a pipeline that yields zero or one item is not an
+        # array, and Set-StrictMode rejects .Count on a scalar.
+        $statusLines = @(
+            @(& git status --porcelain) |
+                Where-Object { $_ -notmatch 'docs/testing/evidence/' }
+        )
         $dirty = if ($statusLines.Count -eq 0) { 'false' } else { 'true' }
 
         return [pscustomobject]@{ Sha = $sha; Dirty = $dirty }
