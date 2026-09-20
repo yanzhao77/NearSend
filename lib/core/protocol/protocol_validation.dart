@@ -158,6 +158,28 @@ void rejectUnknownKeys(
   }
 }
 
+/// Renders a non-negative count as a protocol decimal string (§4).
+///
+/// The counterpart to [parseDecimalString], and validating rather than a bare `toString`
+/// for the same reason the parser exists: §4 makes these fields strings so that a
+/// language's number formatting cannot change the bytes, and a negative or oversized value
+/// has no legal encoding at all.
+String encodeDecimalString(int value, String field) {
+  if (value < 0) {
+    throw ProtocolViolation(
+      ProtocolErrorCode.invalidDecimal,
+      '$field must not be negative',
+    );
+  }
+  if (value > ProtocolLimits.maxDecimalValue) {
+    throw ProtocolViolation(
+      ProtocolErrorCode.invalidDecimal,
+      '$field exceeds the signed 64-bit range',
+    );
+  }
+  return value.toString();
+}
+
 /// `chunkCount = ceil(sizeBytes / chunkSizeBytes)`, with zero size giving zero
 /// chunks (§5).
 int chunkCountForSize(int sizeBytes, int chunkSizeBytes) {
