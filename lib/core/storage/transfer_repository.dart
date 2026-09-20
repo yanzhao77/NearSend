@@ -18,6 +18,7 @@ library;
 import 'package:sqlite3/sqlite3.dart';
 
 import 'package:nearsend/core/protocol/transfer_state.dart';
+import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 
@@ -154,20 +155,32 @@ class TransferRepository {
 
   /// Records that a file was successfully written to [targetUri], and completes it.
   ///
+  /// [verification] is required, not optional, so that "完成 = 终检通过且导出已提交" is a
+  /// property of the code rather than of the caller's discipline. Recording an export is
+  /// the moment the product tells the user their file is safe; the previous signature
+  /// checked only that every chunk was committed, which is silent about whether those
+  /// bytes are the right bytes.
+  ///
   /// Refuses when:
   ///
-  /// * not every chunk is committed - an export must never be recorded for a file whose
-  ///   bytes are not all present;
+  /// * [verification] is for a different file, or was not taken over this file's current
+  ///   size - a receipt for something else proves nothing about this export;
+  /// * [verification] is not exportable: a chunk is missing, a chunk failed its digest,
+  ///   or the whole-file digest did not match;
+  /// * not every chunk is committed - re-checked here rather than trusted from the
+  ///   receipt, because the two components must not have to believe each other;
   /// * a **different** target already holds a saved copy - §10 forbids blindly producing
   ///   a second file when the previous result is unknown.
   ///
-  /// Repeating the call with the same target is idempotent: the existing record is
-  /// returned rather than a second one written.
+  /// Repeating the call with the same target and an exportable receipt is idempotent: the
+  /// existing record is returned rather than a second one written.
   ExportRecord recordSavedExport({
     required String fileId,
     required String targetUri,
+    required FileVerificationResult verification,
   }) {
     return database.transaction(() {
+      _assertVerifiedFor(fileId, verification);
       _assertFullyCommitted(fileId);
 
       final ExportRecord? existing = existingExport(fileId);
@@ -207,6 +220,46 @@ class TransferRepository {
         recordedAtMillis: moment,
       );
     });
+  }
+
+  /// Requires the receipt to be about this file, as it is now.
+  ///
+  /// The size check is what stops a receipt from an earlier attempt being reused after
+  /// the file was re-registered: a digest taken over four bytes says nothing about a file
+  /// that is now eight.
+  void _assertVerifiedFor(String fileId, FileVerificationResult verification) {
+    if (verification.fileId != fileId) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'the verification receipt is for ${verification.fileId}, not $fileId',
+      );
+    }
+    if (!verification.isExportable) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'file $fileId has not passed verification, so its export must not be recorded: '
+        '${verification.summary}',
+      );
+    }
+    final ResultSet rows = database.db.select(
+      'SELECT size_bytes FROM files WHERE file_id = ?;',
+      <Object?>[fileId],
+    );
+    if (rows.isEmpty) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'file $fileId is not registered',
+      );
+    }
+    final int sizeBytes = rows.first['size_bytes'] as int;
+    if (verification.expectedBytes != sizeBytes ||
+        verification.verifiedBytes != sizeBytes) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'the verification receipt covers ${verification.verifiedBytes} of '
+        '${verification.expectedBytes} B but file $fileId is $sizeBytes B',
+      );
+    }
   }
 
   /// Records a failed export attempt so the UI can offer a retry.

@@ -148,6 +148,14 @@ abstract final class RelativePathRules {
     return _reservedNames.contains(stem);
   }
 
+  /// Whether [segment] names a device that a platform resolves specially.
+  ///
+  /// Exposed so that path *derivation* - producing a name to write under, rather than
+  /// validating one that arrived - can avoid creating a reserved name in the first
+  /// place. Keeping one definition matters here: two lists would drift, and the copy
+  /// that drifted would be the one nothing tests.
+  static bool isReservedName(String segment) => _isReservedName(segment);
+
   /// Rejects lone surrogates, which are not valid UTF-8 and would otherwise be
   /// replaced by U+FFFD during encoding, changing the bytes that are digested.
   static void _rejectUnpairedSurrogates(String value) {
