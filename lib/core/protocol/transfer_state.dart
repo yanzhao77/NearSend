@@ -122,6 +122,42 @@ enum TransferState {
 
   /// Whether the task reached a state a user would call finished.
   bool get isSuccess => this == completed;
+
+  /// The name §10 and §7 use for this state on the wire.
+  ///
+  /// The draft writes states in UPPER_SNAKE (`WAITING_ACCEPT`, `CHECKING_RESUME`) while
+  /// Dart convention makes the constants camelCase. Deriving the wire name from the
+  /// constant instead of listing it in a second table means the two cannot drift: a
+  /// renamed constant changes both, and there is no table to forget to update.
+  String get wireName {
+    final StringBuffer out = StringBuffer();
+    for (int i = 0; i < name.length; i++) {
+      final int unit = name.codeUnitAt(i);
+      if (unit >= 0x41 && unit <= 0x5A) {
+        if (i > 0) {
+          out.write('_');
+        }
+        out.writeCharCode(unit);
+      } else {
+        out.writeCharCode(unit - 0x20);
+      }
+    }
+    return out.toString();
+  }
+
+  /// Parses a wire state name, or returns null when §10 does not define it.
+  ///
+  /// Null rather than a default: a state this build does not know is not something to
+  /// guess at, because guessing wrong is how two peers disagree about whether a task is
+  /// still resumable.
+  static TransferState? fromWireName(String value) {
+    for (final TransferState state in TransferState.values) {
+      if (state.wireName == value) {
+        return state;
+      }
+    }
+    return null;
+  }
 }
 
 /// The task state machine.
