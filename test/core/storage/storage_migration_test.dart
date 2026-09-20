@@ -362,6 +362,18 @@ void main() {
         'DB_COMMIT_FAILED',
       );
       expect(
+        StorageFailureCode.spaceInsufficient.protocolCode?.wireCode,
+        'SPACE_INSUFFICIENT',
+        reason:
+            'an exhausted volume is the case §11 answers with 507 and a user action, so '
+            'it must not be reported as a retryable DB_COMMIT_FAILED',
+      );
+      expect(
+        StorageFailureCode.spaceInsufficient.protocolCode?.httpStatus,
+        507,
+      );
+      expect(StorageFailureCode.spaceInsufficient.retryable, isFalse);
+      expect(
         StorageFailureCode.schemaTooNew.protocolCode,
         isNull,
         reason: 'a newer local schema never reaches the peer',
