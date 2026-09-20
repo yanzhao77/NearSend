@@ -57,6 +57,12 @@ abstract final class StorageMigrations {
       description: 'exports remembers the name a saved copy was written under',
       apply: StorageSchema.applyVersion2,
     ),
+    MigrationStep(
+      version: 3,
+      description:
+          'tasks remembers the last committed checkpoint sequence (§8)',
+      apply: StorageSchema.applyVersion3,
+    ),
   ];
 
   /// The version a fresh database reaches by applying every step.

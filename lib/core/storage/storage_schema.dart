@@ -29,7 +29,19 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 2;
+  static const int currentVersion = 3;
+
+  /// The column version 3 adds to `tasks`, holding the last committed checkpoint (§8).
+  ///
+  /// §8 commits "块标志和 checkpointSeq" in one transaction, and §9 has the receiver report
+  /// `{leaseEpoch, checkpointSeq, committedBytes}` and the sender verify it does not
+  /// regress. A counter that only lived in memory would restart at zero and look like a
+  /// regression, so it is persisted.
+  ///
+  /// It lives on `tasks` rather than `files` because its partner `lease_epoch` - the value
+  /// it is always reported and compared with - is a task-scoped write generation. Scope is
+  /// registered as a decision to confirm in the ledger, since §8 does not name the scope.
+  static const String tasksCheckpointSeqColumn = 'checkpoint_seq';
 
   /// The column version 2 adds to `exports`, holding the name the copy was written under.
   ///
@@ -166,6 +178,19 @@ CREATE TABLE exports (
   /// may never have been given.
   static void applyVersion2(Database db) {
     db.execute('ALTER TABLE exports ADD COLUMN $exportsSavedPathColumn TEXT;');
+  }
+
+  /// Applies schema version 3 to [db]: remembers the last committed checkpoint (§8).
+  ///
+  /// `ALTER TABLE ... ADD COLUMN ... NOT NULL DEFAULT 0` rather than a table rebuild: it is
+  /// transactional in SQLite and keeps every existing row. An existing task legitimately
+  /// has no committed checkpoint yet under the new counter, and 0 is what "no checkpoint
+  /// has been taken" means - not a fabricated sequence number.
+  static void applyVersion3(Database db) {
+    db.execute(
+      'ALTER TABLE tasks ADD COLUMN $tasksCheckpointSeqColumn INTEGER NOT NULL '
+      'DEFAULT 0;',
+    );
   }
 
   /// The names of every table in this schema version, including the metadata table.
