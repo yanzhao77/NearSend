@@ -29,7 +29,15 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 1;
+  static const int currentVersion = 2;
+
+  /// The column version 2 adds to `exports`, holding the name the copy was written under.
+  ///
+  /// A saved export without a name cannot answer "where is my file", and a retry cannot
+  /// tell whether it is looking at its own earlier write. The frozen `relativePath` is
+  /// not a substitute: the copy may have been renamed to avoid overwriting something the
+  /// user already had.
+  static const String exportsSavedPathColumn = 'saved_path';
 
   /// The table holding the single row of schema metadata.
   static const String metaTable = 'schema_info';
@@ -135,6 +143,10 @@ CREATE TABLE exports (
   ///
   /// Called only by the migration framework, inside a transaction it controls, so that
   /// a failure part way through leaves the database untouched.
+  ///
+  /// **Never edit this for a later version.** A database in the field already ran it, so
+  /// changing it would make a fresh database and an upgraded one differ in ways no test
+  /// would notice until the difference mattered.
   static void applyVersion1(Database db) {
     db.execute(createMetaTable);
     for (final String ddl in tables.values) {
@@ -143,6 +155,17 @@ CREATE TABLE exports (
     for (final String ddl in indexes.values) {
       db.execute(ddl);
     }
+  }
+
+  /// Applies schema version 2 to [db]: remembers the name a saved export used.
+  ///
+  /// `ALTER TABLE ... ADD COLUMN` is used rather than a table rebuild because it is
+  /// transactional in SQLite and preserves every existing row. Rows written by version 1
+  /// keep a null name, which is the honest answer: that build genuinely did not record
+  /// one, and inventing the frozen path would claim the copy was saved under a name it
+  /// may never have been given.
+  static void applyVersion2(Database db) {
+    db.execute('ALTER TABLE exports ADD COLUMN $exportsSavedPathColumn TEXT;');
   }
 
   /// The names of every table in this schema version, including the metadata table.

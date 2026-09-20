@@ -52,6 +52,11 @@ abstract final class StorageMigrations {
           'initial schema: tasks, files, chunks, peers, idempotency, exports',
       apply: StorageSchema.applyVersion1,
     ),
+    MigrationStep(
+      version: 2,
+      description: 'exports remembers the name a saved copy was written under',
+      apply: StorageSchema.applyVersion2,
+    ),
   ];
 
   /// The version a fresh database reaches by applying every step.

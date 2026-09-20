@@ -21,6 +21,7 @@ import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
+import 'package:nearsend/core/storage/storage_schema.dart';
 
 /// A recorded export of one file.
 class ExportRecord {
@@ -29,6 +30,7 @@ class ExportRecord {
     required this.targetUri,
     required this.result,
     required this.recordedAtMillis,
+    this.savedPath,
   });
 
   final String fileId;
@@ -41,6 +43,13 @@ class ExportRecord {
 
   final int recordedAtMillis;
 
+  /// The name the copy was written under, relative to [targetUri].
+  ///
+  /// Null only for rows written before schema version 2. Those records are kept as they
+  /// are rather than backfilled with the frozen path, because that build genuinely did
+  /// not record which name it used and the copy may have been renamed.
+  final String? savedPath;
+
   bool get isSaved => result == savedResult;
 
   /// The value that means the user's file exists at [targetUri].
@@ -50,7 +59,9 @@ class ExportRecord {
   static const String failedResult = 'failed';
 
   @override
-  String toString() => 'ExportRecord($fileId, $result, $recordedAtMillis)';
+  String toString() =>
+      'ExportRecord($fileId, $result, $recordedAtMillis'
+      '${savedPath == null ? '' : ', $savedPath'})';
 }
 
 /// Reads and writes task state, file state and export records.
@@ -138,7 +149,8 @@ class TransferRepository {
   /// The recorded export of a file, if any.
   ExportRecord? existingExport(String fileId) {
     final ResultSet rows = database.db.select(
-      'SELECT target_uri, result, recorded_at FROM exports WHERE file_id = ?;',
+      'SELECT target_uri, result, recorded_at, ${StorageSchema.exportsSavedPathColumn} '
+      'FROM exports WHERE file_id = ?;',
       <Object?>[fileId],
     );
     if (rows.isEmpty) {
@@ -150,6 +162,7 @@ class TransferRepository {
       targetUri: row['target_uri'] as String,
       result: row['result'] as String,
       recordedAtMillis: row['recorded_at'] as int,
+      savedPath: row[StorageSchema.exportsSavedPathColumn] as String?,
     );
   }
 
@@ -178,6 +191,7 @@ class TransferRepository {
     required String fileId,
     required String targetUri,
     required FileVerificationResult verification,
+    required String savedPath,
   }) {
     return database.transaction(() {
       _assertVerifiedFor(fileId, verification);
@@ -197,11 +211,19 @@ class TransferRepository {
 
       final int moment = now();
       database.db.execute(
-        'INSERT INTO exports (file_id, target_uri, result, recorded_at) '
-        'VALUES (?, ?, ?, ?) '
+        'INSERT INTO exports (file_id, target_uri, result, recorded_at, '
+        '${StorageSchema.exportsSavedPathColumn}) VALUES (?, ?, ?, ?, ?) '
         'ON CONFLICT(file_id) DO UPDATE SET target_uri = excluded.target_uri, '
-        'result = excluded.result, recorded_at = excluded.recorded_at;',
-        <Object?>[fileId, targetUri, ExportRecord.savedResult, moment],
+        'result = excluded.result, recorded_at = excluded.recorded_at, '
+        '${StorageSchema.exportsSavedPathColumn} = '
+        'excluded.${StorageSchema.exportsSavedPathColumn};',
+        <Object?>[
+          fileId,
+          targetUri,
+          ExportRecord.savedResult,
+          moment,
+          savedPath,
+        ],
       );
 
       // The file's own state follows in the same transaction, so a crash cannot leave an
@@ -218,6 +240,7 @@ class TransferRepository {
         targetUri: targetUri,
         result: ExportRecord.savedResult,
         recordedAtMillis: moment,
+        savedPath: savedPath,
       );
     });
   }

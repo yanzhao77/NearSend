@@ -278,6 +278,7 @@ void main() {
           fileId: fileId,
           targetUri: 'content://a',
           verification: receipt,
+          savedPath: 'sample.bin',
         ),
         throwsA(
           isA<StorageException>().having(
@@ -313,6 +314,7 @@ void main() {
           fileId: fileId,
           targetUri: 'content://a',
           verification: receipt,
+          savedPath: 'sample.bin',
         ),
         throwsA(isA<StorageException>()),
         reason:
@@ -336,6 +338,7 @@ void main() {
           fileId: otherId,
           targetUri: 'content://b',
           verification: receiptForFirst,
+          savedPath: 'sample.bin',
         ),
         throwsA(
           isA<StorageException>().having(
@@ -368,6 +371,7 @@ void main() {
             fileId: fileId,
             targetUri: 'content://a',
             verification: receipt,
+            savedPath: 'sample.bin',
           ),
           throwsA(isA<StorageException>()),
           reason: 'a digest taken over four bytes says nothing about a file that is now eight',
@@ -382,6 +386,7 @@ void main() {
         fileId: fileId,
         targetUri: 'content://a',
         verification: await verify(fileId),
+        savedPath: 'sample.bin',
       );
       expect(saved.isSaved, isTrue);
       expect(transfers.fileState(fileId), FileState.completed);
@@ -409,11 +414,13 @@ void main() {
         fileId: fileId,
         targetUri: 'content://a',
         verification: receipt,
+        savedPath: 'sample.bin',
       );
       final ExportRecord second = transfers.recordSavedExport(
         fileId: fileId,
         targetUri: 'content://a',
         verification: receipt,
+        savedPath: 'sample.bin',
       );
 
       expect(second.targetUri, first.targetUri);
@@ -436,6 +443,7 @@ void main() {
         fileId: fileId,
         targetUri: 'content://a',
         verification: receipt,
+        savedPath: 'sample.bin',
       );
 
       expect(
@@ -443,6 +451,7 @@ void main() {
           fileId: fileId,
           targetUri: 'content://b',
           verification: receipt,
+          savedPath: 'sample.bin',
         ),
         throwsA(
           isA<StorageException>().having(
@@ -479,6 +488,7 @@ void main() {
           fileId: fileId,
           targetUri: 'content://a',
           verification: await verify(fileId),
+          savedPath: 'sample.bin',
         );
         expect(saved.isSaved, isTrue);
         expect(transfers.fileState(fileId), FileState.completed);
