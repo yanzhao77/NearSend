@@ -11,7 +11,7 @@
 | 3 | [Vibe Coding 开发流程](DEVELOPMENT_WORKFLOW.md) | 如何从需求推进到可验证交付 | 维护者、Agent 调度者 |
 | 4 | [系统架构](architecture/SYSTEM_ARCHITECTURE.md) | 边界、组件、依赖、数据流和关键不变量 | 架构、端侧开发 |
 | 5 | [应用与端侧服务设计](architecture/APP_AND_SERVICE_DESIGN.md) | Flutter 前台、内嵌服务端、平台适配和持久化规格 | Flutter、原生、协议开发 |
-| 6 | [UI/UX 设计规范](ui/UI_UX_SPEC.md) | 页面、组件、状态、文案和视觉基线 | UI、Flutter、测试 |
+| 6 | [UI 设计交付](ui/README.md) | 样式指南、组件系统、移动端与 Windows 视觉稿 | UI、Flutter、测试 |
 | 7 | [协议草案](protocol/v1.0-draft1.md) | 线上交互、认证、分块与恢复语义 | 协议、网络、安全 |
 | 8 | [质量与验收策略](testing/QUALITY_AND_ACCEPTANCE.md) | 测试金字塔、设备矩阵、门禁与证据格式 | 开发、测试、发布 |
 | 9 | [Agent 任务手册](AGENT_TASK_PLAYBOOK.md) | 如何拆卡、领取、实现、验证和交接 | 所有编码 Agent |

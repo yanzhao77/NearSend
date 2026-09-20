@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1040" viewBox="0 0 1440 1040" role="img" aria-labelledby="title desc">
+  <title id="title">NearSend UI Kit</title>
+  <desc id="desc">NearSend color, typography, buttons, status badges, progress and task card visual specification.</desc>
+  <defs>
+    <style>
+      .bg{fill:#F8FAFC}.card{fill:#FFF;stroke:#E2E8F0}.h1{font:700 32px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#0F172A}.h2{font:700 20px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#0F172A}.h3{font:600 16px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#0F172A}.body{font:400 14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#475569}.small{font:500 12px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#64748B}.label{font:600 14px 'Segoe UI','Microsoft YaHei',sans-serif}.white{fill:#FFF}.blue{fill:#2563EB}.green{fill:#15803D}.orange{fill:#B45309}.red{fill:#B91C1C}.line{stroke:#E2E8F0;stroke-width:1}.icon{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#0F172A" flood-opacity=".08"/></filter>
+  </defs>
+  <rect class="bg" width="1440" height="1040"/>
+  <g transform="translate(64 56)">
+    <g><rect x="0" y="2" width="44" height="44" rx="14" fill="#2563EB"/><path d="M13 18h15l-5-5m5 5-5 5M31 30H16l5 5m-5-5 5-5" stroke="#FFF" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="60" y="26" class="h1">NearSend UI Kit</text><text x="60" y="50" class="body">Reliable · Clear · Calm · UI Baseline 1.0</text></g>
+    <g transform="translate(0 96)">
+      <rect class="card" width="628" height="310" rx="20"/>
+      <text x="28" y="42" class="h2">Color system</text><text x="28" y="66" class="body">Color supports status; text always confirms it.</text>
+      <g transform="translate(28 92)"><rect width="132" height="84" rx="14" fill="#2563EB"/><text x="12" y="56" class="label white">Primary</text><text x="12" y="74" class="small white">#2563EB</text></g>
+      <g transform="translate(174 92)"><rect width="132" height="84" rx="14" fill="#15803D"/><text x="12" y="56" class="label white">Success</text><text x="12" y="74" class="small white">#15803D</text></g>
+      <g transform="translate(320 92)"><rect width="132" height="84" rx="14" fill="#B45309"/><text x="12" y="56" class="label white">Warning</text><text x="12" y="74" class="small white">#B45309</text></g>
+      <g transform="translate(466 92)"><rect width="132" height="84" rx="14" fill="#B91C1C"/><text x="12" y="56" class="label white">Error</text><text x="12" y="74" class="small white">#B91C1C</text></g>
+      <g transform="translate(28 194)"><rect width="132" height="84" rx="14" fill="#0F172A"/><text x="12" y="56" class="label white">Text</text><text x="12" y="74" class="small white">#0F172A</text></g>
+      <g transform="translate(174 194)"><rect width="132" height="84" rx="14" fill="#FFF" stroke="#E2E8F0"/><text x="12" y="56" class="label" fill="#0F172A">Card</text><text x="12" y="74" class="small">#FFFFFF</text></g>
+      <g transform="translate(320 194)"><rect width="132" height="84" rx="14" fill="#F1F5F9"/><text x="12" y="56" class="label" fill="#0F172A">Subtle</text><text x="12" y="74" class="small">#F1F5F9</text></g>
+      <g transform="translate(466 194)"><rect width="132" height="84" rx="14" fill="#111827"/><text x="12" y="56" class="label white">Dark card</text><text x="12" y="74" class="small white">#111827</text></g>
+    </g>
+    <g transform="translate(652 96)">
+      <rect class="card" width="660" height="310" rx="20"/>
+      <text x="28" y="42" class="h2">Typography &amp; actions</text>
+      <text x="28" y="92" style="font:700 32px 'Segoe UI','Microsoft YaHei';fill:#0F172A">Transfer in progress</text>
+      <text x="28" y="128" style="font:600 18px 'Segoe UI','Microsoft YaHei';fill:#0F172A">Project Files · 12 files</text>
+      <text x="28" y="158" class="body">Lead with outcomes, then details.</text>
+      <g transform="translate(28 190)"><rect width="152" height="48" rx="12" fill="#2563EB"/><text x="76" y="30" text-anchor="middle" class="label white">Receive &amp; save</text></g>
+      <g transform="translate(194 190)"><rect width="126" height="48" rx="12" fill="#FFF" stroke="#CBD5E1"/><text x="63" y="30" text-anchor="middle" class="label" fill="#0F172A">Change folder</text></g>
+      <g transform="translate(334 190)"><rect width="112" height="48" rx="12" fill="#FEF2F2"/><text x="56" y="30" text-anchor="middle" class="label red">Cancel</text></g>
+      <g transform="translate(460 190)"><rect width="128" height="48" rx="12" fill="#E2E8F0"/><text x="64" y="30" text-anchor="middle" class="label" fill="#94A3B8">Disabled</text></g>
+      <g transform="translate(28 254)"><rect width="112" height="28" rx="14" fill="#EFF6FF"/><circle cx="16" cy="14" r="4" fill="#2563EB"/><text x="28" y="18" class="small blue">Transferring</text></g>
+      <g transform="translate(152 254)"><rect width="100" height="28" rx="14" fill="#FFF7ED"/><circle cx="16" cy="14" r="4" fill="#B45309"/><text x="28" y="18" class="small orange">Paused</text></g>
+      <g transform="translate(264 254)"><rect width="112" height="28" rx="14" fill="#F0FDF4"/><circle cx="16" cy="14" r="4" fill="#15803D"/><text x="28" y="18" class="small green">Saved</text></g>
+    </g>
+    <g transform="translate(0 430)">
+      <rect class="card" width="628" height="470" rx="20"/>
+      <text x="28" y="42" class="h2">Transfer stages</text><text x="28" y="66" class="body">Keep prepare, transfer, verify and save distinct.</text>
+      <g transform="translate(48 112)">
+        <line x1="16" y1="0" x2="16" y2="272" stroke="#CBD5E1" stroke-width="2"/>
+        <g><circle cx="16" cy="0" r="16" fill="#15803D"/><path d="m8 0 5 5 10-11" stroke="#FFF" stroke-width="2.5" fill="none" stroke-linecap="round"/><text x="48" y="5" class="h3">Prepared</text><text x="48" y="28" class="body">12 files scanned · 20.0 GiB</text></g>
+        <g transform="translate(0 72)"><circle cx="16" cy="0" r="16" fill="#15803D"/><path d="m8 0 5 5 10-11" stroke="#FFF" stroke-width="2.5" fill="none"/><text x="48" y="5" class="h3">Secure connection</text><text x="48" y="28" class="body">Windows-PC identity verified</text></g>
+        <g transform="translate(0 144)"><circle cx="16" cy="0" r="16" fill="#2563EB"/><circle cx="16" cy="0" r="5" fill="#FFF"/><text x="48" y="5" class="h3">Transferring</text><text x="48" y="28" class="body">12.8 / 20.0 GiB · 42.6 MiB/s</text><rect x="48" y="44" width="470" height="8" rx="4" fill="#E2E8F0"/><rect x="48" y="44" width="302" height="8" rx="4" fill="#2563EB"/></g>
+        <g transform="translate(0 232)"><circle cx="16" cy="0" r="14" fill="#FFF" stroke="#CBD5E1" stroke-width="2"/><text x="48" y="5" class="h3" fill="#64748B">Verify &amp; save</text><text x="48" y="28" class="body">Full-file check after transfer</text></g>
+      </g>
+      <rect x="28" y="400" width="572" height="44" rx="12" fill="#EFF6FF"/><circle cx="50" cy="422" r="9" fill="#2563EB"/><text x="50" y="426" text-anchor="middle" class="small white">i</text><text x="70" y="426" class="body">Verified progress stays on this device.</text>
+    </g>
+    <g transform="translate(652 430)">
+      <rect class="card" width="660" height="470" rx="20"/>
+      <text x="28" y="42" class="h2">Task card &amp; feedback</text>
+      <g transform="translate(28 72)" filter="url(#shadow)"><rect width="604" height="166" rx="18" fill="#FFF"/><circle cx="58" cy="62" r="30" fill="#EFF6FF"/><path d="M44 62h24m-8-8 8 8-8 8" stroke="#2563EB" stroke-width="2.5" fill="none"/><text x="104" y="38" class="h3">Project Files</text><text x="104" y="64" class="body">To Windows-PC · 12 files</text><text x="104" y="92" class="h3" fill="#2563EB">12.8 / 20.0 GiB</text><text x="494" y="92" class="small">42.6 MiB/s</text><rect x="104" y="112" width="470" height="8" rx="4" fill="#E2E8F0"/><rect x="104" y="112" width="302" height="8" rx="4" fill="#2563EB"/><text x="104" y="144" class="small">Transferring · About 3 min left</text><rect x="506" y="128" width="68" height="28" rx="14" fill="#EFF6FF"/><text x="540" y="147" text-anchor="middle" class="small blue">Pause</text></g>
+      <g transform="translate(28 264)"><rect width="604" height="76" rx="14" fill="#FFF7ED" stroke="#FED7AA"/><circle cx="52" cy="38" r="14" fill="#B45309"/><text x="52" y="43" text-anchor="middle" class="label white">!</text><text x="82" y="31" class="h3">Free space is unknown</text><text x="82" y="54" class="body">Transfer may stop. Use a local drive.</text><text x="526" y="43" class="label orange">Change folder</text></g>
+      <g transform="translate(28 358)"><rect width="604" height="76" rx="14" fill="#F0FDF4" stroke="#BBF7D0"/><circle cx="52" cy="38" r="14" fill="#15803D"/><path d="m45 38 5 5 9-11" stroke="#FFF" stroke-width="2" fill="none"/><text x="82" y="31" class="h3">Transfer complete</text><text x="82" y="54" class="body">12 files verified and saved.</text><text x="534" y="43" class="label green">Open folder</text></g>
+    </g>
+  </g>
+</svg>
