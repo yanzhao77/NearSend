@@ -46,6 +46,12 @@ linked_*.ds
 unlinked.ds
 unlinked_spec.ds
 
+# NearSend application (IDE and per-platform generated output)
+.idea/
+*.iml
+**/windows/flutter/ephemeral/
+**/linux/flutter/ephemeral/
+
 # Android related
 **/android/**/gradle-wrapper.jar
 .gradle/
@@ -111,6 +117,13 @@ coverage/
 app.*.symbols
 
 # Exceptions to above rules.
+#
+# The `*.lock` rule above is inherited from the Flutter SDK repository and would
+# otherwise hide application dependency lock files. AGENTS.md §3 requires
+# dependency locking and §7 requires checking the lock file before committing, so
+# pubspec.lock must be tracked. When iOS CocoaPods dependencies are introduced by
+# T09, ios/Podfile.lock needs the same treatment.
+!pubspec.lock
 !**/ios/**/default.mode1v3
 !**/ios/**/default.mode2v3
 !**/ios/**/default.pbxuser
