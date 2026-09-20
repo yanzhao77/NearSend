@@ -159,7 +159,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | 完成Linux参考实验及协议draft1 | 原始日志、JSON结果和报告 |
 | 2026-09-20 | 导入仓库、完成24项复测、建立本台账 | 本次Git提交/PR、repository-import-tests.log |
 | 2026-09-20 | 建立 Vibe Coding 研发流程、实施架构、端侧/UI/质量规格和 Agent 任务手册 | D06–D12、本次文档 PR |
-| 2026-09-20 | T01-01 完成：创建三端 Flutter 工程与版本壳应用，Android 真机与 Windows 构建/运行通过，建立任务卡与 ADR 目录，修正 `pubspec.lock` 与 S0 探针编码缺陷 | [T01-01](tasks/T01-01.md)、[运行汇总](testing/evidence/2026-09-20/t01-01-01/summary.md)、本次 PR |
+| 2026-09-20 | T01-01 完成：创建三端 Flutter 工程与版本壳应用，Android 真机与 Windows 构建/运行通过，建立任务卡与 ADR 目录，修正 `pubspec.lock` 与 S0 探针编码缺陷 | [T01-01](tasks/T01-01.md)、[运行汇总](testing/evidence/2026-09-20/t01-01-01/summary.md)、[PR #4](https://github.com/yanzhao77/NearSend/pull/4) |
 | 2026-09-20 | 修正 T02-01/T02-02 依赖列（实际依赖 T01-01 工程），B01–B04 阻塞口径按新环境更新 | 本台账 §3、§4.1 |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。

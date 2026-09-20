@@ -31,7 +31,7 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 
 | 任务 ID | 标题 | 状态 | 分支 / PR |
 | --- | --- | --- | --- |
-| [T01-01](T01-01.md) | Flutter 工程基线 | 已完成 | `feat/t01-01-flutter-baseline` |
+| [T01-01](T01-01.md) | Flutter 工程基线 | 已完成 | `feat/t01-01-flutter-baseline` → [#4](https://github.com/yanzhao77/NearSend/pull/4) |
 
 T01-01 的完成依据见 [运行汇总](../testing/evidence/2026-09-20/t01-01-01/summary.md)。
 **已完成仅表示 T01-01 的退出门槛全部满足**（工程可构建、两端可运行、版本可追踪、
