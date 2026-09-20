@@ -101,19 +101,27 @@ flowchart TB
 
 ## 项目状态
 
-NearSend 目前处于 **S0 技术验证与协议细化阶段**，工程侧已完成 **M1 工程基线（T01-01）**。仓库中的设计描述是目标和验收标准，不代表相应功能已经实现或经过真机验证。性能数据、兼容设备和最低系统版本会在实验完成后基于证据冻结。
+NearSend 目前处于 **S0 技术验证与协议细化阶段**，工程侧已完成 **M1 工程基线（T01-01）** 与 **CI 门禁（T01-02）**。仓库中的设计描述是目标和验收标准，不代表相应功能已经实现或经过真机验证。性能数据、兼容设备和最低系统版本会在实验完成后基于证据冻结。
 
-**截至 2026-09-20：** 已提交协议 v1.0-draft1、Python 参考探针及测试证据。24 项自动化检查通过；Linux 本地完成 20 GiB 实际落盘回读和 10,000 个小文件校验。
+**截至 2026-09-20：** 已提交协议 v1.0-draft1、Python 参考探针及测试证据。24 项参考探针检查通过；Linux 本地完成 20 GiB 实际落盘回读和 10,000 个小文件校验。
 
-**T01-01 已建立 Android / Windows / iOS 三端 Flutter 工程与版本可追踪的壳应用：** `flutter analyze` 无问题，29 项 Flutter 测试通过，Android debug/release APK 与 Windows release 可执行文件构建成功；release APK 已在 **Xiaomi 25102RKBEC / Android 17 (API 37)** 真机安装并启动，Windows 10 22H2 上可正常运行，两端都能显示应用版本、Git 提交、协议版本与数据库 schema 版本。
+**T01-01 已建立 Android / Windows / iOS 三端 Flutter 工程与版本可追踪的壳应用：** `flutter analyze` 无问题，36 项 Flutter 测试通过，Android debug/release APK 与 Windows release 可执行文件构建成功；release APK 已在 **Xiaomi 25102RKBEC / Android 17 (API 37)** 真机安装并启动，Windows 10 22H2 上可正常运行，两端都能显示应用版本、Git 提交、协议版本与数据库 schema 版本。
 
-上述结果**不包含任何传输、配对、发现、存储或恢复能力**——这些尚未实现，应用内的发送与接收入口被显式禁用并标注未实现。目前没有可分发安装包（release APK 使用调试签名）、没有 Windows 11 或 iOS 结论，也没有三端兼容性结论。
+**T01-02 已把这些检查固化为 CI 门禁：** GitHub Actions 上四个作业——仓库检查（协议固定向量、Markdown 相对链接、敏感信息、依赖锁文件）、`dart format` / `flutter analyze` / `flutter test`、Android 构建、Windows 构建——在提交 `eb8c4d9` 上**全部真实通过**。Flutter 版本固定为 3.47.5 并校验归档 SHA-256。
 
-查看 **[项目现状与进度台账](docs/PROJECT_LEDGER.md)** · [T01-01 运行汇总](docs/testing/evidence/2026-09-20/t01-01-01/summary.md) · [S0 验证报告](docs/testing/S0-report.md) · [运行参考探针](tooling/s0/README.md)。
+上述结果**不包含任何传输、配对、发现、存储或恢复能力**——这些尚未实现，应用内的发送与接收入口被显式禁用并标注未实现。CI 通过也不代表真机、网络、耐久性或安全结论。目前没有可分发安装包（release APK 使用调试签名）、没有 Windows 11 或 iOS 结论，也没有三端兼容性结论。
+
+查看 **[项目现状与进度台账](docs/PROJECT_LEDGER.md)** · [T01-01 运行汇总](docs/testing/evidence/2026-09-20/t01-01-01/summary.md) · [T01-02 运行汇总](docs/testing/evidence/2026-09-20/t01-02-01/summary.md) · [S0 验证报告](docs/testing/S0-report.md) · [运行参考探针](tooling/s0/README.md)。
+
+本地一次跑完全部门禁：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/check.ps1
+```
 
 当前优先事项：
 
-- 建立 CI 与必做检查门禁（T01-02），并独立实现协议模型与固定向量比对（T02-01/T02-02），再冻结协议 v1。
+- 独立实现协议模型与固定向量比对（T02-01/T02-02），再冻结协议 v1。
 - 在目标设备复验 20 GiB 流式读写、哈希、内存上限与完整导出；Linux 本地参考实验已通过。
 - 在真实平台存储后端验证 checkpoint、重启及故障恢复；Linux 子进程中断实验已通过。
 - 验证 Android LocalOnlyHotspot、网络绑定和 SAF URI 重启恢复（B01–B03）。
@@ -137,6 +145,9 @@ NearSend 目前处于 **S0 技术验证与协议细化阶段**，工程侧已完
 - [固定测试向量](docs/protocol/vectors-v1.json)
 - [S0 验证报告与真机执行单](docs/testing/S0-report.md)
 - [S0 参考探针运行说明](tooling/s0/README.md)
+- [构建与检查脚本说明](tooling/scripts/README.md)
+- [仓库级检查脚本说明](tooling/checks/README.md)
+- [CI 工作流](.github/workflows/ci.yml) · [Flutter 工具链安装脚本](tooling/ci/install_flutter.sh)
 
 `AGENTS.md` 是本项目对 Cursor、Claude Code、Codex 等 AI 编码工具的最高优先级项目规则，包含架构边界、安全要求、目录规范、开发工作流与必做检查。
 

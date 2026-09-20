@@ -4,7 +4,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；协议草案与 Python 参考实验已完成；T01-01 已建立 Android/Windows/iOS 三端 Flutter 工程与版本可追踪的壳应用，并在 Android 真机与 Windows 上构建运行通过。传输、配对、发现、存储与恢复功能均未实现；没有可分发安装包或正式发布版本；协议与关键平台选型尚未冻结。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；协议草案与 Python 参考实验已完成；T01-01 已建立 Android/Windows/iOS 三端 Flutter 工程与版本可追踪的壳应用，并在 Android 真机与 Windows 上构建运行通过；T01-02 已把必做检查与双端构建固化为 GitHub Actions 门禁并在真实运行中全部通过。传输、配对、发现、存储与恢复功能均未实现；没有可分发安装包或正式发布版本；协议与关键平台选型尚未冻结。**
 
 ## 1. 状态口径
 
@@ -39,6 +39,7 @@
 | D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡统一放在 [docs/tasks/](tasks/README.md)，见 ADR-0001 |
 | R01 | Flutter客户端与原生适配 | 部分完成：工程基线 | [T01-01](tasks/T01-01.md)、[T01-01 证据](testing/evidence/2026-09-20/t01-01-01/summary.md) | Android/Windows/iOS 工程可构建；Android 真机与 Windows 均启动同一版本壳应用；传输、配对、发现、存储、恢复未实现 |
 | R02 | 安装包、签名构建及发布CI | 待开始 | 无产物 | 当前只有发布策略，未发布任何版本 |
+| R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | 四个作业在 GitHub Actions 真实通过；签名与发布作业仍属 T10 |
 
 历史实验环境见[environment.json](testing/evidence/2026-09-20/environment.json)。20GiB整文件哈希通过；峰值RSS为18,944KiB，1GiB为18,816KiB。该口径不包含系统页缓存，不代表真机吞吐量或完整应用内存。
 
@@ -62,7 +63,7 @@
 | 任务 | 当前状态 | 退出门槛 |
 | --- | --- | --- |
 | T00 文档与研发治理 | 已完成：设计 | 文档索引、流程、架构、端侧、UI、质量和 Agent 手册已提交；后续持续维护 |
-| T01 工程/构建/配置 | 已完成 | Android、Windows 构建成功并可安装/运行；版本、Git 提交、协议版本与 schema 版本在两端可见（见 §6.1） |
+| T01 工程/构建/配置 | 已完成 | 两端可安装/运行、版本可追踪（§6.1）；检查与双端构建已固化为 CI 门禁（§6.2） |
 | T02 协议/模型/向量 | 部分完成 | 草案和Python向量已提交；需跨语言一致并冻结 |
 | T03 配对与单文件链路 | 待开始：仅TLS探针 | 用户授权后端到端收发、鉴权负例通过 |
 | T04 分块与checkpoint | 部分完成：实验 | 生产存储实现、批量窗口及背压验证 |
@@ -78,7 +79,7 @@
 | 子任务 | 依赖 | 当前状态 | 退出门槛 |
 | --- | --- | --- | --- |
 | T01-01 Flutter 工程基线 | 无 | 已完成 | Android/Windows 启动同一壳应用，版本可追踪 |
-| T01-02 CI 与检查 | T01-01 | 就绪 | format/analyze/test/build 可重复运行 |
+| T01-02 CI 与检查 | T01-01 | 已完成 | format/analyze/test/build 可重复运行 |
 | T02-01 Dart canonical manifest | T01-01、D03/D04 | 就绪（依赖 T01-01 工程） | 固定向量正反例一致，不复制 Python 实现逻辑 |
 | T02-02 状态/错误/版本模型 | T01-01、D03 | 就绪（依赖 T01-01 工程） | 模型和序列化测试通过，未知字段规则明确 |
 | T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 待澄清 | durable 提交顺序、迁移和故障测试通过 |
@@ -100,6 +101,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 平台目录边界 | `android`/`windows`/`ios` 相对 `flutter create` 生成结果只允许标识类差异，不得混入业务逻辑 | T01-01 已按 SHA-256 逐文件审计通过，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)；后续每个平台任务需重复复核 |
 | 依赖锁定 | `pubspec.lock` 必须入库；新增依赖需按端侧设计 §12 记录用途、许可证、维护状态与安全影响 | T01-01 已修正 `*.lock` 误忽略并跟踪 `pubspec.lock`；T01-01 未引入任何第三方运行时依赖 |
 | 应用标识 | `applicationId` / bundle identifier 发布后不可更改 | 已在 [ADR-0001](decisions/ADR-0001-工程基线与标识.md) 冻结为 `com.nearsend.app`；变更必须在 T10 之前完成 |
+| CI 门禁范围 | 自动化门禁只覆盖静态检查、单元/组件测试与构建；**不得**把它当作真机、网络、耐久性或安全结论的替代 | T01-02 已建立并在真实运行中通过，见 [运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md)；平台能力结论仍必须由目标设备证据支持 |
+| CI 工具链与供应链 | Action 必须固定到提交 SHA、权限只读、禁止 `continue-on-error`；Flutter 版本与安装脚本两处必须一致 | 已由 `tooling/checks/check_ci_workflow.py` 在 CI 中强制 |
 
 这些项阻止产品发布，不妨碍将明确标注为实验的源码和证据归档入仓。
 
@@ -159,6 +162,32 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   正式签名（T10）；深色模式、动态字体、屏幕阅读器与一万项列表性能（后续 UI 任务）；
   以及全部传输、配对、发现、存储与恢复能力（尚未实现）。
 
+### 6.2 T01-02 CI 与检查（本次交付）
+
+任务卡：[T01-02](tasks/T01-02.md)　证据：[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md)（运行 ID `t01-02-01`）
+
+- 新增 `.github/workflows/ci.yml`：四个作业（仓库检查、format/analyze/test、Android 构建、
+  Windows 构建）。**没有任何 `continue-on-error`**，工作流权限为只读；
+  所有 `uses:` 固定到 40 位提交 SHA，只使用 GitHub 官方一方 Action（MIT）。
+- Flutter 工具链由 `tooling/ci/install_flutter.sh` 安装：版本固定 3.47.5 并**校验归档 SHA-256**
+  （Linux `2132e990…`、Windows `0ccd7193…`，后者在 T01-01 中由本地实际下载独立核对）。
+  不使用第三方 Action 安装 Flutter，理由与依赖评估记入运行汇总 §2。
+- 新增 `tooling/checks/` 三个**仅用 Python 标准库**的检查：相对链接、敏感信息、CI 工作流不变量。
+  `check.ps1` 与工作流调用同一份脚本，因此本地与 CI 执行同一组规则，不存在两套会分叉的实现。
+- `build.ps1` 改为跨平台（搜索路径使用正斜杠），使 ubuntu 作业运行开发者本地使用的同一份构建逻辑，
+  而不是在 YAML 里再写一遍。
+- 新增 `.gitattributes` 声明行尾与二进制策略；`git add --renormalize .` 未改变任何既有文件内容。
+- **真实 CI 结果**：首次运行（run 35521877748）3/4 作业通过，`Markdown relative links` 失败；
+  修复后运行（run 35522211411，提交 `eb8c4d9`）**四个作业全部 success**。
+  首次失败暴露了两个真实问题并已修复：检查器把文档中的行内代码示例当成真实链接；
+  以及本地的「通过」只覆盖 26 个 Markdown 而 CI 看到 29 个（差额是当时尚未 `git add` 的新文档）。
+  现在检查器会跳过代码块/行内代码/HTML 注释，并显式列出未跟踪的 Markdown 打印 `NOT CHECKED`。
+  **首次失败的完整日志保留未覆盖**，见 `ci-run-35521877748-repository-checks-FAILED.log`。
+- 反例验证：5 类缺陷（坏链接、假令牌、标签固定 Action、`continue-on-error`、Flutter 版本漂移）
+  全部被对应检查抓到；敏感信息扫描的输出经过脱敏（只打印前 4 字符与长度）。
+- 未执行/未完成：签名与发布作业（T10）；macOS runner 与 iOS 构建（B06/T09 仍阻塞）；
+  pub/Gradle 依赖缓存优化；夜间集成测试与真机证据（按质量策略由里程碑任务承担）。
+
 ## 7. 更新记录与维护规则
 
 | 日期 | 变更 | 证据 |
@@ -173,5 +202,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | T01-01 并入 UI Baseline 1.0：设计 Token 按 `docs/ui/STYLE_GUIDE.md` 重写（圆角 16/12、新增 canvas/border/muted/soft 与精确排版比例） | [样式指南](ui/STYLE_GUIDE.md)、[PR #4](https://github.com/yanzhao77/NearSend/pull/4) |
 | 2026-09-20 | T01-01 经 PR #4 合并入 `master`（合并提交 `5a3d840`），任务状态由「已完成（待合并）」转为「已完成」 | [PR #4](https://github.com/yanzhao77/NearSend/pull/4)、合并提交 `5a3d840` |
 | 2026-09-20 | 构建脚本修订：产物摘要排除本次运行自身重写的证据日志，使干净提交的构建立即体现为 `gitDirty=false`；修复该判定在 `Set-StrictMode` 下对单个变更路径报错的问题。证据按新的干净修订重新采集 | [build.ps1](../tooling/scripts/build.ps1)、T01-01 证据 |
+| 2026-09-20 | T01-02 完成：建立 GitHub Actions 门禁（仓库检查、format/analyze/test、Android/Windows 构建），固定并校验 Flutter 工具链摘要，新增三项跨平台仓库检查与 `.gitattributes`；真实 CI 首次失败后修复并全部通过 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md)、[PR #6](https://github.com/yanzhao77/NearSend/pull/6) |
+| 2026-09-20 | 记录一条过程教训：仓库级检查只扫描已跟踪文件，因此**本地通过不代表覆盖工作区**。检查器现在会列出未跟踪的 Markdown 并打印 `NOT CHECKED` | T01-02 运行汇总 §6、`ci-run-35521877748-repository-checks-FAILED.log` |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
