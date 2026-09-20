@@ -1,0 +1,233 @@
+ï»¿2026-09-20T16:10:37.9767841Z Current runner version: '2.337.0'
+##[group]Runner Image Provisioner
+Hosted Compute Agent
+Version: 20260828.587
+Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+Build Date: 2026-08-28T16:44:25Z
+Worker ID: {bf8dacff-dcef-4917-8084-a85095ca8607}
+Azure Region: northcentralus
+##[endgroup]
+##[group]Operating System
+Ubuntu
+24.04.5
+LTS
+##[endgroup]
+##[group]Runner Image
+Image: ubuntu-24.04
+Version: 20260907.300.1
+Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260907.300/images/ubuntu/Ubuntu2404-Readme.md
+Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260907.300
+##[endgroup]
+##[group]GITHUB_TOKEN Permissions
+Contents: read
+Metadata: read
+##[endgroup]
+Secret source: Actions
+Cache mode: write
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+Download action repository 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+Complete job name: Repository checks (vectors, links, secrets, lock file)
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+with:
+  repository: yanzhao77/NearSend
+  token: ***
+  ssh-strict: true
+  ssh-user: git
+  persist-credentials: true
+  clean: true
+  sparse-checkout-cone-mode: true
+  fetch-depth: 1
+  fetch-tags: false
+  show-progress: true
+  lfs: false
+  submodules: false
+  set-safe-directory: true
+  allow-unsafe-pr-checkout: false
+env:
+  FLUTTER_VERSION: 3.47.5
+##[endgroup]
+Syncing repository: yanzhao77/NearSend
+##[group]Getting Git version info
+Working directory is '/home/runner/work/NearSend/NearSend'
+[command]/usr/bin/git version
+git version 2.55.0
+##[endgroup]
+Temporarily overriding HOME='/home/runner/work/_temp/8e65ff88-53ee-4c2d-9cb1-53bcb2d9d808' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/NearSend/NearSend
+Deleting the contents of '/home/runner/work/NearSend/NearSend'
+##[group]Initializing the repository
+[command]/usr/bin/git init /home/runner/work/NearSend/NearSend
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Initialized empty Git repository in /home/runner/work/NearSend/NearSend/.git/
+[command]/usr/bin/git remote add origin https://github.com/yanzhao77/NearSend
+##[endgroup]
+##[group]Disabling automatic garbage collection
+[command]/usr/bin/git config --local gc.auto 0
+##[endgroup]
+##[group]Setting up auth
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+[command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+##[endgroup]
+##[group]Fetching the repository
+[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8925512a5accce5105760cb7cd9041f2ba96b87f:refs/remotes/pull/6/merge
+From https://github.com/yanzhao77/NearSend
+ * [new ref]         8925512a5accce5105760cb7cd9041f2ba96b87f -> pull/6/merge
+##[endgroup]
+##[group]Determining the checkout info
+##[endgroup]
+[command]/usr/bin/git sparse-checkout disable
+[command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+##[group]Checking out the ref
+[command]/usr/bin/git checkout --progress --force refs/remotes/pull/6/merge
+Note: switching to 'refs/remotes/pull/6/merge'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 8925512 Merge c9d3a5e1fbb9654c568ba5500a238d009c7c3732 into af5eb486f3f257be82c7074f94a4f58f7dc10b18
+##[endgroup]
+[command]/usr/bin/git log -1 --format=%H
+8925512a5accce5105760cb7cd9041f2ba96b87f
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+##[group]Run actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+with:
+  python-version: 3.12
+  check-latest: false
+  token: ***
+  update-environment: true
+  allow-prereleases: false
+  freethreaded: false
+env:
+  FLUTTER_VERSION: 3.47.5
+##[endgroup]
+##[group]Installed versions
+(node:2259) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Successfully set up CPython (3.12.14)
+##[endgroup]
+##[group]Run set -euo pipefail
+[36;1mset -euo pipefail[0m
+[36;1mgit ls-files --error-unmatch pubspec.lock[0m
+[36;1mtest -s pubspec.lock[0m
+[36;1mecho "pubspec.lock is tracked and non-empty"[0m
+shell: /usr/bin/bash -e {0}
+env:
+  FLUTTER_VERSION: 3.47.5
+  pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+  PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+  Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+##[endgroup]
+pubspec.lock
+pubspec.lock is tracked and non-empty
+##[group]Run python -m unittest -v test_probes
+[36;1mpython -m unittest -v test_probes[0m
+shell: /usr/bin/bash -e {0}
+env:
+  FLUTTER_VERSION: 3.47.5
+  pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+  PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+  Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+##[endgroup]
+test_20gib_offsets_and_tail (test_probes.ProtocolTests.test_20gib_offsets_and_tail) ... ok
+test_accept_10000_manifest_entries (test_probes.ProtocolTests.test_accept_10000_manifest_entries) ... ok
+test_chunk_order_length (test_probes.ProtocolTests.test_chunk_order_length) ... ok
+test_decimal_limits (test_probes.ProtocolTests.test_decimal_limits) ... ok
+test_file_count_limit_and_duplicate_id (test_probes.ProtocolTests.test_file_count_limit_and_duplicate_id) ... ok
+test_fixed_vectors (test_probes.ProtocolTests.test_fixed_vectors) ... ok
+test_json_depth_and_size_limits (test_probes.ProtocolTests.test_json_depth_and_size_limits) ... ok
+test_key_order_and_whitespace (test_probes.ProtocolTests.test_key_order_and_whitespace) ... ok
+test_path_rejections (test_probes.ProtocolTests.test_path_rejections) ... ok
+test_reject_duplicate_keys (test_probes.ProtocolTests.test_reject_duplicate_keys) ... ok
+test_standard_hash (test_probes.ProtocolTests.test_standard_hash) ... ok
+test_total_chunk_limit (test_probes.ProtocolTests.test_total_chunk_limit) ... ok
+test_unknown_fields_and_version (test_probes.ProtocolTests.test_unknown_fields_and_version) ... ok
+test_corruption_selective_repair (test_probes.StorageTests.test_corruption_selective_repair) ... ok
+test_crash_after_sync (test_probes.StorageTests.test_crash_after_sync) ... ok
+test_crash_after_write (test_probes.StorageTests.test_crash_after_write) ... ok
+test_crash_before_commit (test_probes.StorageTests.test_crash_before_commit) ... ok
+test_lost_ack_after_commit (test_probes.StorageTests.test_lost_ack_after_commit) ... ok
+test_stale_writer_and_idempotent_resume (test_probes.StorageTests.test_stale_writer_and_idempotent_resume) ... ok
+test_sync_failure_not_committed (test_probes.StorageTests.test_sync_failure_not_committed) ... ok
+test_wrong_content_and_range (test_probes.StorageTests.test_wrong_content_and_range) ... ok
+test_tls12_rejected (test_probes.TLSTests.test_tls12_rejected) ... ok
+test_tls13_correct_pin (test_probes.TLSTests.test_tls13_correct_pin) ... ok
+test_wrong_pin_sends_no_http (test_probes.TLSTests.test_wrong_pin_sends_no_http) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 0.683s
+
+OK
+##[group]Run python tooling/checks/check_links.py
+[36;1mpython tooling/checks/check_links.py[0m
+shell: /usr/bin/bash -e {0}
+env:
+  FLUTTER_VERSION: 3.47.5
+  pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+  PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+  Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+  LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+##[endgroup]
+checked 29 Markdown files, 143 links
+
+BROKEN LINKS (1):
+  tooling/checks/README.md -> ç®æ 
+##[error]Process completed with exit code 1.
+Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Post job cleanup.
+[command]/usr/bin/git version
+git version 2.55.0
+Temporarily overriding HOME='/home/runner/work/_temp/aee5390e-9fbb-46a6-8975-7de9e19f30f3' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/NearSend/NearSend
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+http.https://github.com/.extraheader
+[command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Cleaning up orphan processes
+##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

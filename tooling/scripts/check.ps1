@@ -1,12 +1,17 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Runs the NearSend required checks: format, analyze, test.
+    Runs the NearSend required checks: repository checks, format, analyze, test.
 
 .DESCRIPTION
     Implements the mandatory checks from AGENTS.md §7 in a fixed order. Each step
     streams its own output and the script stops at the first failure with a
     non-zero exit code, so a failing check can never be mistaken for a pass.
+
+    The repository checks (Markdown relative links and sensitive information) are
+    cross-platform Python scripts under tooling/checks/, so this script and
+    .github/workflows/ci.yml execute exactly the same rules rather than two
+    parallel implementations that can drift apart.
 
 .PARAMETER SkipFormat
     Skip the `dart format` verification step.
@@ -16,12 +21,16 @@
 
 .PARAMETER SkipTest
     Skip the `flutter test` step.
+
+.PARAMETER SkipRepoChecks
+    Skip the Markdown link and sensitive-information checks.
 #>
 [CmdletBinding()]
 param(
     [switch]$SkipFormat,
     [switch]$SkipAnalyze,
-    [switch]$SkipTest
+    [switch]$SkipTest,
+    [switch]$SkipRepoChecks
 )
 
 Set-StrictMode -Version Latest
@@ -74,6 +83,29 @@ try {
     if (-not $SkipTest) {
         Invoke-Step -Name 'flutter test' -Command 'flutter' `
             -Arguments @('test', '--no-pub')
+    }
+
+    if (-not $SkipRepoChecks) {
+        # These need no Flutter toolchain. `python3` is the name on Linux and macOS
+        # runners and on most Unix-like systems; `python` is what the Windows
+        # launcher provides.
+        $python = Get-Command python3 -ErrorAction SilentlyContinue
+        if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
+
+        if ($python) {
+            Invoke-Step -Name 'Markdown relative links' -Command $python.Source `
+                -Arguments @('tooling/checks/check_links.py')
+            Invoke-Step -Name 'Sensitive information' -Command $python.Source `
+                -Arguments @('tooling/checks/check_secrets.py')
+            Invoke-Step -Name 'CI workflow invariants' -Command $python.Source `
+                -Arguments @('tooling/checks/check_ci_workflow.py')
+        }
+        else {
+            # Reported as skipped, never as passed (AGENTS.md §7: an unexecuted
+            # check must be stated, not implied to have succeeded).
+            Write-Host ''
+            Write-Host 'SKIPPED: Markdown link and sensitive-information checks - no python3/python on PATH.' -ForegroundColor Yellow
+        }
     }
 
     Write-Host ''

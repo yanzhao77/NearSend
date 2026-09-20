@@ -1,0 +1,51 @@
+# Line-ending and binary policy.
+#
+# Why this file exists: `AGENTS.md` §7 requires `dart format --output=none
+# --set-exit-if-changed` to pass, and the Dart formatter emits LF. Without a
+# declared policy a Windows checkout (core.autocrlf=true) rewrites tracked text to
+# CRLF in the working tree, so the same commit passes the format check on Linux CI
+# and fails on a Windows machine. Declaring the policy removes that class of
+# environment-dependent failure and keeps diffs reviewable.
+#
+# The repository already stores LF, so enabling this does not rewrite history or
+# change any committed content.
+
+# Normalise every text file to LF, in the repository and in the working tree.
+* text=auto eol=lf
+
+# Windows command shells require CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Explicitly binary. Autodetection usually gets these right, but a misdetected
+# archive or keystore is corrupted by newline normalisation, so the important ones
+# are declared. Signing material must never be committed at all (AGENTS.md §5);
+# the entries below are defensive.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.xz binary
+*.7z binary
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.a binary
+*.lib binary
+*.pdb binary
+*.class binary
+*.pdf binary
