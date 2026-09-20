@@ -39,6 +39,18 @@ abstract final class ProtocolLimits {
   /// Maximum control-body size in bytes (§4).
   static const int controlBodyMaxBytes = 1048576;
 
+  /// Maximum nesting depth of a control body (§4).
+  ///
+  /// The limit is enforced *while* scanning rather than after parsing, so a hostile body
+  /// cannot turn the parser itself into a stack overflow.
+  static const int maxJsonDepth = 16;
+
+  /// Maximum length of an error `message` on the wire (§7).
+  ///
+  /// §7 requires the message to carry no secret and no full local path; bounding it also
+  /// stops a peer from using the field as a channel.
+  static const int wireMessageMaxBytes = 256;
+
   /// Highest protocol minor version this implementation understands (§3).
   static const int protocolMajor = 1;
   static const int protocolMinor = 0;
