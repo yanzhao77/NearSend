@@ -325,11 +325,20 @@ void main() {
     });
 
     test('rejects a registry that does not reach the schema constant', () {
+      // Expressed in terms of the constant so the test keeps its meaning when a version
+      // is added: the point is "one short of what the schema claims", not "two steps".
+      final List<MigrationStep> short = <MigrationStep>[
+        for (int i = 1; i < StorageSchema.currentVersion; i++)
+          MigrationStep(version: i, description: 'step $i', apply: _noop),
+      ];
       expect(
-        () => StorageMigrations.assertWellFormed(<MigrationStep>[
-          const MigrationStep(version: 1, description: 'a', apply: _noop),
-          const MigrationStep(version: 2, description: 'b', apply: _noop),
-        ]),
+        short,
+        isNotEmpty,
+        reason: 'the schema must claim at least two versions',
+      );
+
+      expect(
+        () => StorageMigrations.assertWellFormed(short),
         throwsA(
           isA<StorageException>().having(
             (StorageException e) => e.detail,
@@ -338,6 +347,224 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('rejects a registry that goes past the schema constant', () {
+      final List<MigrationStep> over = <MigrationStep>[
+        for (int i = 1; i <= StorageSchema.currentVersion + 1; i++)
+          MigrationStep(version: i, description: 'step $i', apply: _noop),
+      ];
+
+      expect(
+        () => StorageMigrations.assertWellFormed(over),
+        throwsA(
+          isA<StorageException>().having(
+            (StorageException e) => e.detail,
+            'detail',
+            contains('schema constant'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('upgrading a version 1 database', () {
+    /// Builds a database at version 1 only, as the version 1 build would have left it.
+    ///
+    /// The step is applied directly rather than through [StorageMigrator], deliberately:
+    /// the migrator requires its registry to reach the current schema constant, which is
+    /// the right invariant for a shipped registry and the wrong one for reconstructing a
+    /// historical database. Relaxing it to make this test possible would trade a real
+    /// guard for test convenience.
+    Database openVersionOne(String name) {
+      final Database db = sqlite3.open(dbPath(name));
+      db.execute('PRAGMA foreign_keys = ON;');
+      StorageSchema.applyVersion1(db);
+      db.execute(
+        'INSERT INTO ${StorageSchema.metaTable} (id, version, applied_at) '
+        'VALUES (1, 1, 0);',
+      );
+      return db;
+    }
+
+    test('reaches the current version', () {
+      final Database db = openVersionOne('v1.db');
+      try {
+        expect(StorageMigrator().storedVersion(db), 1);
+        expect(StorageMigrator().migrate(db), StorageSchema.currentVersion);
+        expect(
+          StorageMigrator().storedVersion(db),
+          StorageSchema.currentVersion,
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    test('keeps the rows the old version wrote', () {
+      final Database db = openVersionOne('v1-rows.db');
+      try {
+        db.execute(
+          "INSERT INTO tasks (task_id, role, direction, state, protocol_major, "
+          "protocol_minor, lease_epoch, created_at, updated_at) "
+          "VALUES ('t1', 'receiver', 'client_to_server', 'ready', 1, 0, 0, 1, 1);",
+        );
+        db.execute(
+          "INSERT INTO files (file_id, task_id, relative_path, size_bytes, "
+          "chunk_size_bytes, chunk_count, file_sha256, chunk_manifest_digest, "
+          "export_state, created_at) "
+          "VALUES ('f1', 't1', 'a/b.bin', 4, 4, 1, 'aa', 'bb', 'completed', 1);",
+        );
+        // Written the version 1 way, which had no saved_path column.
+        db.execute(
+          "INSERT INTO exports (file_id, target_uri, result, recorded_at) "
+          "VALUES ('f1', 'content://old', 'saved', 7);",
+        );
+
+        StorageMigrator().migrate(db);
+
+        final Row task = db.select('SELECT * FROM tasks;').first;
+        expect(task['task_id'], 't1');
+        expect(task['state'], 'ready');
+
+        final Row export = db.select('SELECT * FROM exports;').first;
+        expect(export['target_uri'], 'content://old');
+        expect(export['result'], 'saved');
+        expect(export['recorded_at'], 7);
+      } finally {
+        db.close();
+      }
+    });
+
+    test('an old export row has no name rather than an invented one', () {
+      final Database db = openVersionOne('v1-null.db');
+      try {
+        db.execute(
+          "INSERT INTO tasks (task_id, role, direction, state, protocol_major, "
+          "protocol_minor, lease_epoch, created_at, updated_at) "
+          "VALUES ('t1', 'receiver', 'client_to_server', 'ready', 1, 0, 0, 1, 1);",
+        );
+        db.execute(
+          "INSERT INTO files (file_id, task_id, relative_path, size_bytes, "
+          "chunk_size_bytes, chunk_count, file_sha256, chunk_manifest_digest, "
+          "export_state, created_at) "
+          "VALUES ('f1', 't1', 'a/b.bin', 4, 4, 1, 'aa', 'bb', 'completed', 1);",
+        );
+        db.execute(
+          "INSERT INTO exports (file_id, target_uri, result, recorded_at) "
+          "VALUES ('f1', 'content://old', 'saved', 7);",
+        );
+
+        StorageMigrator().migrate(db);
+
+        expect(
+          db.select('SELECT saved_path FROM exports;').first['saved_path'],
+          isNull,
+          reason:
+              'the version 1 build genuinely did not record which name it used, and the '
+              'copy may have been renamed to avoid overwriting something',
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    test('a backup is written before the upgrade', () {
+      final Database db = openVersionOne('v1-backup.db');
+      try {
+        db.execute(
+          "INSERT INTO peers (peer_id, identity_fingerprint, authorized) "
+          "VALUES ('p1', 'fp', 1);",
+        );
+        final String backupDir = '${dir.path}${Platform.pathSeparator}backup';
+
+        StorageMigrator().migrate(db, backupDirectory: backupDir);
+
+        final List<File> backups = Directory(backupDir)
+            .listSync()
+            .whereType<File>()
+            .toList();
+        expect(backups, hasLength(1));
+        expect(
+          backups.single.path,
+          contains('v1'),
+          reason: 'the backup names the version it came from',
+        );
+
+        // The backup is a readable database that still holds the old row.
+        final Database restored = sqlite3.open(backups.single.path);
+        try {
+          expect(
+            restored.select('SELECT COUNT(*) AS c FROM peers;').first['c'],
+            1,
+          );
+        } finally {
+          restored.close();
+        }
+      } finally {
+        db.close();
+      }
+    });
+
+    test('the upgraded database can store a name afterwards', () {
+      final Database db = openVersionOne('v1-write.db');
+      try {
+        db.execute(
+          "INSERT INTO tasks (task_id, role, direction, state, protocol_major, "
+          "protocol_minor, lease_epoch, created_at, updated_at) "
+          "VALUES ('t1', 'receiver', 'client_to_server', 'ready', 1, 0, 0, 1, 1);",
+        );
+        db.execute(
+          "INSERT INTO files (file_id, task_id, relative_path, size_bytes, "
+          "chunk_size_bytes, chunk_count, file_sha256, chunk_manifest_digest, "
+          "export_state, created_at) "
+          "VALUES ('f1', 't1', 'a/b.bin', 4, 4, 1, 'aa', 'bb', 'completed', 1);",
+        );
+
+        StorageMigrator().migrate(db);
+        db.execute(
+          "INSERT INTO exports (file_id, target_uri, result, recorded_at, saved_path) "
+          "VALUES ('f1', 'content://new', 'saved', 9, 'a/b (1).bin');",
+        );
+
+        expect(
+          db.select('SELECT saved_path FROM exports;').first['saved_path'],
+          'a/b (1).bin',
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    test('a fresh database and an upgraded one have the same columns', () {
+      final Database upgraded = openVersionOne('same-upgraded.db');
+      final NearSendDatabase fresh = NearSendDatabase.open(
+        path: dbPath('same-fresh.db'),
+      );
+      try {
+        StorageMigrator().migrate(upgraded);
+
+        Set<String> columnsOf(Database db, String table) => <String>{
+          for (final Row row in db.select('PRAGMA table_info($table);'))
+            row['name'] as String,
+        };
+
+        for (final String table in StorageSchema.tableNames) {
+          if (table == StorageSchema.metaTable) {
+            continue;
+          }
+          expect(
+            columnsOf(upgraded, table),
+            columnsOf(fresh.db, table),
+            reason:
+                'a fresh database runs every step from 1, so it must end up with exactly '
+                'what an upgraded one has for $table',
+          );
+        }
+      } finally {
+        upgraded.close();
+        fresh.close();
+      }
     });
   });
 
