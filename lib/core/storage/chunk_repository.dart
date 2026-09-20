@@ -6,25 +6,32 @@
 ///   exposes a byte counter, because a byte counter is exactly what a recovery path must
 ///   not trust.
 /// * the order is `write → chunk digest → durable sync → commit → acknowledge`. The only
-///   method that commits a chunk performs the whole sequence, so there is no API that
-///   lets a caller commit first and sync later.
+///   method that commits a chunk, [ChunkRepository.commitPendingBatch], requires a
+///   verified sync receipt for every chunk it commits, so there is no API that lets a
+///   caller commit first and sync later.
 /// * a failure at any step must not acknowledge the chunk, so a failed commit leaves the
 ///   row `missing` and the chunk is re-sent rather than trusted.
 /// * a commit is refused unless it presents the task's current write generation, and the
 ///   generation is re-checked inside the same transaction that commits the chunk - §8
 ///   warns that checking only at the request entry point lets an in-flight write land
 ///   after a resume has taken over.
+/// * §8 bounds how much verified-but-uncommitted data may accumulate
+///   ([ChunkCommitWindow]) and commits a checkpoint sequence with the chunk flags, in the
+///   same transaction, so the two can never disagree about how far the receiver got.
 library;
 
 import 'dart:typed_data';
 
 import 'package:sqlite3/sqlite3.dart';
 
+import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/chunk_manifest.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/protocol_validation.dart';
+import 'package:nearsend/core/storage/commit_window.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
+import 'package:nearsend/core/storage/storage_schema.dart';
 
 /// Whether a chunk's bytes are durably committed.
 enum ChunkState {
@@ -87,6 +94,53 @@ class DurableChunkWriteResult {
   final String sha256;
 }
 
+/// The outcome of one chunk write, in §8's own vocabulary.
+///
+/// Reuses [ChunkWriteState] rather than declaring a parallel enum: §8 fixes the two wire
+/// values, and a second spelling of them is exactly the kind of divergence between the
+/// protocol layer and the storage layer that a test on either side alone would miss.
+class ChunkWriteOutcome {
+  const ChunkWriteOutcome({
+    required this.index,
+    required this.state,
+    required this.leaseEpoch,
+    required this.checkpointSeq,
+  });
+
+  final int index;
+  final ChunkWriteState state;
+  final int leaseEpoch;
+
+  /// The sequence of the last committed checkpoint.
+  ///
+  /// For a [ChunkWriteState.verifiedPending] outcome this is the *previous* checkpoint: the
+  /// chunk's bytes are synced but no checkpoint includes them yet.
+  final int checkpointSeq;
+
+  @override
+  String toString() =>
+      'ChunkWriteOutcome($index ${state.wireValue} epoch $leaseEpoch seq '
+      '$checkpointSeq)';
+}
+
+/// What one batch commit did.
+class ChunkBatchCommit {
+  const ChunkBatchCommit({
+    required this.checkpointSeq,
+    required this.committedIndices,
+  });
+
+  /// The sequence the checkpoint advanced to, or the unchanged sequence for an empty batch.
+  final int checkpointSeq;
+
+  /// The chunk indices this commit marked committed, ascending as the window held them.
+  final List<int> committedIndices;
+
+  @override
+  String toString() =>
+      'ChunkBatchCommit(seq $checkpointSeq, $committedIndices)';
+}
+
 /// The platform port that writes chunk bytes and makes them durable.
 ///
 /// Implementations must not return until the bytes are durably synced. Real durable-sync
@@ -136,6 +190,11 @@ class ChunkRepository {
   ChunkRepository(this.database);
 
   final NearSendDatabase database;
+
+  /// §8's checkpoint counter, on `tasks` because that is where its partner `lease_epoch`
+  /// lives.
+  static const String checkpointSeqColumn =
+      StorageSchema.tasksCheckpointSeqColumn;
 
   /// Registers a task row, or leaves an existing one untouched.
   ///
@@ -273,12 +332,16 @@ class ChunkRepository {
     });
   }
 
-  /// Writes, verifies, durably syncs and commits one chunk.
+  /// Writes, verifies, durably syncs and commits one chunk (the single-chunk path).
   ///
-  /// This is the only method that can mark a chunk committed, and it cannot be completed
-  /// without a sink that reports a successful durable sync. The reported length and
-  /// digest are checked against the frozen manifest before the commit, so a sink that
-  /// writes the wrong bytes fails the operation rather than recording false progress.
+  /// This is §8's per-chunk checkpoint, expressed as [CommitWindowPolicy.immediate]: it
+  /// exists so the one-chunk case is *implemented by* the window rather than beside it.
+  /// Callers handling a stream of chunks use [writeChunkThroughWindow] with a shared
+  /// window instead, which lets §8 batch the commits.
+  ///
+  /// The reported length and digest are checked against the frozen manifest before the
+  /// commit, so a sink that writes the wrong bytes fails the operation rather than
+  /// recording false progress.
   ///
   /// [leaseEpoch] must be the task's current generation. It is checked before the write
   /// and again inside the commit transaction, because §8 warns that a generation can be
@@ -292,7 +355,58 @@ class ChunkRepository {
     required DurableChunkSink sink,
     int? nowMillis,
   }) async {
+    final ChunkCommitWindow window = ChunkCommitWindow(
+      policy: CommitWindowPolicy.immediate,
+    );
+    final ChunkWriteOutcome outcome = await writeChunkThroughWindow(
+      taskId: taskId,
+      fileId: fileId,
+      index: index,
+      bytes: bytes,
+      leaseEpoch: leaseEpoch,
+      sink: sink,
+      window: window,
+      nowMillis: nowMillis,
+      // The single-chunk path has no later boundary to rely on, so the checkpoint it
+      // promises is the one it takes now.
+      atBoundary: true,
+    );
+    if (outcome.state != ChunkWriteState.committed) {
+      throw StorageException(
+        StorageFailureCode.commitFailed,
+        'the immediate window left $fileId[$index] verified but uncommitted',
+      );
+    }
+    return readChunk(fileId, index);
+  }
+
+  /// Writes, verifies and durably syncs one chunk, then checkpoints the window if §8
+  /// requires it.
+  ///
+  /// This is §8's write path minus the two steps that belong to the endpoint layer:
+  /// authentication/authorization and the per-file lock ("认证和授权→文件锁→再次检查 epoch→
+  /// 写入并验证长度/块摘要→受控待提交队列→syncData→SQLite 事务提交块标志和 checkpointSeq→
+  /// 发布 committed").
+  ///
+  /// The answer distinguishes §8's two states honestly. A chunk whose bytes are synced but
+  /// whose checkpoint has not run yet is `verified_pending`: §8 says that state "只证明本次块
+  /// 长度/摘要正确，不可释放持久化确认跟踪", so the returned `checkpointSeq` is the last
+  /// committed one and does not include this chunk.
+  ///
+  /// [atBoundary] reports a pause or a file end, where §8 forces a checkpoint.
+  Future<ChunkWriteOutcome> writeChunkThroughWindow({
+    required String taskId,
+    required String fileId,
+    required int index,
+    required Uint8List bytes,
+    required int leaseEpoch,
+    required DurableChunkSink sink,
+    required ChunkCommitWindow window,
+    int? nowMillis,
+    bool atBoundary = false,
+  }) async {
     final StoredChunk expected = readChunk(fileId, index);
+    final int now = nowMillis ?? DateTime.now().millisecondsSinceEpoch;
 
     _assertLease(taskId, leaseEpoch);
 
@@ -301,6 +415,20 @@ class ChunkRepository {
         StorageFailureCode.manifestMismatch,
         'chunk $fileId[$index] received ${bytes.length} bytes but the frozen manifest '
         'requires ${expected.lengthBytes}',
+      );
+    }
+
+    // §8 bounds the pending window, so a window that cannot hold this chunk commits what
+    // it already has *before* the write rather than exceeding the bound.
+    if (window
+        .plan(lengthBytes: expected.lengthBytes, nowMillis: now)
+        .flushBefore) {
+      commitPendingBatch(
+        taskId: taskId,
+        fileId: fileId,
+        leaseEpoch: leaseEpoch,
+        window: window,
+        nowMillis: now,
       );
     }
 
@@ -322,25 +450,144 @@ class ChunkRepository {
       );
     }
 
+    window.enqueue(
+      PendingChunkCommit(
+        index: index,
+        lengthBytes: result.lengthBytes,
+        sha256: result.sha256,
+      ),
+      nowMillis: now,
+    );
+
+    final bool due = window.isCheckpointDue(nowMillis: now, forced: atBoundary);
+    if (!due) {
+      return ChunkWriteOutcome(
+        index: index,
+        state: ChunkWriteState.verifiedPending,
+        leaseEpoch: leaseEpoch,
+        checkpointSeq: checkpointSeq(taskId),
+      );
+    }
+
+    final ChunkBatchCommit batch = commitPendingBatch(
+      taskId: taskId,
+      fileId: fileId,
+      leaseEpoch: leaseEpoch,
+      window: window,
+      nowMillis: now,
+    );
+    return ChunkWriteOutcome(
+      index: index,
+      state: ChunkWriteState.committed,
+      leaseEpoch: leaseEpoch,
+      checkpointSeq: batch.checkpointSeq,
+    );
+  }
+
+  /// Commits every receipt the window holds in one transaction, and clears the window.
+  ///
+  /// This is the **only** method that marks a chunk committed, so there is no path that
+  /// records progress without a durable sync having been reported first.
+  ///
+  /// Each receipt is re-checked against the frozen manifest *inside* the transaction. §8
+  /// requires a re-sent already-committed chunk to be verified rather than accepted because
+  /// "已有块"; checking the receipt here means a caller cannot commit an index it never
+  /// verified, and a content conflict fails the whole batch instead of committing part of
+  /// it - a half-applied checkpoint would advance the sequence past work it did not record.
+  ///
+  /// The generation is re-checked inside the transaction because a resume may have advanced
+  /// it while the bytes were being written.
+  ///
+  /// A window with nothing pending is a no-op: it returns the current sequence without
+  /// opening a transaction, so an empty checkpoint cannot advance the sequence and make the
+  /// sender's "does not regress" comparison meaningless.
+  ChunkBatchCommit commitPendingBatch({
+    required String taskId,
+    required String fileId,
+    required int leaseEpoch,
+    required ChunkCommitWindow window,
+    int? nowMillis,
+  }) {
+    if (!window.hasPending) {
+      return ChunkBatchCommit(
+        checkpointSeq: checkpointSeq(taskId),
+        committedIndices: const <int>[],
+      );
+    }
+
     final int now = nowMillis ?? DateTime.now().millisecondsSinceEpoch;
-    return database.transaction(() {
-      // Re-check inside the transaction: a resume may have advanced the generation while
-      // the bytes were being written.
+    final List<PendingChunkCommit> batch = window.pending;
+
+    final ChunkBatchCommit result = database.transaction(() {
       _assertLease(taskId, leaseEpoch);
 
+      final List<int> committed = <int>[];
+      for (final PendingChunkCommit receipt in batch) {
+        final StoredChunk frozen = readChunk(fileId, receipt.index);
+        if (frozen.lengthBytes != receipt.lengthBytes ||
+            frozen.sha256.toLowerCase() != receipt.sha256.toLowerCase()) {
+          throw StorageException(
+            StorageFailureCode.syncReceiptMismatch,
+            'the verified receipt for $fileId[${receipt.index}] '
+            '(${receipt.lengthBytes} bytes / ${receipt.sha256}) does not match the '
+            'frozen manifest (${frozen.lengthBytes} bytes / ${frozen.sha256})',
+          );
+        }
+        database.db.execute(
+          "UPDATE chunks SET state = 'committed', committed_at = ? "
+          'WHERE file_id = ? AND idx = ?;',
+          <Object?>[now, fileId, receipt.index],
+        );
+        if (database.db.updatedRows == 0) {
+          throw StorageException(
+            StorageFailureCode.commitFailed,
+            'chunk $fileId[${receipt.index}] disappeared before it could be committed',
+          );
+        }
+        committed.add(receipt.index);
+      }
+
       database.db.execute(
-        "UPDATE chunks SET state = 'committed', committed_at = ? "
-        'WHERE file_id = ? AND idx = ?;',
-        <Object?>[now, fileId, index],
+        'UPDATE tasks SET $checkpointSeqColumn = $checkpointSeqColumn + 1, '
+        'updated_at = ? WHERE task_id = ?;',
+        <Object?>[now, taskId],
       );
       if (database.db.updatedRows == 0) {
         throw StorageException(
-          StorageFailureCode.commitFailed,
-          'chunk $fileId[$index] disappeared before it could be committed',
+          StorageFailureCode.staleLease,
+          'task $taskId is not registered',
         );
       }
-      return readChunk(fileId, index);
+
+      return ChunkBatchCommit(
+        checkpointSeq: checkpointSeq(taskId),
+        committedIndices: List<int>.unmodifiable(committed),
+      );
     });
+
+    // Cleared only after the transaction committed. A failure above leaves the receipts in
+    // place, and the bytes on disk, so the same batch is retried instead of the chunk rows
+    // silently staying missing until a resume re-sends them.
+    window.markFlushed();
+    return result;
+  }
+
+  /// The task's last committed checkpoint sequence (§8).
+  ///
+  /// 0 means no checkpoint has been taken, which is what §8's counter starts at rather
+  /// than a fabricated first sequence.
+  int checkpointSeq(String taskId) {
+    final ResultSet rows = database.db.select(
+      'SELECT $checkpointSeqColumn FROM tasks WHERE task_id = ?;',
+      <Object?>[taskId],
+    );
+    if (rows.isEmpty) {
+      throw StorageException(
+        StorageFailureCode.staleLease,
+        'task $taskId is not registered',
+      );
+    }
+    return rows.first[checkpointSeqColumn] as int;
   }
 
   /// Reads one chunk row.

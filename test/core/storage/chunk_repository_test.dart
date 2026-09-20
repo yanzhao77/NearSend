@@ -4,9 +4,12 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/chunk_manifest.dart';
+import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
+import 'package:nearsend/core/storage/commit_window.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 
@@ -545,6 +548,553 @@ void main() {
             'the tail chunk starts at the 4 MiB boundary, computed in 64-bit',
       );
       expect(repository.readChunk(fileId, 1).lengthBytes, 3);
+    });
+  });
+
+  /// §8's batch checkpoint window, driven through the repository.
+  ///
+  /// The property that matters most here is the negative one: a chunk answered
+  /// `verified_pending` must **not** count as progress. §8 says that state "只证明本次块长度/
+  /// 摘要正确，不可释放持久化确认跟踪", so a crash after three verified chunks must leave
+  /// every one of them `missing`. If this path quietly committed them, recovery would
+  /// believe in data that was never checkpointed.
+  group('the batch checkpoint window', () {
+    const CommitWindowPolicy batched = CommitWindowPolicy(
+      maxPendingBytes: 16,
+      flushIntervalMillis: 1000,
+      chunkSizeBytes: 4,
+    );
+
+    ChunkCommitWindow window([CommitWindowPolicy policy = batched]) =>
+        ChunkCommitWindow(policy: policy);
+
+    /// Takes §8's write generation, once per test.
+    ///
+    /// `registerTask` leaves `lease_epoch` at 0, which means "no write generation
+    /// has been allocated yet"; §8 requires a resume to allocate one before
+    /// anything may be committed. Reused within a test so a second call does not
+    /// invalidate the generation the first one allocated.
+    int lease() {
+      final int current = repository.leaseEpoch(taskId);
+      return current > 0 ? current : repository.revokeAndAdvanceLease(taskId);
+    }
+
+    test(
+      'checkpointSeq starts at 0 rather than a fabricated first sequence',
+      () {
+        registerFile(contents: 'abcd');
+        expect(repository.checkpointSeq(taskId), 0);
+      },
+    );
+
+    test(
+      'verified_pending is not progress: the chunk row stays missing',
+      () async {
+        const String contents = 'abcdefghijklmnop';
+        registerFile(contents: contents); // 16 bytes / 4 = 4 chunks
+        final ChunkCommitWindow pending = window();
+
+        for (int i = 0; i < 3; i++) {
+          final ChunkWriteOutcome outcome = await repository
+              .writeChunkThroughWindow(
+                taskId: taskId,
+                fileId: fileId,
+                index: i,
+                bytes: _bytes(contents.substring(i * 4, i * 4 + 4)),
+                leaseEpoch: lease(),
+                sink: _RecordingSink(),
+                window: pending,
+                nowMillis: 0,
+              );
+
+          expect(outcome.state, ChunkWriteState.verifiedPending);
+          expect(outcome.state.wireValue, 'verified_pending');
+          expect(
+            outcome.checkpointSeq,
+            0,
+            reason:
+                'the returned sequence is the last *committed* checkpoint, so it must not '
+                'include this chunk',
+          );
+        }
+
+        expect(pending.pendingBytes, 12);
+        expect(
+          repository.committedChunkCount(fileId),
+          0,
+          reason:
+              'three verified chunks are not one byte of committed progress',
+        );
+        expect(repository.missingChunkIndices(fileId), <int>[0, 1, 2, 3]);
+        expect(repository.checkpointSeq(taskId), 0);
+      },
+    );
+
+    test('filling the window commits every chunk in one checkpoint', () async {
+      const String contents = 'abcdefghijklmnop';
+      registerFile(contents: contents);
+      final ChunkCommitWindow pending = window();
+
+      for (int i = 0; i < 4; i++) {
+        await repository.writeChunkThroughWindow(
+          taskId: taskId,
+          fileId: fileId,
+          index: i,
+          bytes: _bytes(contents.substring(i * 4, i * 4 + 4)),
+          leaseEpoch: lease(),
+          sink: _RecordingSink(),
+          window: pending,
+          nowMillis: 0,
+        );
+      }
+
+      expect(
+        repository.committedChunkCount(fileId),
+        4,
+        reason:
+            '§8s point in batching is that four chunks cost one transaction',
+      );
+      expect(
+        repository.checkpointSeq(taskId),
+        1,
+        reason: 'the sequence counts checkpoints, not chunks',
+      );
+      expect(repository.missingChunkIndices(fileId), isEmpty);
+      expect(repository.isFullyCommitted(fileId), isTrue);
+      expect(pending.hasPending, isFalse, reason: 'the window was cleared');
+    });
+
+    test(
+      'the last chunk of a batch is reported committed, not pending',
+      () async {
+        const String contents = 'abcdefghijklmnop';
+        registerFile(contents: contents);
+        final ChunkCommitWindow pending = window();
+
+        late ChunkWriteOutcome outcome;
+        for (int i = 0; i < 4; i++) {
+          outcome = await repository.writeChunkThroughWindow(
+            taskId: taskId,
+            fileId: fileId,
+            index: i,
+            bytes: _bytes(contents.substring(i * 4, i * 4 + 4)),
+            leaseEpoch: lease(),
+            sink: _RecordingSink(),
+            window: pending,
+            nowMillis: 0,
+          );
+        }
+
+        expect(outcome.index, 3);
+        expect(outcome.state, ChunkWriteState.committed);
+        expect(outcome.state.wireValue, 'committed');
+        expect(outcome.checkpointSeq, 1);
+      },
+    );
+
+    test(
+      'an overdue window is committed before the next chunk is written',
+      () async {
+        registerFile(contents: 'abcdefghijkl'); // 12 bytes / 4 = 3 chunks
+        final ChunkCommitWindow pending = window();
+
+        await repository.writeChunkThroughWindow(
+          taskId: taskId,
+          fileId: fileId,
+          index: 0,
+          bytes: _bytes('abcd'),
+          leaseEpoch: lease(),
+          sink: _RecordingSink(),
+          window: pending,
+          nowMillis: 0,
+        );
+        expect(repository.checkpointSeq(taskId), 0);
+
+        // Two seconds later the chunk from t=0 is past §8's one-second limit, so it is
+        // committed before the new chunk is admitted.
+        final ChunkWriteOutcome second = await repository
+            .writeChunkThroughWindow(
+              taskId: taskId,
+              fileId: fileId,
+              index: 1,
+              bytes: _bytes('efgh'),
+              leaseEpoch: lease(),
+              sink: _RecordingSink(),
+              window: pending,
+              nowMillis: 2000,
+            );
+
+        expect(repository.committedChunkCount(fileId), 1);
+        expect(second.state, ChunkWriteState.verifiedPending);
+        expect(second.checkpointSeq, 1);
+      },
+    );
+
+    test('a chunk that does not fit commits the window first', () async {
+      const String contents = 'abcdefghijklmnopqr'; // 18 bytes / 3 = 6 chunks
+      registerFile(contents: contents, chunkSizeBytes: 3);
+      final ChunkCommitWindow pending = window(
+        const CommitWindowPolicy(
+          maxPendingBytes: 16,
+          flushIntervalMillis: 1000,
+          chunkSizeBytes: 3,
+        ),
+      );
+
+      for (int i = 0; i < 5; i++) {
+        await repository.writeChunkThroughWindow(
+          taskId: taskId,
+          fileId: fileId,
+          index: i,
+          bytes: _bytes(contents.substring(i * 3, i * 3 + 3)),
+          leaseEpoch: lease(),
+          sink: _RecordingSink(),
+          window: pending,
+          nowMillis: 0,
+        );
+      }
+      expect(
+        pending.pendingBytes,
+        15,
+        reason: 'five 3-byte chunks fit in 16 bytes',
+      );
+      expect(
+        repository.checkpointSeq(taskId),
+        0,
+        reason: 'still below the bound',
+      );
+
+      // The sixth chunk would make 18 bytes, so §8's bound forces the checkpoint first.
+      final ChunkWriteOutcome sixth = await repository.writeChunkThroughWindow(
+        taskId: taskId,
+        fileId: fileId,
+        index: 5,
+        bytes: _bytes('pqr'),
+        leaseEpoch: lease(),
+        sink: _RecordingSink(),
+        window: pending,
+        nowMillis: 0,
+      );
+
+      expect(repository.committedChunkCount(fileId), 5);
+      expect(repository.missingChunkIndices(fileId), <int>[5]);
+      expect(repository.checkpointSeq(taskId), 1);
+      expect(sixth.state, ChunkWriteState.verifiedPending);
+    });
+
+    test('a file end commits the tail instead of leaving it pending', () async {
+      registerFile(contents: 'abcdef'); // 4 + 2
+      final ChunkCommitWindow pending = window();
+
+      await repository.writeChunkThroughWindow(
+        taskId: taskId,
+        fileId: fileId,
+        index: 0,
+        bytes: _bytes('abcd'),
+        leaseEpoch: lease(),
+        sink: _RecordingSink(),
+        window: pending,
+        nowMillis: 0,
+      );
+      expect(
+        repository.missingChunkIndices(fileId),
+        <int>[0, 1],
+        reason:
+            'the first chunk is verified but not yet checkpointed, so it is still '
+            'missing; the file end is what makes the pair durable',
+      );
+
+      final ChunkWriteOutcome tail = await repository.writeChunkThroughWindow(
+        taskId: taskId,
+        fileId: fileId,
+        index: 1,
+        bytes: _bytes('ef'),
+        leaseEpoch: lease(),
+        sink: _RecordingSink(),
+        window: pending,
+        nowMillis: 1,
+        atBoundary: true,
+      );
+
+      expect(tail.state, ChunkWriteState.committed);
+      expect(repository.missingChunkIndices(fileId), isEmpty);
+      expect(repository.checkpointSeq(taskId), 1);
+    });
+
+    test('an empty window is not a checkpoint and does not advance', () {
+      registerFile(contents: 'abcd');
+      final ChunkBatchCommit batch = repository.commitPendingBatch(
+        taskId: taskId,
+        fileId: fileId,
+        leaseEpoch: lease(),
+        window: window(),
+        nowMillis: 0,
+      );
+
+      expect(batch.committedIndices, isEmpty);
+      expect(
+        batch.checkpointSeq,
+        0,
+        reason:
+            'an empty checkpoint advancing the sequence would make the senders "does '
+            'not regress" comparison meaningless',
+      );
+    });
+
+    test(
+      'a failed commit keeps the receipts and nothing is committed',
+      () async {
+        registerFile(contents: 'abcdefgh');
+        final ChunkCommitWindow pending = window();
+
+        await repository.writeChunkThroughWindow(
+          taskId: taskId,
+          fileId: fileId,
+          index: 0,
+          bytes: _bytes('abcd'),
+          leaseEpoch: lease(),
+          sink: _RecordingSink(),
+          window: pending,
+          nowMillis: 0,
+        );
+
+        final int staleEpoch = lease();
+        repository.revokeAndAdvanceLease(taskId); // a resume took over
+
+        expect(
+          () => repository.commitPendingBatch(
+            taskId: taskId,
+            fileId: fileId,
+            leaseEpoch: staleEpoch,
+            window: pending,
+            nowMillis: 0,
+          ),
+          throwsA(
+            isA<StorageException>().having(
+              (StorageException e) => e.code,
+              'code',
+              StorageFailureCode.staleLease,
+            ),
+          ),
+        );
+
+        expect(repository.committedChunkCount(fileId), 0);
+        expect(repository.checkpointSeq(taskId), 0);
+        expect(
+          pending.hasPending,
+          isTrue,
+          reason:
+              'the bytes are synced on disk, so dropping the receipts would leave rows '
+              'missing that nothing revisits until a resume re-sends them',
+        );
+
+        // Retrying under the current generation commits the same batch.
+        final ChunkBatchCommit retried = repository.commitPendingBatch(
+          taskId: taskId,
+          fileId: fileId,
+          leaseEpoch: lease(),
+          window: pending,
+          nowMillis: 1,
+        );
+        expect(retried.committedIndices, <int>[0]);
+        expect(retried.checkpointSeq, 1);
+        expect(repository.committedChunkCount(fileId), 1);
+        expect(pending.hasPending, isFalse);
+      },
+    );
+
+    test(
+      'a receipt that contradicts the frozen manifest fails the whole batch',
+      () {
+        registerFile(contents: 'abcdefgh');
+        final ChunkCommitWindow pending = window();
+
+        // A caller that enqueues an index it never verified, with a digest that is not the
+        // manifest's. §8 forbids succeeding merely because a chunk exists.
+        pending.enqueue(
+          PendingChunkCommit(index: 0, lengthBytes: 4, sha256: 'a' * 64),
+          nowMillis: 0,
+        );
+
+        late StorageException failure;
+        try {
+          repository.commitPendingBatch(
+            taskId: taskId,
+            fileId: fileId,
+            leaseEpoch: lease(),
+            window: pending,
+            nowMillis: 0,
+          );
+          fail(
+            'a receipt conflicting with the frozen manifest must not commit',
+          );
+        } on StorageException catch (error) {
+          failure = error;
+        }
+
+        expect(failure.code, StorageFailureCode.syncReceiptMismatch);
+        expect(
+          failure.toProtocolError().code,
+          ProtocolErrorCode.chunkHashMismatch,
+          reason:
+              '§8 names CHUNK_HASH_MISMATCH (422, not retryable) for a content conflict; '
+              'reporting a retryable code would invite an endless resend',
+        );
+        expect(
+          repository.committedChunkCount(fileId),
+          0,
+          reason: 'a half-applied batch would advance the sequence past work it did not record',
+        );
+        expect(repository.checkpointSeq(taskId), 0);
+        expect(pending.hasPending, isTrue);
+      },
+    );
+
+    test('a receipt for an unregistered chunk cannot be committed', () {
+      registerFile(contents: 'abcd');
+      final ChunkCommitWindow pending = window();
+      pending.enqueue(
+        PendingChunkCommit(index: 9, lengthBytes: 4, sha256: 'a' * 64),
+        nowMillis: 0,
+      );
+
+      expect(
+        () => repository.commitPendingBatch(
+          taskId: taskId,
+          fileId: fileId,
+          leaseEpoch: lease(),
+          window: pending,
+          nowMillis: 0,
+        ),
+        throwsA(
+          isA<StorageException>().having(
+            (StorageException e) => e.code,
+            'code',
+            StorageFailureCode.manifestMismatch,
+          ),
+        ),
+      );
+      expect(repository.checkpointSeq(taskId), 0);
+    });
+
+    test(
+      'a sink failure commits nothing and leaves the window empty',
+      () async {
+        registerFile(contents: 'abcd');
+        final ChunkCommitWindow pending = window();
+
+        await expectLater(
+          repository.writeChunkThroughWindow(
+            taskId: taskId,
+            fileId: fileId,
+            index: 0,
+            bytes: _bytes('abcd'),
+            leaseEpoch: lease(),
+            sink: _RecordingSink(
+              failWith: const StorageException(
+                StorageFailureCode.commitFailed,
+                'the disk went away',
+              ),
+            ),
+            window: pending,
+            nowMillis: 0,
+            atBoundary: true,
+          ),
+          throwsA(isA<StorageException>()),
+        );
+
+        expect(pending.hasPending, isFalse);
+        expect(repository.committedChunkCount(fileId), 0);
+        expect(repository.checkpointSeq(taskId), 0);
+      },
+    );
+
+    test(
+      'a chunk that is not registered is refused before any write',
+      () async {
+        registerFile(contents: 'abcd');
+        await expectLater(
+          repository.writeChunkThroughWindow(
+            taskId: taskId,
+            fileId: fileId,
+            index: 4,
+            bytes: _bytes('abcd'),
+            leaseEpoch: lease(),
+            sink: _RecordingSink(),
+            window: window(),
+            nowMillis: 0,
+          ),
+          throwsA(
+            isA<StorageException>().having(
+              (StorageException e) => e.code,
+              'code',
+              StorageFailureCode.manifestMismatch,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('checkpointSeq is shared by the files of one task', () async {
+      const String secondFileId = '00000000-0000-4000-8000-0000000000f2';
+      registerFile(contents: 'abcd');
+      registerFile(contents: 'efgh', id: secondFileId);
+
+      for (final String target in <String>[fileId, secondFileId]) {
+        final ChunkCommitWindow pending = window();
+        await repository.writeChunkThroughWindow(
+          taskId: taskId,
+          fileId: target,
+          index: 0,
+          bytes: _bytes(target == fileId ? 'abcd' : 'efgh'),
+          leaseEpoch: lease(),
+          sink: _RecordingSink(),
+          window: pending,
+          nowMillis: 0,
+        );
+        repository.commitPendingBatch(
+          taskId: taskId,
+          fileId: target,
+          leaseEpoch: lease(),
+          window: pending,
+          nowMillis: 0,
+        );
+      }
+
+      expect(
+        repository.checkpointSeq(taskId),
+        2,
+        reason:
+            'the second file took sequence 2 rather than restarting at 1, so the counter '
+            'is task-scoped. §8 does not name the scope; it lives on tasks because its '
+            'partner leaseEpoch is task-scoped, and that reading is registered for '
+            'confirmation',
+      );
+      expect(repository.isFullyCommitted(fileId), isTrue);
+      expect(repository.isFullyCommitted(secondFileId), isTrue);
+    });
+
+    test('the single-chunk path also advances the checkpoint', () async {
+      registerFile(contents: 'abcdefgh');
+
+      final StoredChunk committed = await repository.commitChunkAfterSync(
+        taskId: taskId,
+        fileId: fileId,
+        index: 0,
+        bytes: _bytes('abcd'),
+        leaseEpoch: lease(),
+        sink: _RecordingSink(),
+        nowMillis: 0,
+      );
+
+      expect(committed.state, ChunkState.committed);
+      expect(
+        repository.checkpointSeq(taskId),
+        1,
+        reason:
+            'commitChunkAfterSync is now the immediate policy of the same window, so it '
+            'must take a checkpoint too',
+      );
     });
   });
 }
