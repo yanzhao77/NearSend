@@ -170,6 +170,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | 完成 UI Baseline 1.0、组件样式和移动端/Windows视觉稿 | D10、UI设计PR |
 | 2026-09-20 | T01-01 完成：创建三端 Flutter 工程与版本壳应用，Android 真机与 Windows 构建/运行通过，建立任务卡与 ADR 目录，修正 `pubspec.lock` 与 S0 探针编码缺陷 | [T01-01](tasks/T01-01.md)、[运行汇总](testing/evidence/2026-09-20/t01-01-01/summary.md)、[PR #4](https://github.com/yanzhao77/NearSend/pull/4) |
 | 2026-09-20 | 修正 T02-01/T02-02 依赖列（实际依赖 T01-01 工程），B01–B04 阻塞口径按新环境更新 | 本台账 §3、§4.1 |
-| 2026-09-20 | T01-01 并入 UI Baseline 1.0：设计 Token 按 `docs/ui/STYLE_GUIDE.md` 重写（圆角 16/12、新增 canvas/border/muted/soft 与精确排版比例） | [样式指南](ui/STYLE_GUIDE.md)、本次 PR |
+| 2026-09-20 | T01-01 并入 UI Baseline 1.0：设计 Token 按 `docs/ui/STYLE_GUIDE.md` 重写（圆角 16/12、新增 canvas/border/muted/soft 与精确排版比例） | [样式指南](ui/STYLE_GUIDE.md)、[PR #4](https://github.com/yanzhao77/NearSend/pull/4) |
+| 2026-09-20 | T01-01 经 PR #4 合并入 `master`（合并提交 `5a3d840`），任务状态由「已完成（待合并）」转为「已完成」 | [PR #4](https://github.com/yanzhao77/NearSend/pull/4)、合并提交 `5a3d840` |
+| 2026-09-20 | 构建脚本修订：产物摘要排除本次运行自身重写的证据日志，使干净提交的构建立即体现为 `gitDirty=false`；修复该判定在 `Set-StrictMode` 下对单个变更路径报错的问题。证据按新的干净修订重新采集 | [build.ps1](../tooling/scripts/build.ps1)、T01-01 证据 |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。

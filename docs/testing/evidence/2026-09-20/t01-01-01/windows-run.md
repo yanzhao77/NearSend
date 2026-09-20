@@ -14,7 +14,7 @@
 | 工具链 | Flutter 3.47.5 / Dart 3.13.4 |
 | 原生工具链 | Visual Studio Community 2022 17.14.37614.0（含 VC++ x86/x64 工具集），Windows 10 SDK 10.0.26100.0 |
 | 产物 | `build/windows/x64/runner/Release/nearsend.exe`，90,624 字节，SHA-256 `AAFD7E5771BCE57086886A9E1A0004FA18F3D66A0CC005A302183D335758B2EC` |
-| 构建提交 | `ba7c1825043d4e830daf0b62d05789438f8139d0`（构建时工作区有未提交改动） |
+| 构建提交 | `10215137453b5be41cf61a286623b63f0a3833f4`（`gitDirty=false`） |
 
 `Release` 目录组成（应用需要与 DLL、`data/` 同目录运行）：
 

@@ -18,8 +18,8 @@
 | 连接方式 | USB（adb serial `25102RKBEC`，adb id `478ef8a9`） |
 | 构建主机 | Windows 10 22H2 (10.0.19045.6466) |
 | 构建工具 | Flutter 3.47.5 / Dart 3.13.4 / JDK 21.0.2 / Android SDK platform-36 + build-tools 36.0.0 + NDK 28.2.13676358 |
-| 安装包 | `build/app/outputs/flutter-apk/app-release.apk`，44,939,724 字节，SHA-256 `FAB26F56FC9590DE4F6A604FF846DDED9AB15B1B454DF28A594E13D55479D904` |
-| 构建提交 | `ba7c1825043d4e830daf0b62d05789438f8139d0`（构建时工作区有未提交改动） |
+| 构建提交 | `10215137453b5be41cf61a286623b63f0a3833f4`（`gitDirty=false`） |
+| 安装包 | `build/app/outputs/flutter-apk/app-release.apk`，44,939,724 字节，SHA-256 `EF6E025938BCB7137B196EA3A5398D1120951E32D38E79AFF35A75EF6B9A88C5` |
 
 ## 2. 操作步骤与结果
 
@@ -58,7 +58,7 @@ NearSend
 版本与诊断
 NearSend
 应用版本          0.1.0+1
-Git 提交          ba7c182（构建时工作区有未提交改动）
+Git 提交          1021513
 协议版本          1.0 · 1.0-draft1（草案，未冻结）
 数据库 schema 版本  1（已声明，数据库尚未创建）
 构建渠道          internal
@@ -69,7 +69,17 @@ Git 提交          ba7c182（构建时工作区有未提交改动）
 ```
 
 这证明 T01-01 的验收项「应用能显示版本、Git commit、协议版本和数据库 schema 版本」
-在**真实 Android 设备**上成立，且 Git 提交确实由构建期注入、与构建提交一致。
+在**真实 Android 设备**上成立，且 Git 提交确实由构建期注入、与构建提交 `1021513` 一致。
+
+`Git 提交` 一行**没有**「构建时工作区有未提交改动」后缀，说明该产物可回溯到干净的提交，
+而不是在工作区带改动的情况下构建的。
+
+## 4.1 UI Baseline 1.0 并入后的复验
+
+`docs/ui/STYLE_GUIDE.md`（UI Baseline 1.0）并入 `master` 后，设计 Token 被重写
+（卡片圆角 12→16、按钮圆角 10→12、新增独立画布色等）。改动后已重新构建、重新安装并再次采集：
+`android-home.png`、`android-about.png`、`android-ui-*.xml` 均为**并入 UI Baseline 1.0 之后**的产物。
+截图中可直接观察到页面使用带色调的画布背景，卡片为 16dp 圆角并带 1dp 边框，而不是纯白页面。
 
 ## 5. 已知限制
 
