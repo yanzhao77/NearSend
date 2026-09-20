@@ -82,7 +82,7 @@
 | T01-02 CI 与检查 | T01-01 | 已完成 | format/analyze/test/build 可重复运行 |
 | T02-01 Dart canonical manifest | T01-01、D03/D04 | 已完成 | 固定向量正反例一致，不复制 Python 实现逻辑 |
 | T02-02 状态/错误/版本模型 | T01-01、D03 | 已完成 | 模型和序列化测试通过，未知字段规则明确 |
-| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 待澄清 | durable 提交顺序、迁移和故障测试通过 |
+| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 就绪（范围已定案，绑定已验证；实现进行中） | durable 提交顺序、迁移和故障测试通过 |
 | T03-01 同网二维码配对 | T01-01/T02-02/B02 | 阻塞 | pin 先于令牌，正负例和目标端网络绑定通过 |
 | T06-01 空间计划与导出 | T01-01/T04-01 | 待开始 | 分卷明细、unknown/不足、终检和幂等导出通过 |
 
@@ -102,6 +102,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | **草案缺口：文件级重试** | 文件状态机的 `failed` 无出边，无法表达「只重试失败项」 | 以 `FileStateMachine.retryOfFailedFilesIsDefined = false` 显式暴露并断言。**冻结前必须解决** |
 | **NFC 路径强制** | 协议 §5.1 要求接收端拒绝非 NFC 规范的相对路径；检测需要 Unicode 规范化实现，Dart SDK 不提供 | **未实现，已登记为待人工决策**：选择实现属于依赖决策（`AGENTS.md` §3 禁止凭偏好定案）。候选：① 引入纯 Dart 规范化包；② 调用平台原生规范化 API；③ 由发送端负责并对摘要附加规范化声明。缺口以 `RelativePathRules.enforcesNfcNormalisation` 与一条断言显式暴露。**必须在协议冻结前解决** |
 | 加密原语依赖 | SHA-256 实现的选择必须记录理由、许可证与安全影响 | 已引入 `crypto` 3.0.7（Dart 团队、BSD-3、纯 Dart、不接触文件/网络/密钥），见 [ADR-0002](decisions/ADR-0002-crypto依赖与SHA256.md)；自制加密算法已被明确否决 |
+| SQLite 绑定 | `SYSTEM_ARCHITECTURE.md` §12 把 SQLite 插件列为待冻结；选择必须记录候选与验证结果 | 已选用 `sqlite3` 3.6.0（MIT、跨三端、可显式控制 PRAGMA 与事务），见 [ADR-0003](decisions/ADR-0003-SQLite绑定与耐久性配置.md)；探针在本机 5/5 通过（SQLite 3.53.4、`synchronous=FULL` 读回为 2）。**已移除已废弃且为空的 `sqlite3_flutter_libs`（`0.6.0+eol`）** |
+| 平台 durable sync 语义 | 协议要求「durable sync 后才提交块」；`syncData` 的真实平台语义须由真机验证 | **未验证**。ADR-0003 只证明 PRAGMA 被接受与事务原子性，**不得**据此声称断电耐久性已验证；该结论属 B04 真机故障注入 |
 | 导出/删除/迁移 | 不误删、不重复导出、迁移失败保留数据 | 尚未实现，后续必须复核 |
 | 平台目录边界 | `android`/`windows`/`ios` 相对 `flutter create` 生成结果只允许标识类差异，不得混入业务逻辑 | T01-01 已按 SHA-256 逐文件审计通过，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)；后续每个平台任务需重复复核 |
 | 依赖锁定 | `pubspec.lock` 必须入库；新增依赖需按端侧设计 §12 记录用途、许可证、维护状态与安全影响 | T01-01 已修正 `*.lock` 误忽略并跟踪 `pubspec.lock`；T01-01 未引入任何第三方运行时依赖 |
@@ -262,5 +264,6 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | T02-02 待验证：错误模型、状态机、版本/能力协商、超时重试、`request_id` 幂等与 `lease_epoch` 收敛为可测试模型（协议测试 48→127，总计 163） | [T02-02](tasks/T02-02.md)、[运行汇总](testing/evidence/2026-09-20/t02-02-01/summary.md) |
 | 2026-09-20 | **发现三处协议草案缺口并登记**：能力词表未定义；`BLOCKED`/`FAILED`/`PARTIALLY_COMPLETED` 无出边（`blocked` 只能取消，与 §11 处方冲突）；文件级 `failed` 无出边，无法「只重试失败项」。三项均属协议变更，**冻结前必须解决** | 本台账 §5、T02-02 运行汇总 §4 |
 | 2026-09-20 | T02-02 经 PR #10 合并入 `master`（合并提交 `29ed41c`），任务状态由「待验证」转为「已完成」；CI 四个作业在首次运行即全部通过（run 35525798037） | [PR #10](https://github.com/yanzhao77/NearSend/pull/10)、合并提交 `29ed41c`、T02-02 证据 |
+| 2026-09-20 | T04-01 由「待澄清」转为「就绪」：范围写入任务卡；SQLite 绑定按 §12 完成候选评估与实测验证（ADR-0003），并移除已废弃且为空的 `sqlite3_flutter_libs`。schema/迁移/repository 实现尚未开始 | [T04-01](tasks/T04-01.md)、[ADR-0003](decisions/ADR-0003-SQLite绑定与耐久性配置.md)、[绑定验证证据](testing/evidence/2026-09-20/t04-01-01/summary.md) |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
