@@ -49,7 +49,6 @@ import 'package:nearsend/core/protocol/idempotency.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/transfer_creation_request.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
-import 'package:nearsend/core/security/credential_fingerprint.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
 import 'package:nearsend/core/storage/idempotency_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
@@ -115,7 +114,7 @@ class TransferCreationEndpoint {
       scope: RequestScope(
         transferId: creation.transferId,
         operation: ProtocolOperation.createTransfer,
-        credentialFingerprint: _fingerprintOf(request),
+        credentialFingerprint: credentialFingerprintOf(request),
       ),
       requestId: creation.requestId,
       requestDigest: creation.requestDigest,
@@ -219,22 +218,5 @@ class TransferCreationEndpoint {
     // written by another version, and returning it unchecked would put an unvalidated body
     // on the wire.
     return TransferCreated.parse(stored).toJson();
-  }
-
-  /// §9's scope component: the credential in force, fingerprinted rather than held.
-  ///
-  /// Read from the request because the pipeline hands the handler a *grant*, not the secret -
-  /// by design, since a grant must never carry one. The `createTransfer` route requires a
-  /// bearer (§7), so an absent token here means this handler and the credential table
-  /// disagree, which is a programming error rather than a request error.
-  String _fingerprintOf(ControlRequest request) {
-    final String? token = request.bearerToken();
-    if (token == null) {
-      throw StateError(
-        'POST /transfers is a bearer route, but no credential reached the handler; the '
-        '§7 credential table and this endpoint disagree',
-      );
-    }
-    return credentialFingerprint(token);
   }
 }
