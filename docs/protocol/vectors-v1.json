@@ -1,0 +1,85 @@
+[
+  {
+    "name": "empty",
+    "manifest": {
+      "protocolMajor": 1,
+      "protocolMinor": 0,
+      "transferId": "00000000-0000-4000-8000-000000000001",
+      "files": [
+        {
+          "fileId": "00000000-0000-4000-8000-000000000002",
+          "relativePath": "empty.bin",
+          "sizeBytes": "0",
+          "chunkSizeBytes": 4194304,
+          "chunkCount": "0",
+          "fileSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "chunkManifestDigest": "6b9cc9266e484bfacda67bfde585c03835f9a62ebebeafe47f90a551330a1709"
+        }
+      ]
+    },
+    "chunks": [],
+    "canonicalHex": "4c46544d31000001000000000000000040008000000000000001000000010000000000004000800000000000000200000009656d7074792e62696e0000000000000000004000000000000000000000e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b8556b9cc9266e484bfacda67bfde585c03835f9a62ebebeafe47f90a551330a1709",
+    "manifestDigest": "5bc222eac32d751fbb5f4dd6925526f6e589504a315bf3c339ab411798009ad5"
+  },
+  {
+    "name": "abc_unicode",
+    "manifest": {
+      "protocolMajor": 1,
+      "protocolMinor": 0,
+      "transferId": "00000000-0000-4000-8000-000000000001",
+      "files": [
+        {
+          "fileId": "00000000-0000-4000-8000-000000000002",
+          "relativePath": "资料/测试.txt",
+          "sizeBytes": "3",
+          "chunkSizeBytes": 4194304,
+          "chunkCount": "1",
+          "fileSha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+          "chunkManifestDigest": "d1a1073a518facced3b0c7f1f612a1449018a7047653411dc8530cfcbe3d6809"
+        }
+      ]
+    },
+    "chunks": [
+      {
+        "index": "0",
+        "length": 3,
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      }
+    ],
+    "canonicalHex": "4c46544d31000001000000000000000040008000000000000001000000010000000000004000800000000000000200000011e8b584e696992fe6b58be8af952e7478740000000000000003004000000000000000000001ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015add1a1073a518facced3b0c7f1f612a1449018a7047653411dc8530cfcbe3d6809",
+    "manifestDigest": "c0b716cfba3d212ef6894be420098c3e9324eb069807f5a0ee1537755ab5fa6a"
+  },
+  {
+    "name": "tail",
+    "manifest": {
+      "protocolMajor": 1,
+      "protocolMinor": 0,
+      "transferId": "00000000-0000-4000-8000-000000000001",
+      "files": [
+        {
+          "fileId": "00000000-0000-4000-8000-000000000002",
+          "relativePath": "tail.bin",
+          "sizeBytes": "4194307",
+          "chunkSizeBytes": 4194304,
+          "chunkCount": "2",
+          "fileSha256": "e1634ba11a85004475a260dfc969238b32772992d26433f7a0e4745c73b3a17e",
+          "chunkManifestDigest": "c7c57379a7f19ea7c2dba780b3c05b57a09c025b290180e921f7538be1011ded"
+        }
+      ]
+    },
+    "chunks": [
+      {
+        "index": "0",
+        "length": 4194304,
+        "sha256": "299285fc41a44cdb038b9fdaf494c76ca9d0c866672b2b266c1a0c17dda60a05"
+      },
+      {
+        "index": "1",
+        "length": 3,
+        "sha256": "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282"
+      }
+    ],
+    "canonicalHex": "4c46544d310000010000000000000000400080000000000000010000000100000000000040008000000000000002000000087461696c2e62696e0000000000400003004000000000000000000002e1634ba11a85004475a260dfc969238b32772992d26433f7a0e4745c73b3a17ec7c57379a7f19ea7c2dba780b3c05b57a09c025b290180e921f7538be1011ded",
+    "manifestDigest": "98f7a416e26165bac103055d6603ef5855688e9b31b50436168a4f5268a9cada"
+  }
+]

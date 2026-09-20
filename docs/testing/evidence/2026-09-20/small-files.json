@@ -1,0 +1,29 @@
+[
+  {
+    "status": "passed",
+    "count": 1000,
+    "size_each": 4096,
+    "write_fsync_seconds": 0.202,
+    "read_hash_seconds": 0.057,
+    "peak_rss_kib_linux": 10624,
+    "scope": "Linux local files only; NOT end-to-end small-file acceptance"
+  },
+  {
+    "status": "passed",
+    "count": 10000,
+    "size_each": 4096,
+    "write_fsync_seconds": 1.274,
+    "read_hash_seconds": 0.975,
+    "peak_rss_kib_linux": 15360,
+    "scope": "Linux local files only; NOT end-to-end small-file acceptance"
+  },
+  {
+    "status": "passed",
+    "count": 100,
+    "size_each": 0,
+    "write_fsync_seconds": 0.009,
+    "read_hash_seconds": 0.005,
+    "peak_rss_kib_linux": 15360,
+    "scope": "Linux local files only; NOT end-to-end small-file acceptance"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "recorded_at_utc": "2026-09-20T09:34:15.588266+00:00",
+  "os": "Linux-6.18.44-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "openssl": "OpenSSL 3.5.8 25 Aug 2026",
+  "sqlite": "3.53.1",
+  "tools": {
+    "flutter": null,
+    "dart": null,
+    "adb": null,
+    "java": "/usr/bin/java",
+    "openssl": "/usr/bin/openssl",
+    "git": "/usr/local/bin/git",
+    "dotnet": null,
+    "xcodebuild": null
+  },
+  "filesystem": "overlayfs",
+  "usb_available": false,
+  "scope": "remote Linux workspace; no target devices"
+}

@@ -117,3 +117,10 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+
+# S0 local probe outputs (reviewed historical evidence is tracked under docs/testing/)
+tooling/s0/__pycache__/
+tooling/s0/evidence/
+tooling/s0/large-probe-*/
+tooling/s0/small-probe-*/
+!docs/testing/evidence/**/*.log
