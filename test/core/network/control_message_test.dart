@@ -17,8 +17,6 @@ import 'package:nearsend/core/protocol/wire_error.dart';
 /// carries a token. So most of the first group is about the ways it could leak out: a
 /// factory that forgets it, a caller who passes their own, a caller who deletes it after.
 void main() {
-  final Uint8List empty = Uint8List(0);
-
   Uint8List jsonBytes(Map<String, Object?> body) =>
       Uint8List.fromList(utf8.encode(jsonEncode(body)));
 
