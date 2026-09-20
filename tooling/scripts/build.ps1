@@ -58,8 +58,12 @@ function Get-GitStamp {
             throw 'git rev-parse HEAD failed; refusing to build without a source revision.'
         }
 
-        $status = ((& git status --porcelain) | Out-String).Trim()
-        $dirty = if ([string]::IsNullOrWhiteSpace($status)) { 'false' } else { 'true' }
+        # Evidence logs are rewritten by the very run doing the building, so counting
+        # them would mark every recorded build as dirty and make the stamp useless for
+        # release traceability. Source and configuration still count.
+        $statusLines = @(& git status --porcelain) |
+            Where-Object { $_ -notmatch 'docs/testing/evidence/' }
+        $dirty = if ($statusLines.Count -eq 0) { 'false' } else { 'true' }
 
         return [pscustomobject]@{ Sha = $sha; Dirty = $dirty }
     }
