@@ -1,0 +1,42 @@
+﻿[
+    {
+        "platform":  "android",
+        "added":  [
+                      "app\\src\\main\\kotlin\\com\\nearsend\\app\\MainActivity.kt"
+                  ],
+        "removed":  [
+                        "app\\src\\main\\kotlin\\com\\nearsend\\nearsend\\MainActivity.kt"
+                    ],
+        "modified":  [
+                         "app\\build.gradle.kts",
+                         "app\\src\\main\\AndroidManifest.xml",
+                         "local.properties"
+                     ]
+    },
+    {
+        "platform":  "windows",
+        "added":  [
+
+                  ],
+        "removed":  [
+
+                    ],
+        "modified":  [
+                         "runner\\main.cpp",
+                         "runner\\Runner.rc"
+                     ]
+    },
+    {
+        "platform":  "ios",
+        "added":  [
+
+                  ],
+        "removed":  [
+
+                    ],
+        "modified":  [
+                         "Runner.xcodeproj\\project.pbxproj",
+                         "Runner\\Info.plist"
+                     ]
+    }
+]

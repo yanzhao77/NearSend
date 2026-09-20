@@ -1,0 +1,115 @@
+{
+  "runId": "t01-01-01",
+  "task": "T01-01",
+  "date": "2026-09-20",
+  "host": {
+    "os": "Microsoft Windows 10 专业版",
+    "version": "10.0.19045",
+    "build": "19045.6466",
+    "edition": "22H2 (2009)",
+    "architecture": "64-bit",
+    "manufacturer": "HP",
+    "model": "HP Pavilion Power Laptop 15-cb0xx",
+    "cpu": "Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz",
+    "ramGiB": 15.9,
+    "wlanAdapter": "Intel(R) Dual Band Wireless-AC 7265",
+    "wlanStatus": "Up",
+    "virtualization": {
+      "virtualizationFirmwareEnabled": false,
+      "secondLevelAddressTranslation": false,
+      "hypervisorPresent": true,
+      "hypervisorPlatformFeature": "Disabled",
+      "consequence": "No hardware-accelerated Android emulator available; a physical Android device is required."
+    }
+  },
+  "toolchain": {
+    "flutter": {
+      "version": "3.47.5",
+      "channel": "stable",
+      "installPath": "C:\\tools\\flutter",
+      "frameworkRevision": "6a19cca564",
+      "frameworkCommitDate": "2026-09-17",
+      "engineHash": "ab598368592da0064197e2bc15c7f5b0a2c6bb1f",
+      "engineRevision": "af7e796e16",
+      "dartVersion": "3.13.4",
+      "devToolsVersion": "2.60.0",
+      "archiveUrl": "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_3.47.5-stable.zip",
+      "archiveBytes": 1933437428,
+      "archiveSha256": "0ccd71931f49c2fbe394b1eeb6d79af3d624058a043ea0d03d34160581624fb8"
+    },
+    "androidSdk": {
+      "installPath": "C:\\tools\\Android",
+      "envAndroidHome": "C:\\tools\\Android",
+      "cmdlineToolsBuild": "16111833",
+      "cmdlineToolsArchiveUrl": "https://dl.google.com/android/repository/commandlinetools-win-16111833_latest.zip",
+      "cmdlineToolsArchiveBytes": 154957218,
+      "cmdlineToolsArchiveSha256": "e5885e2e59038c0778a85fc19f01de7ce7c567c105553f7617b936b1e0e87b2b",
+      "platformTools": "37.0.1",
+      "platforms": ["android-36"],
+      "buildTools": ["36.0.0"],
+      "licensesAccepted": true,
+      "note": "sdkmanager in cmdline-tools 16111833 is deprecated and crashed (0xC0000409) after installing platform-tools; 'android sdk install' was used instead and completed platform 36 and build-tools 36.0.0."
+    },
+    "jdk": {
+      "version": "21.0.2+13-LTS-58",
+      "vendor": "Oracle",
+      "home": "C:\\data\\java\\jdk-21.0.2"
+    },
+    "visualStudio": {
+      "product": "Visual Studio Community 2022",
+      "version": "17.14.37614.0",
+      "installPath": "C:\\tools\\Microsoft Visual Studio\\2022\\Community",
+      "components": ["Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "Microsoft.VisualStudio.Component.Windows11SDK.22621", "Microsoft.VisualStudio.Component.Windows10SDK"],
+      "windows10SdkVersion": "10.0.26100.0"
+    }
+  },
+  "devices": {
+    "android": [
+      {
+        "serial": "25102RKBEC",
+        "adbId": "478ef8a9",
+        "kind": "physical",
+        "abi": "android-arm64",
+        "osVersion": "Android 17",
+        "apiLevel": 37,
+        "connection": "USB"
+      }
+    ],
+    "windows": {
+      "kind": "host",
+      "version": "Windows 10 22H2 (10.0.19045.6466)"
+    }
+  },
+  "network": {
+    "internetRequiredForBuild": "yes (Flutter and Android SDK bootstrap, Gradle dependency resolution)",
+    "proxy": "http://127.0.0.1:6789",
+    "proxyNotes": [
+      "Windows WinINET and WinHTTP are configured with this proxy.",
+      "curl does not read the WinINET proxy and failed with schannel error 0x80092013 (CRYPT_E_REVOCATION_OFFLINE); downloads used '--ssl-revoke-best-effort -x http://127.0.0.1:6789'.",
+      "Gradle (JVM) does not read WinINET either; %USERPROFILE%\\.gradle\\gradle.properties declares systemProp.http(s).proxyHost/Port on this machine."
+    ],
+    "offlineProductBehaviourVerified": false
+  },
+  "git": {
+    "repository": "https://github.com/yanzhao77/NearSend",
+    "defaultBranch": "master",
+    "baseCommit": "ba7c1825043d4e830daf0b62d05789438f8139d0",
+    "baseCommitSubject": "Merge pull request #2 from yanzhao77/docs/vibe-coding-playbook",
+    "taskBranch": "feat/t01-01-flutter-baseline",
+    "pullRequest2Merged": true,
+    "pullRequest2MergedAt": "2026-09-20T14:52:22Z"
+  },
+  "s0ReferenceProbe": {
+    "python": "3.10.9",
+    "sqlite": "3.40.1",
+    "opensslLibrary": "OpenSSL 1.1.1w (anaconda python ssl module)",
+    "opensslCliUsedForProbe": "OpenSSL 3.5.7 (E:\\Tools\\Git\\usr\\bin\\openssl.exe)",
+    "localePreferredEncoding": "cp936",
+    "historicalEvidenceEnvironment": "Linux-6.18.44 / Python 3.12.14 / SQLite 3.53.1 / OpenSSL 3.5.8 (docs/testing/evidence/2026-09-20)"
+  },
+  "notes": [
+    "This run records the toolchain that was installed during T01-01; it did not exist in the repository before.",
+    "Windows 11 was NOT tested. All Windows results in this run are Windows 10 22H2 only.",
+    "Two adb binaries exist on this machine (C:\\tools\\Android\\platform-tools\\adb.exe and the pre-existing C:\\tools\\platform-tools\\adb.exe); flutter doctor reports this as a warning."
+  ]
+}

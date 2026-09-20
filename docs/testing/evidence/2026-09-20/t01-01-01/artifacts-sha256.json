@@ -1,0 +1,32 @@
+﻿[
+    {
+        "path":  "build/app/outputs/flutter-apk/app-debug.apk",
+        "bytes":  150506612,
+        "sha256":  "C51EEAF6384F524A1108C5AA26EB851C19DDE5C9F96884129ADD188FE6F5E35A",
+        "target":  "android",
+        "mode":  "debug",
+        "gitSha":  "ba7c1825043d4e830daf0b62d05789438f8139d0",
+        "gitDirty":  "true",
+        "buildChannel":  "local"
+    },
+    {
+        "path":  "build/app/outputs/flutter-apk/app-release.apk",
+        "bytes":  44939724,
+        "sha256":  "FAB26F56FC9590DE4F6A604FF846DDED9AB15B1B454DF28A594E13D55479D904",
+        "target":  "android",
+        "mode":  "release",
+        "gitSha":  "ba7c1825043d4e830daf0b62d05789438f8139d0",
+        "gitDirty":  "true",
+        "buildChannel":  "internal"
+    },
+    {
+        "path":  "build/windows/x64/runner/Release/nearsend.exe",
+        "bytes":  90624,
+        "sha256":  "AAFD7E5771BCE57086886A9E1A0004FA18F3D66A0CC005A302183D335758B2EC",
+        "target":  "windows",
+        "mode":  "release",
+        "gitSha":  "ba7c1825043d4e830daf0b62d05789438f8139d0",
+        "gitDirty":  "true",
+        "buildChannel":  "internal"
+    }
+]

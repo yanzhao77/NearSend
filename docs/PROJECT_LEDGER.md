@@ -4,7 +4,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；协议草案与 Python 参考实验已完成。Android/Windows/iOS 真机验证尚未完成，没有 Flutter 客户端、安装包或正式发布版本；协议与关键平台选型尚未冻结。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；协议草案与 Python 参考实验已完成；T01-01 已建立 Android/Windows/iOS 三端 Flutter 工程与版本可追踪的壳应用，并在 Android 真机与 Windows 上构建运行通过。传输、配对、发现、存储与恢复功能均未实现；没有可分发安装包或正式发布版本；协议与关键平台选型尚未冻结。**
 
 ## 1. 状态口径
 
@@ -36,8 +36,8 @@
 | D09 | 应用与端侧服务设计 | 已完成：实施草案 | [端侧设计](architecture/APP_AND_SERVICE_DESIGN.md) | NearSend 无中心云后台；具体库待验证 |
 | D10 | UI/UX 与视觉基线 | 已完成：视觉设计 | [设计入口](ui/README.md)、[样式指南](ui/STYLE_GUIDE.md) | 已提供组件、移动端和 Windows SVG 视觉稿；待 Flutter 实现与可访问性验证 |
 | D11 | 质量与验收策略 | 已完成：设计 | [质量策略](testing/QUALITY_AND_ACCEPTANCE.md) | 设备阈值待目标端基线形成后冻结 |
-| D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡应进入 Issue 或 docs/tasks，并保持统一 |
-| R01 | Flutter客户端与原生适配 | 待开始 | 尚无lib/android/windows/ios产品工程 | 优先Android+Windows闭环 |
+| D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡统一放在 [docs/tasks/](tasks/README.md)，见 ADR-0001 |
+| R01 | Flutter客户端与原生适配 | 部分完成：工程基线 | [T01-01](tasks/T01-01.md)、[T01-01 证据](testing/evidence/2026-09-20/t01-01-01/summary.md) | Android/Windows/iOS 工程可构建；Android 真机与 Windows 均启动同一版本壳应用；传输、配对、发现、存储、恢复未实现 |
 | R02 | 安装包、签名构建及发布CI | 待开始 | 无产物 | 当前只有发布策略，未发布任何版本 |
 
 历史实验环境见[environment.json](testing/evidence/2026-09-20/environment.json)。20GiB整文件哈希通过；峰值RSS为18,944KiB，1GiB为18,816KiB。该口径不包含系统页缓存，不代表真机吞吐量或完整应用内存。
@@ -46,10 +46,10 @@
 
 | ID | 优先级 | 项目 | 当前状态/阻塞 | 下一动作 | 完成标准 |
 | --- | --- | --- | --- | --- | --- |
-| B01 | P0 | Android热点与Windows加入 | 缺Android SDK/真机和Windows实机 | 准备原生探针，关闭上游网络测试 | 实际双向样本传输、重建热点重新认证 |
-| B02 | P0 | Android指定Network与TLS衔接 | 缺目标环境；纯Dart路径未确认 | 对比原生与Dart适配路径 | 多网络下走正确接口，pin前不发凭证 |
-| B03 | P0 | URI重开、seek、权限与暂存 | 缺真实文档提供者 | 本地/外接/云占位文件分别测试 | 重启重开或明确暂存/阻断路径 |
-| B04 | P0 | 真实存储checkpoint及恢复 | 仅Linux参考层通过 | 真机存储后端执行故障窗口 | 不假提交，恢复最终哈希一致 |
+| B01 | P0 | Android热点与Windows加入 | 环境已具备（T01-01 安装 Flutter/Android SDK 并接入真机 25102RKBEC / Android 17）；探针未执行。限制：Windows 侧只有本机 Win10 + Intel AC-7265，且无第二台 Android 设备 | 准备原生探针，关闭上游网络测试 | 实际双向样本传输、重建热点重新认证 |
+| B02 | P0 | Android指定Network与TLS衔接 | 真机与 SDK 已具备；纯Dart路径仍未确认 | 对比原生与Dart适配路径 | 多网络下走正确接口，pin前不发凭证 |
+| B03 | P0 | URI重开、seek、权限与暂存 | 真机已具备；尚无真实文档提供者样本 | 本地/外接/云占位文件分别测试 | 重启重开或明确暂存/阻断路径 |
+| B04 | P0 | 真实存储checkpoint及恢复 | 仍仅Linux参考层通过；真机存储后端未执行 | 真机存储后端执行故障窗口 | 不假提交，恢复最终哈希一致 |
 | B05 | P0 | 协议跨语言与完整API | 只有Python子集 | 实现独立编码器及认证/分页/恢复接口 | 向量一致，授权与幂等正反例通过 |
 | B06 | P1 | iOS关键能力探针 | 缺macOS/Xcode/iPhone | 早期验证TLS、局域网权限、文件生命周期 | 前后台中断后可靠恢复，记录实际边界 |
 | B07 | P1 | 真机大文件与队列 | 尚无完整产品链路 | 先小样本，再20GiB及小文件集合 | 准备/传输/终检/导出全流程证据 |
@@ -62,7 +62,7 @@
 | 任务 | 当前状态 | 退出门槛 |
 | --- | --- | --- |
 | T00 文档与研发治理 | 已完成：设计 | 文档索引、流程、架构、端侧、UI、质量和 Agent 手册已提交；后续持续维护 |
-| T01 工程/构建/配置 | 待开始 | Android、Windows可安装启动 |
+| T01 工程/构建/配置 | 已完成 | Android、Windows 构建成功并可安装/运行；版本、Git 提交、协议版本与 schema 版本在两端可见（见 §6.1） |
 | T02 协议/模型/向量 | 部分完成 | 草案和Python向量已提交；需跨语言一致并冻结 |
 | T03 配对与单文件链路 | 待开始：仅TLS探针 | 用户授权后端到端收发、鉴权负例通过 |
 | T04 分块与checkpoint | 部分完成：实验 | 生产存储实现、批量窗口及背压验证 |
@@ -77,10 +77,10 @@
 
 | 子任务 | 依赖 | 当前状态 | 退出门槛 |
 | --- | --- | --- | --- |
-| T01-01 Flutter 工程基线 | 无 | 就绪 | Android/Windows 启动同一壳应用，版本可追踪 |
-| T01-02 CI 与检查 | T01-01 | 待开始 | format/analyze/test/build 可重复运行 |
-| T02-01 Dart canonical manifest | D03/D04 | 就绪 | 固定向量正反例一致，不复制 Python 实现逻辑 |
-| T02-02 状态/错误/版本模型 | D03 | 就绪 | 模型和序列化测试通过，未知字段规则明确 |
+| T01-01 Flutter 工程基线 | 无 | 已完成 | Android/Windows 启动同一壳应用，版本可追踪 |
+| T01-02 CI 与检查 | T01-01 | 就绪 | format/analyze/test/build 可重复运行 |
+| T02-01 Dart canonical manifest | T01-01、D03/D04 | 就绪（依赖 T01-01 工程） | 固定向量正反例一致，不复制 Python 实现逻辑 |
+| T02-02 状态/错误/版本模型 | T01-01、D03 | 就绪（依赖 T01-01 工程） | 模型和序列化测试通过，未知字段规则明确 |
 | T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 待澄清 | durable 提交顺序、迁移和故障测试通过 |
 | T03-01 同网二维码配对 | T01-01/T02-02/B02 | 阻塞 | pin 先于令牌，正负例和目标端网络绑定通过 |
 | T06-01 空间计划与导出 | T01-01/T04-01 | 待开始 | 分卷明细、unknown/不足、终检和幂等导出通过 |
@@ -97,6 +97,9 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 文件写入与checkpoint | 同步顺序、写入栅栏、实际平台耐久性 | 待真机及人工复核 |
 | 协议冻结 | 双向角色、分页快照、恢复幂等与版本规则 | 草案待独立实现验证 |
 | 导出/删除/迁移 | 不误删、不重复导出、迁移失败保留数据 | 尚未实现，后续必须复核 |
+| 平台目录边界 | `android`/`windows`/`ios` 相对 `flutter create` 生成结果只允许标识类差异，不得混入业务逻辑 | T01-01 已按 SHA-256 逐文件审计通过，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)；后续每个平台任务需重复复核 |
+| 依赖锁定 | `pubspec.lock` 必须入库；新增依赖需按端侧设计 §12 记录用途、许可证、维护状态与安全影响 | T01-01 已修正 `*.lock` 误忽略并跟踪 `pubspec.lock`；T01-01 未引入任何第三方运行时依赖 |
+| 应用标识 | `applicationId` / bundle identifier 发布后不可更改 | 已在 [ADR-0001](decisions/ADR-0001-工程基线与标识.md) 冻结为 `com.nearsend.app`；变更必须在 T10 之前完成 |
 
 这些项阻止产品发布，不妨碍将明确标注为实验的源码和证据归档入仓。
 
@@ -116,6 +119,46 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 未重复20GiB和小文件高成本实验：源码算法未变，历史原始证据完整保留。
 - 未完成三端真机、真实断电、完整HTTP接口、生产背压、导出及迁移验证，详见阻塞表。
 
+### 6.1 T01-01 Flutter 工程基线（本次交付）
+
+任务卡：[T01-01](tasks/T01-01.md)　决策：[ADR-0001 工程基线与标识](decisions/ADR-0001-工程基线与标识.md)　
+证据：[运行汇总](testing/evidence/2026-09-20/t01-01-01/summary.md)（运行 ID `t01-01-01`）
+
+- 首次创建 Flutter 产品工程：`android`、`windows`、`ios` 三端平台目录，`lib/` 按
+  `app / core / features` 分层，`test/` 覆盖构建信息、设计 Token、首页与版本信息页。
+- 应用为**版本可追踪的壳**：显示应用版本、Git 提交（构建期 `--dart-define` 注入）、协议版本
+  （明确标注 `1.0-draft1` 草案未冻结）与数据库 schema 版本（明确标注「已声明，数据库尚未创建」）。
+  首页两个主操作**显式禁用并标注未实现**，未伪造任何业务能力。
+- 新增 `tooling/scripts/check.ps1` 与 `build.ps1`：把 `AGENTS.md` §7 的必做检查与
+  Android/Windows 构建固定为一组可复现命令，并把 Git 提交注入产物、输出产物 SHA-256。
+- 新增 `docs/tasks/`（任务卡唯一存放位置，替代 GitHub Issue，理由见该目录 README）
+  与 `docs/decisions/`（ADR-0001）。
+- 修正根 `.gitignore` 中 `*.lock` 误忽略 `pubspec.lock` 的问题，满足 `AGENTS.md` §3 依赖锁定要求。
+- 本机原先没有 Flutter/Dart SDK，`C:\tools\Android` 为空；本次安装 Flutter 3.47.5、
+  Android SDK（platform-36、build-tools 36.0.0、NDK 28.2.13676358、platform-tools 37.0.1）
+  并写入用户级环境变量。安装事实与脚本摘要记入 [environment.json](testing/evidence/2026-09-20/t01-01-01/environment.json)。
+- 验证结果：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` 29/29 通过、
+  `tooling/s0` 24/24 通过；Android debug/release APK 与 Windows release 可执行文件均构建成功；
+  release APK 在 **Xiaomi 25102RKBEC / Android 17 (API 37)** 真机安装并启动，
+  版本信息页四项数值与构建提交一致；Windows 10 22H2 上可执行文件启动、窗口标题为 `NearSend`、
+  键盘 `Tab`+`Enter` 可进入版本信息页。
+- 平台目录经 SHA-256 逐文件审计，相对 `flutter create` 原始生成结果**只有标识类差异**，
+  没有业务逻辑进入平台目录，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)。
+- **附带修复**：`tooling/s0` 原先用不带编码的 `read_text()`/`write_text()` 处理 UTF-8 协议向量，
+  在本机 `cp936` locale 下不可复现（实际 21 项运行、1 项失败）。已显式指定 UTF-8，并验证
+  在 cp936 机器上重新生成向量得到字节相同的文件。原始失败日志保留未覆盖，见
+  [S0 探针 Windows 复现](testing/evidence/2026-09-20/t01-01-01/s0-probe-baseline-on-windows.md)。
+- **并入 UI Baseline 1.0**：本任务期间 PR #3 合并了 `docs/ui/STYLE_GUIDE.md` 并使其成为视觉权威。
+  该指南推翻了原实现采用的两处数值（卡片圆角 12→**16**、按钮圆角 10→**12**），并新增
+  `canvas`/`border`/`textMuted`/`primaryHover`/`primarySoft` 与三个语义 soft 背景、七级精确排版比例。
+  `lib/app/theme/design_tokens.dart` 已按指南重写（`NearSendPalette` → `NearSendColors`），
+  Flutter 测试由 29 项增至 36 项，并新增 canvas/card 区分、卡片 1dp 边框与语义色对比度检查。
+  按 `AGENTS.md`「合并前处理基线变化并重新运行相关检查」，`origin/master` 已并入分支并解决
+  §7 冲突后完整重跑全部检查与两端构建。
+- 未执行/未完成：iOS 构建（本机无 macOS/Xcode，B06/T09 仍阻塞）；Windows 11 验证（本机为 Win10）；
+  正式签名（T10）；深色模式、动态字体、屏幕阅读器与一万项列表性能（后续 UI 任务）；
+  以及全部传输、配对、发现、存储与恢复能力（尚未实现）。
+
 ## 7. 更新记录与维护规则
 
 | 日期 | 变更 | 证据 |
@@ -125,5 +168,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | 导入仓库、完成24项复测、建立本台账 | 本次Git提交/PR、repository-import-tests.log |
 | 2026-09-20 | 建立 Vibe Coding 研发流程、实施架构、端侧/UI/质量规格和 Agent 任务手册 | D06–D12、本次文档 PR |
 | 2026-09-20 | 完成 UI Baseline 1.0、组件样式和移动端/Windows视觉稿 | D10、UI设计PR |
+| 2026-09-20 | T01-01 完成：创建三端 Flutter 工程与版本壳应用，Android 真机与 Windows 构建/运行通过，建立任务卡与 ADR 目录，修正 `pubspec.lock` 与 S0 探针编码缺陷 | [T01-01](tasks/T01-01.md)、[运行汇总](testing/evidence/2026-09-20/t01-01-01/summary.md)、[PR #4](https://github.com/yanzhao77/NearSend/pull/4) |
+| 2026-09-20 | 修正 T02-01/T02-02 依赖列（实际依赖 T01-01 工程），B01–B04 阻塞口径按新环境更新 | 本台账 §3、§4.1 |
+| 2026-09-20 | T01-01 并入 UI Baseline 1.0：设计 Token 按 `docs/ui/STYLE_GUIDE.md` 重写（圆角 16/12、新增 canvas/border/muted/soft 与精确排版比例） | [样式指南](ui/STYLE_GUIDE.md)、本次 PR |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。

@@ -1,5 +1,9 @@
 """Maintainer utility: regenerate only after reviewing a protocol change.
 Consumers must compare to committed vectors, not regenerate before tests.
+
+The output is written as UTF-8 explicitly: the vectors contain non-ASCII paths,
+and letting the process locale decide would emit cp936 bytes on Windows and
+produce a different file from the same inputs.
 """
 import hashlib
 import json
@@ -17,4 +21,6 @@ for name, path, payload in [("empty", "empty.bin", b""), ("abc_unicode", "资料
                     "fileSha256": hashlib.sha256(payload).hexdigest(), "chunkManifestDigest": chunk_digest(chunks, len(payload))}]}
     vectors.append({"name": name, "manifest": m, "chunks": chunks,
                     "canonicalHex": manifest_bytes(m).hex(), "manifestDigest": manifest_digest(m)})
-(Path(__file__).resolve().parents[2] / "docs/protocol/vectors-v1.json").write_text(json.dumps(vectors, ensure_ascii=False, indent=2)+"\n")
+(Path(__file__).resolve().parents[2] / "docs/protocol/vectors-v1.json").write_text(
+    json.dumps(vectors, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+)
