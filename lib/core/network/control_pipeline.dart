@@ -43,10 +43,13 @@ import 'package:nearsend/core/protocol/protocol_validation.dart';
 /// The use-case behind one route.
 ///
 /// Receives the matched request, so it never re-parses a target or re-validates an identifier
-/// that the routing stage already checked.
+/// that the routing stage already checked, and the authorisation result, so it can scope what
+/// it does to the credential that was accepted: §9's idempotency scope is
+/// "同一任务＋操作＋**当前恢复凭证**", which a handler cannot know on its own.
 typedef ControlHandler = Future<ControlResponse> Function(
   ControlRequest request,
   MatchedApiRequest matched,
+  ControlAuthorized authorization,
 );
 
 /// §7's pipeline: match, authorise, dispatch, and turn every failure into a §7 error body.
@@ -99,11 +102,12 @@ class ControlPipeline {
           nowMillis: now(),
         );
 
+    final ControlAuthorized authorization;
     switch (decision) {
       case ControlDenied(:final ProtocolErrorCode code):
         return ControlResponse.error(code, requestId: requestId);
       case ControlAuthorized():
-        break;
+        authorization = decision;
     }
 
     final ControlHandler? handler = handlers[matched.route.name];
@@ -115,7 +119,7 @@ class ControlPipeline {
     }
 
     try {
-      return await handler(request, matched);
+      return await handler(request, matched, authorization);
     } on ProtocolViolation catch (violation) {
       return ControlResponse.violation(violation, requestId: requestId);
     }

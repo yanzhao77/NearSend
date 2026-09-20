@@ -254,6 +254,13 @@ void assertChunkBodyLength({
 /// Leading zeros are accepted because HTTP allows them and the value is what matters; the
 /// §4 canonical form is a rule about protocol fields, not about this header. The value that
 /// comes out is then checked against the manifest by [assertChunkBodyLength].
+///
+/// The zeros are stripped **before** the range is decided, and the range is decided by
+/// [parseNormalizedDigits] rather than by `int.parse`. HTTP puts no bound on the digit
+/// count, so `Content-Length: 99999999999999999999999` is a shape this parser accepts and
+/// `int.parse` answers with a raw `FormatException` - an unhandled platform error where
+/// §8 requires a malformed request to be refused. Stripping first also keeps a long run of
+/// leading zeros working, since that is a legal `Content-Length` of the value it wraps.
 int _parseContentLength(String value) {
   if (value.isEmpty || !RegExp(r'^[0-9]+$').hasMatch(value)) {
     throw const ProtocolViolation(
@@ -261,7 +268,16 @@ int _parseContentLength(String value) {
       'Content-Length must be one or more digits',
     );
   }
-  return int.parse(value);
+  try {
+    return parseNormalizedDigits(stripLeadingZeros(value), 'Content-Length');
+  } on ProtocolViolation {
+    // §11 pairs a malformed field with INVALID_FIELD, and a length no implementation can
+    // hold is a malformed field rather than a wrong decimal elsewhere in the protocol.
+    throw const ProtocolViolation(
+      ProtocolErrorCode.invalidField,
+      'Content-Length is larger than any length this protocol can carry',
+    );
+  }
 }
 
 /// Lowercases header names, refusing two names that differ only in case.

@@ -152,13 +152,18 @@ void main() {
     test('a bearer route with no Authorization header is 401 and the handler never runs', () async {
       bool ran = false;
       final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-        'pause': (ControlRequest request, MatchedApiRequest matched) async {
-          ran = true;
-          return ControlResponse.json(
-            status: 200,
-            body: <String, Object?>{'state': 'PAUSED'},
-          );
-        },
+        'pause':
+            (
+              ControlRequest request,
+              MatchedApiRequest matched,
+              ControlAuthorized authorization,
+            ) async {
+              ran = true;
+              return ControlResponse.json(
+                status: 200,
+                body: <String, Object?>{'state': 'PAUSED'},
+              );
+            },
       });
 
       final ControlResponse response = await pipeline.handle(
@@ -174,8 +179,12 @@ void main() {
       'a token the authority rejects is 401 even when well formed',
       () async {
         final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-          'pause': (ControlRequest request, MatchedApiRequest matched) async =>
-              ControlResponse.json(
+          'pause':
+              (
+                ControlRequest request,
+                MatchedApiRequest matched,
+                ControlAuthorized authorization,
+              ) async => ControlResponse.json(
                 status: 200,
                 body: <String, Object?>{'state': 'PAUSED'},
               ),
@@ -190,8 +199,12 @@ void main() {
 
     test('pair needs no credential and reaches its handler', () async {
       final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-        'pair': (ControlRequest request, MatchedApiRequest matched) async =>
-            ControlResponse.json(
+        'pair':
+            (
+              ControlRequest request,
+              MatchedApiRequest matched,
+              ControlAuthorized authorization,
+            ) async => ControlResponse.json(
               status: 200,
               body: <String, Object?>{'paired': true},
             ),
@@ -216,6 +229,35 @@ void main() {
       expect(recorder.lastNowMillis, 1000);
       expect(recorder.lastToken, taskToken);
     });
+
+    test('the handler receives the authorisation that was accepted', () async {
+      // §9's idempotency scope is "同一任务＋操作＋当前恢复凭证", so a handler has to be able
+      // to see which credential was accepted. A grant never carries the secret, which is why
+      // the result is passed rather than the token.
+      ControlAuthorized? seen;
+      final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
+        'pause':
+            (
+              ControlRequest request,
+              MatchedApiRequest matched,
+              ControlAuthorized authorization,
+            ) async {
+              seen = authorization;
+              return ControlResponse.json(
+                status: 200,
+                body: <String, Object?>{'state': 'PAUSED'},
+              );
+            },
+      });
+
+      await pipeline.handle(
+        post('/v1/transfers/$taskId/pause', token: taskToken),
+      );
+
+      expect(seen, isNotNull);
+      expect(seen!.grant, isA<TaskGrant>());
+      expect((seen!.grant! as TaskGrant).transferId, taskId);
+    });
   });
 
   group('dispatching to a handler', () {
@@ -223,8 +265,13 @@ void main() {
       'an unregistered route is NOT_FOUND and reports what it serves',
       () async {
         final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-          'pair': (ControlRequest request, MatchedApiRequest matched) async =>
-              ControlResponse.json(status: 200, body: <String, Object?>{}),
+          'pair':
+              (
+                ControlRequest request,
+                MatchedApiRequest matched,
+                ControlAuthorized authorization,
+              ) async =>
+                  ControlResponse.json(status: 200, body: <String, Object?>{}),
         });
 
         expect(pipeline.servedRoutes, <String>{'pair'});
@@ -248,7 +295,11 @@ void main() {
         MatchedApiRequest? seen;
         final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
           'getManifest':
-              (ControlRequest request, MatchedApiRequest matched) async {
+              (
+                ControlRequest request,
+                MatchedApiRequest matched,
+                ControlAuthorized authorization,
+              ) async {
                 seen = matched;
                 return ControlResponse.json(
                   status: 200,
@@ -281,8 +332,12 @@ void main() {
 
     test('the handler response is returned as built', () async {
       final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-        'pair': (ControlRequest request, MatchedApiRequest matched) async =>
-            ControlResponse.json(
+        'pair':
+            (
+              ControlRequest request,
+              MatchedApiRequest matched,
+              ControlAuthorized authorization,
+            ) async => ControlResponse.json(
               status: 201,
               body: <String, Object?>{'state': 'STAGING'},
             ),
@@ -295,12 +350,17 @@ void main() {
 
     test('a handler protocol violation becomes its own §11 answer', () async {
       final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-        'pause': (ControlRequest request, MatchedApiRequest matched) async {
-          throw const ProtocolViolation(
-            ProtocolErrorCode.invalidState,
-            'the task is not in a state that can be paused',
-          );
-        },
+        'pause':
+            (
+              ControlRequest request,
+              MatchedApiRequest matched,
+              ControlAuthorized authorization,
+            ) async {
+              throw const ProtocolViolation(
+                ProtocolErrorCode.invalidState,
+                'the task is not in a state that can be paused',
+              );
+            },
       });
 
       final ControlResponse response = await pipeline.handle(
@@ -318,8 +378,12 @@ void main() {
 
     test('a 429 from a handler keeps its Retry-After', () async {
       final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-        'pause': (ControlRequest request, MatchedApiRequest matched) async =>
-            ControlResponse.error(
+        'pause':
+            (
+              ControlRequest request,
+              MatchedApiRequest matched,
+              ControlAuthorized authorization,
+            ) async => ControlResponse.error(
               ProtocolErrorCode.rateLimited,
               retryAfterSeconds: 7,
             ),
@@ -339,8 +403,12 @@ void main() {
       'success and failure both carry no-store and a control content type',
       () async {
         final ControlPipeline pipeline = pipelineWith(<String, ControlHandler>{
-          'pair': (ControlRequest request, MatchedApiRequest matched) async =>
-              ControlResponse.json(
+          'pair':
+              (
+                ControlRequest request,
+                MatchedApiRequest matched,
+                ControlAuthorized authorization,
+              ) async => ControlResponse.json(
                 status: 200,
                 body: <String, Object?>{'paired': true},
               ),
