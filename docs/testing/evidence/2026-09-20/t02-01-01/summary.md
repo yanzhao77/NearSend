@@ -84,7 +84,7 @@
 
 新增 `crypto 3.0.7`（Dart 团队维护，BSD-3-Clause，纯 Dart，不接触文件/网络/密钥），
 按 `docs/architecture/APP_AND_SERVICE_DESIGN.md` §12 的九项要求记录于
-[ADR-0002](../../../decisions/ADR-0002-crypto依赖与SHA256.md)。自制 SHA-256 被明确否决
+[ADR-0002](../../../../decisions/ADR-0002-crypto依赖与SHA256.md)。自制 SHA-256 被明确否决
 （`AGENTS.md` §5 禁止自制加密算法）；平台原生实现因三端一致性与流式增量成本被否决。
 
 ## 6. 已知缺口与限制

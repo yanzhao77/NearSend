@@ -134,6 +134,15 @@ def main() -> int:
         help="repository root (default: current directory)",
     )
     parser.add_argument("--verbose", action="store_true", help="list every file checked")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "fail when untracked Markdown exists instead of only warning. Use this "
+            "from the local check entry point: a verdict that does not cover the "
+            "working tree is misleading, and staging the file is a one-line fix."
+        ),
+    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -162,13 +171,13 @@ def main() -> int:
 
     # Only tracked files are checked. That is the right scope for CI, but locally it
     # means a new document is invisible until it is staged - which is exactly how a
-    # broken link reached CI the first time. Say so out loud instead of reporting a
-    # clean result that does not cover the working tree.
+    # broken link reached CI twice. Say so loudly, and carry the caveat into the
+    # verdict line too, because a truncated log can easily hide a notice above it.
     untracked = untracked_markdown(root)
     if untracked:
         print(
-            f"\nNOT CHECKED: {len(untracked)} untracked Markdown file(s). "
-            "Stage them to include them:\n"
+            f"\nWARNING: {len(untracked)} untracked Markdown file(s) were NOT "
+            "checked. Stage them to include them:\n"
         )
         for name in untracked:
             print(f"  {name}")
@@ -179,7 +188,19 @@ def main() -> int:
             print(f"  {problem}")
         return 1
 
-    print("all relative links resolve")
+    if untracked and args.strict:
+        print(
+            "\nFAILED: untracked Markdown is not covered by this check. Stage the "
+            "files or run without --strict to get a tracked-only verdict."
+        )
+        return 1
+
+    coverage = (
+        'tracked files only - see the warning above'
+        if untracked
+        else 'all tracked Markdown'
+    )
+    print(f"no broken relative links ({coverage})")
     return 0
 
 
