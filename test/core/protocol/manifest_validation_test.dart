@@ -55,6 +55,36 @@ void main() {
       );
     });
 
+    test('a 19-digit value above 2^63-1 is refused, not crashed on', () {
+      // The band that matters: §4's pattern allows nineteen digits, so these values are
+      // well-shaped and reach the range check. `int.parse` answers them with a raw
+      // `FormatException`, which would escape as an unhandled platform error where §4
+      // requires `INVALID_DECIMAL` - and a peer chooses the value. The earlier 20-digit
+      // case never reached the parser, which is why this one is separate.
+      for (final String value in <String>[
+        '9223372036854775808', // 2^63, one past the maximum
+        '9999999999999999999', // the largest 19-digit value
+        '9223372036854775907', // above the maximum with a different low digit
+      ]) {
+        expect(
+          () => parseDecimalString(value, 'f'),
+          throwsA(_violation(ProtocolErrorCode.invalidDecimal)),
+          reason: '"$value" is nineteen digits and out of range',
+        );
+      }
+    });
+
+    test('the maximum itself still parses, so the boundary is exact', () {
+      expect(
+        parseDecimalString('9223372036854775807', 'f'),
+        ProtocolLimits.maxDecimalValue,
+      );
+      expect(
+        () => parseDecimalString('9223372036854775808', 'f'),
+        throwsA(_violation(ProtocolErrorCode.invalidDecimal)),
+      );
+    });
+
     test('rejects non-string values, including JSON numbers', () {
       for (final Object? bad in <Object?>[0, 1, true, null, <int>[]]) {
         expect(

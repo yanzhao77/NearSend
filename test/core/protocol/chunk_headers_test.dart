@@ -186,6 +186,42 @@ void main() {
       );
     });
 
+    test(
+      'an unrepresentably large Content-Length is refused, not crashed on',
+      () {
+        // HTTP puts no bound on the digit count, so these are well-shaped and reach the
+        // parser; `int.parse` answers them with a raw `FormatException`, which would escape
+        // as an unhandled platform error where §8 requires a refusal - and the peer chooses
+        // the value.
+        for (final String value in <String>[
+          '99999999999999999999999', // 23 digits
+          '9223372036854775808', // 19 digits, one past 2^63-1
+          '9' * 400, // far past anything a parser should try
+        ]) {
+          expect(
+            () => ChunkPutHeaders.parse(put(contentLength: value)),
+            refuses,
+            reason: 'Content-Length: "$value"',
+          );
+        }
+      },
+    );
+
+    test('a long run of leading zeros still names the value it wraps', () {
+      // Stripping the zeros before deciding the range keeps legal HTTP working: this is a
+      // Content-Length of 4194304 written with a lot of padding.
+      expect(
+        ChunkPutHeaders.parse(put(contentLength: '${'0' * 30}4194304'))
+            .contentLength,
+        expectedBytes,
+      );
+      expect(
+        ChunkPutHeaders.parse(put(contentLength: '0')).contentLength,
+        0,
+        reason: 'a zero length is a zero, not an empty digit run',
+      );
+    });
+
     test('a compressed body is refused', () {
       for (final String value in <String>['gzip', 'deflate', 'br']) {
         expect(

@@ -49,20 +49,42 @@ int parseDecimalString(Object? value, String field) {
       '$field is not a valid decimal string',
     );
   }
-  if (value.length > ProtocolLimits.maxDecimalDigits) {
-    throw ProtocolViolation(
-      ProtocolErrorCode.invalidDecimal,
-      '$field exceeds ${ProtocolLimits.maxDecimalDigits} digits',
-    );
-  }
-  final int parsed = int.parse(value);
-  if (parsed > ProtocolLimits.maxDecimalValue) {
+  return parseNormalizedDigits(value, field);
+}
+
+/// Parses [digits], already known to be ASCII digits with no leading zero unless it is
+/// exactly `"0"`, into §4's `0..2^63-1` range.
+///
+/// **The range is checked by comparison, before `int.parse`, and this is the only place that
+/// decides it.** §4's pattern allows up to nineteen digits, so a value above the signed
+/// 64-bit range is well-shaped and reaches a parser; `int.parse` answers such a value with a
+/// raw `FormatException`, which would escape as an unhandled platform error rather than
+/// `INVALID_DECIMAL` - `AGENTS.md` §5 forbids presenting a platform exception as a protocol
+/// error, and a peer could otherwise turn a validation failure into a crash path. Every
+/// field that parses digits goes through here so the fix cannot be needed in two places.
+///
+/// The caller is responsible for the shape check, because the two callers differ on one
+/// point: §4's decimal strings refuse a leading zero while HTTP's `Content-Length` accepts
+/// them. Both produce normalized digits first.
+int parseNormalizedDigits(String digits, String field) {
+  // Two values of equal length compare the same lexicographically as numerically, and the
+  // input has no leading zero, so `compareTo` is a numeric comparison here.
+  final String maxDecimal = '${ProtocolLimits.maxDecimalValue}';
+  if (digits.length > maxDecimal.length ||
+      (digits.length == maxDecimal.length &&
+          digits.compareTo(maxDecimal) > 0)) {
     throw ProtocolViolation(
       ProtocolErrorCode.invalidDecimal,
       '$field exceeds the signed 64-bit range',
     );
   }
-  return parsed;
+  return int.parse(digits);
+}
+
+/// Strips leading zeros from an all-digit string, leaving `"0"` for a value of zero.
+String stripLeadingZeros(String digits) {
+  final String stripped = digits.replaceFirst(RegExp(r'^0+'), '');
+  return stripped.isEmpty ? '0' : stripped;
 }
 
 /// Parses a JSON integer field such as `chunkSizeBytes` or `fileCount` (§4).
