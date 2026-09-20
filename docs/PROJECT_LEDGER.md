@@ -82,7 +82,7 @@
 | T01-02 CI 与检查 | T01-01 | 已完成 | format/analyze/test/build 可重复运行 |
 | T02-01 Dart canonical manifest | T01-01、D03/D04 | 已完成 | 固定向量正反例一致，不复制 Python 实现逻辑 |
 | T02-02 状态/错误/版本模型 | T01-01、D03 | 已完成 | 模型和序列化测试通过，未知字段规则明确 |
-| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 进行中（schema/迁移/chunk repository 已实现并测试；幂等持久化等未完成） | durable 提交顺序、迁移和故障测试通过 |
+| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 进行中（schema/迁移/chunk repository/幂等持久化已实现并测试；peers/exports 仓储、ENOSPC、真机 syncData 等未完成） | durable 提交顺序、迁移和故障测试通过 |
 | T03-01 同网二维码配对 | T01-01/T02-02/B02 | 阻塞 | pin 先于令牌，正负例和目标端网络绑定通过 |
 | T06-01 空间计划与导出 | T01-01/T04-01 | 待开始 | 分卷明细、unknown/不足、终检和幂等导出通过 |
 
@@ -267,5 +267,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | T04-01 由「待澄清」转为「就绪」：范围写入任务卡；SQLite 绑定按 §12 完成候选评估与实测验证（ADR-0003），并移除已废弃且为空的 `sqlite3_flutter_libs`。schema/迁移/repository 实现尚未开始 | [T04-01](tasks/T04-01.md)、[ADR-0003](decisions/ADR-0003-SQLite绑定与耐久性配置.md)、[绑定验证证据](testing/evidence/2026-09-20/t04-01-01/summary.md) |
 | 2026-09-20 | T04-01 转为「进行中」：实现 schema v1、迁移框架与一致性备份、高版本拒绝、chunk repository（提交顺序、缺失块权威、写入世代仲裁）及 38 项测试（Flutter 测试 168→201）。**未完成**：幂等持久化、peers/exports 仓储、ENOSPC 注入、真实暂存损坏、多版本迁移、真机 syncData | [T04-01](tasks/T04-01.md)、[实现证据](testing/evidence/2026-09-20/t04-01-02/summary.md) |
 | 2026-09-20 | T04-01 存储核心经 PR #13 合并入 `master`（合并提交 `df0481a`）；CI 四个作业首次运行即全部通过（run 35527238578）。任务**保持「进行中」**，退出门槛未满足 | [PR #13](https://github.com/yanzhao77/NearSend/pull/13)、合并提交 `df0481a`、T04-01 证据 |
+
+| 2026-09-20 | T04-01 幂等持久化：实现 `idempotency_repository.dart`，**记录与效果在同一事务提交**（以「效果写标记行 + 断言两者同时提交/同时回滚」直接验证），规则复用 T02-02 定义；Flutter 测试 201→214。任务仍为「进行中」 | [T04-01](tasks/T04-01.md)、[实现证据](testing/evidence/2026-09-20/t04-01-03/summary.md) |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
