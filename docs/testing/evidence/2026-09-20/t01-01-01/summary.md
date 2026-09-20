@@ -4,50 +4,63 @@
 - 任务：[T01-01 Flutter 工程基线](../../../../tasks/T01-01.md)
 - 日期：2026-09-20
 - 基线提交：`ba7c1825043d4e830daf0b62d05789438f8139d0`
-- 分支：`feat/t01-01-flutter-baseline`
+- 构建提交：`10215137453b5be41cf61a286623b63f0a3833f4`（`gitDirty=false`）
+- 分支 / PR：`feat/t01-01-flutter-baseline` → [#4](https://github.com/yanzhao77/NearSend/pull/4)
 - 主机：Windows 10 22H2 (10.0.19045.6466)
 - **结论：在下列具体环境与设备上，T01-01 的自动化门槛与两端真机/实机验证全部通过。**
 
 > 本文件只陈述本次实际执行并留证的结果。它不代表传输、配对、发现、存储、恢复等业务能力，
 > 那些能力在本次改动中**并未实现**。
+>
+> 本任务执行期间 `origin/master` 前移（PR #3 合并了 UI Baseline 1.0）。分支已并入新基线、
+> 解决冲突并**完整重跑**全部检查与两端构建；下表的产物与摘要均来自并入后的干净提交。
+>
+> 早期一轮（`a076b67`、`gitDirty=true`）的构建日志仍保留在
+> `build-android-*.log` / `build-windows-release.log` 的历史内容之外未被覆盖为结论，
+> 最终结论以下表的干净提交产物为准。
 
 ## 1. 验收条件逐项核对
 
 | 验收条件 | 结果 | 证据 |
 | --- | --- | --- |
-| Android 构建成功 | 通过 | `build-android-debug.log`、`build-android-release.log`；debug 150,506,612 B、release 44,939,724 B |
+| Android 构建成功 | 通过 | `build-android-debug.log`、`build-android-release.log`；debug 165,485,078 B、release 44,939,724 B |
 | Windows 构建成功 | 通过 | `build-windows-release.log`；`nearsend.exe` 90,624 B |
 | Android 可安装并启动 | 通过 | [android-run.md](android-run.md)；Xiaomi 25102RKBEC / Android 17 (API 37) |
 | Windows 可运行 | 通过 | [windows-run.md](windows-run.md)；窗口标题 `NearSend` |
 | 两端显示版本、Git commit、协议版本、schema 版本 | 通过 | `android-ui-about.xml`、`windows-about.png` |
 | 没有业务逻辑放入平台目录 | 通过 | [platform-directory-audit.md](platform-directory-audit.md) |
-| `dart format` / `flutter analyze` / `flutter test` 通过 | 通过 | `check-script.log`；analyze `No issues found`；test 29/29 |
+| `dart format` / `flutter analyze` / `flutter test` 通过 | 通过 | `check-script.log`；analyze `No issues found`；test 36/36 |
 | `pubspec.lock` 进入版本控制 | 通过 | `.gitignore` 增加 `!pubspec.lock`；`git check-ignore -q` 退出码 1 |
 
 ## 2. 产物与摘要（`artifacts-sha256.json`）
 
+构建提交 `10215137453b5be41cf61a286623b63f0a3833f4`，`gitDirty=false`：
+
 | 产物 | 模式 | 字节 | SHA-256 |
 | --- | --- | --- | --- |
-| `build/app/outputs/flutter-apk/app-debug.apk` | debug | 150,506,612 | `C51EEAF6384F524A1108C5AA26EB851C19DDE5C9F96884129ADD188FE6F5E35A` |
-| `build/app/outputs/flutter-apk/app-release.apk` | release | 44,939,724 | `FAB26F56FC9590DE4F6A604FF846DDED9AB15B1B454DF28A594E13D55479D904` |
+| `build/app/outputs/flutter-apk/app-debug.apk` | debug | 165,485,078 | `8E3445AAC8701611F4C41AB2CFBF1915430A1CAECC2B93E5B3537ADAAB275615` |
+| `build/app/outputs/flutter-apk/app-release.apk` | release | 44,939,724 | `EF6E025938BCB7137B196EA3A5398D1120951E32D38E79AFF35A75EF6B9A88C5` |
 | `build/windows/x64/runner/Release/nearsend.exe` | release | 90,624 | `AAFD7E5771BCE57086886A9E1A0004FA18F3D66A0CC005A302183D335758B2EC` |
 
-三者都由同一次构建流程注入 `NS_GIT_SHA=ba7c182…`、`NS_GIT_DIRTY=true`、`NS_BUILD_CHANNEL`，
-因此可以回溯到确切的源码提交（技术方案 §17.3）。
+三者都由同一次构建流程注入 `NS_GIT_SHA=1021513…`、`NS_GIT_DIRTY=false`、`NS_BUILD_CHANNEL`，
+因此可以回溯到确切的源码提交（技术方案 §17.3）。真机版本信息页显示的 Git 提交为 `1021513`，
+与该提交一致且**没有「未提交改动」后缀**。
 
 ## 3. 自动化检查
 
 ```text
 dart format --output=none --set-exit-if-changed .   → 通过（无改动）
 flutter analyze                                     → No issues found!
-flutter test                                        → 29 个测试全部通过
+flutter test                                        → 36 个测试全部通过
 tooling/s0: python -m unittest -v test_probes       → 24 个测试全部通过
 ```
 
 测试内容覆盖：`pubspec.yaml` 与 `kAppVersion` 一致性、协议/schema 常量与「未冻结/未创建」诚实标注、
-Git SHA 不伪造、`UI_UX_SPEC` §5 色彩与间距/圆角/字号/动效 Token 逐值一致、
-六组前景/背景组合达到 WCAG AA 对比度、按钮主题满足 48dp 触控目标、
-减少动效偏好生效、首页主操作禁用且标注未实现、版本信息页四类信息渲染。
+Git SHA 不伪造、**UI Baseline 1.0 的 17 个颜色 Token**、`canvas` 与 `card` 必须可区分、
+七级排版比例逐值一致、间距阶梯（4–64）、圆角（16/12/12/999）、尺寸与栅格、
+**13 组前景/背景组合达到 WCAG AA 对比度**（含画布/卡片两种背景与语义色在其 soft 背景上）、
+卡片 1dp 边框与零阴影、按钮 48dp 高度、减少动效偏好生效、
+首页主操作禁用且标注未实现、版本信息页四类信息渲染。
 
 ## 4. 环境搭建记录（本次新增，仓库外）
 

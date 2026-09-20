@@ -1,22 +1,22 @@
 ﻿[
     {
         "path":  "build/app/outputs/flutter-apk/app-debug.apk",
-        "bytes":  150506612,
-        "sha256":  "C51EEAF6384F524A1108C5AA26EB851C19DDE5C9F96884129ADD188FE6F5E35A",
+        "bytes":  165485078,
+        "sha256":  "8E3445AAC8701611F4C41AB2CFBF1915430A1CAECC2B93E5B3537ADAAB275615",
         "target":  "android",
         "mode":  "debug",
-        "gitSha":  "ba7c1825043d4e830daf0b62d05789438f8139d0",
-        "gitDirty":  "true",
+        "gitSha":  "10215137453b5be41cf61a286623b63f0a3833f4",
+        "gitDirty":  "false",
         "buildChannel":  "local"
     },
     {
         "path":  "build/app/outputs/flutter-apk/app-release.apk",
         "bytes":  44939724,
-        "sha256":  "FAB26F56FC9590DE4F6A604FF846DDED9AB15B1B454DF28A594E13D55479D904",
+        "sha256":  "EF6E025938BCB7137B196EA3A5398D1120951E32D38E79AFF35A75EF6B9A88C5",
         "target":  "android",
         "mode":  "release",
-        "gitSha":  "ba7c1825043d4e830daf0b62d05789438f8139d0",
-        "gitDirty":  "true",
+        "gitSha":  "10215137453b5be41cf61a286623b63f0a3833f4",
+        "gitDirty":  "false",
         "buildChannel":  "internal"
     },
     {
@@ -25,8 +25,8 @@
         "sha256":  "AAFD7E5771BCE57086886A9E1A0004FA18F3D66A0CC005A302183D335758B2EC",
         "target":  "windows",
         "mode":  "release",
-        "gitSha":  "ba7c1825043d4e830daf0b62d05789438f8139d0",
-        "gitDirty":  "true",
+        "gitSha":  "10215137453b5be41cf61a286623b63f0a3833f4",
+        "gitDirty":  "false",
         "buildChannel":  "internal"
     }
 ]
