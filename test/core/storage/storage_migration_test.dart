@@ -388,6 +388,20 @@ void main() {
       return db;
     }
 
+    /// Builds a database at exactly version 2, by running the real version 2 step.
+    ///
+    /// Reconstructed rather than hand-written for the same reason as [openVersionOne]: a
+    /// hand-written "version 2" would be a guess at history, and the migration runner is
+    /// entitled to refuse a registry that does not reach the current constant.
+    Database openVersionTwo(String name) {
+      final Database db = openVersionOne(name);
+      StorageSchema.applyVersion2(db);
+      db.execute(
+        'UPDATE ${StorageSchema.metaTable} SET version = 2 WHERE id = 1;',
+      );
+      return db;
+    }
+
     test('reaches the current version', () {
       final Database db = openVersionOne('v1.db');
       try {
@@ -531,6 +545,61 @@ void main() {
         expect(
           db.select('SELECT saved_path FROM exports;').first['saved_path'],
           'a/b (1).bin',
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    test('a version 2 database gains the checkpoint column at 0', () {
+      // The checkpoint counter arrives in version 3. A task that existed before it has
+      // legitimately taken no checkpoint, and 0 is what that means; defaulting to 1 or
+      // copying some other number would claim a checkpoint was recorded when none was.
+      final Database db = openVersionTwo('v2-checkpoint.db');
+      try {
+        db.execute(
+          "INSERT INTO tasks (task_id, role, direction, state, protocol_major, "
+          "protocol_minor, lease_epoch, created_at, updated_at) "
+          "VALUES ('t1', 'receiver', 'client_to_server', 'ready', 1, 0, 3, 1, 1);",
+        );
+
+        expect(StorageMigrator().migrate(db), StorageSchema.currentVersion);
+        expect(
+          db
+              .select(
+                'SELECT ${StorageSchema.tasksCheckpointSeqColumn} AS seq FROM tasks;',
+              )
+              .first['seq'],
+          0,
+          reason:
+              'the pre-existing task is at sequence 0, not a fabricated one',
+        );
+        expect(
+          db.select('SELECT lease_epoch FROM tasks;').first['lease_epoch'],
+          3,
+          reason: 'the upgrade must not disturb the write generation',
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    test('the checkpoint column refuses a null', () {
+      // NOT NULL with a default is what makes "no checkpoint yet" a value rather than an
+      // absence, so a writer cannot leave the counter undefined.
+      final Database db = openVersionTwo('v2-not-null.db');
+      try {
+        StorageMigrator().migrate(db);
+        db.execute(
+          "INSERT INTO tasks (task_id, role, direction, state, protocol_major, "
+          "protocol_minor, created_at, updated_at) "
+          "VALUES ('t1', 'receiver', 'client_to_server', 'ready', 1, 0, 1, 1);",
+        );
+        expect(
+          () => db.execute(
+            'UPDATE tasks SET ${StorageSchema.tasksCheckpointSeqColumn} = NULL;',
+          ),
+          throwsA(isA<SqliteException>()),
         );
       } finally {
         db.close();

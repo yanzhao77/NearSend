@@ -116,7 +116,7 @@ flowchart TD
 
 | 实体 | 关键字段 | 约束 |
 | --- | --- | --- |
-| tasks | task_id、角色、状态、协议版本、lease_epoch、manifest_hash | 状态迁移和世代原子更新 |
+| tasks | task_id、角色、状态、协议版本、lease_epoch、checkpoint_seq、manifest_hash | 状态迁移、世代与 checkpoint 原子更新 |
 | peers | peer_id、身份指纹、授权状态 | 敏感凭证不明文写入 |
 | files | file_id、规范化路径、大小、块大小、file_hash、export_state | 清单冻结后不可静默修改 |
 | chunks | file_id、index、offset、length、hash、state | `(file_id,index)` 唯一；committed 为恢复权威 |
