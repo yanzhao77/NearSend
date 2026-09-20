@@ -109,6 +109,8 @@ NearSend 目前处于 **S0 技术验证与协议细化阶段**，工程侧已完
 
 **T01-02 已把这些检查固化为 CI 门禁：** GitHub Actions 上四个作业——仓库检查（协议固定向量、Markdown 相对链接、敏感信息、依赖锁文件）、`dart format` / `flutter analyze` / `flutter test`、Android 构建、Windows 构建——在提交 `eb8c4d9` 上**全部真实通过**。Flutter 版本固定为 3.47.5 并校验归档 SHA-256。
 
+**T02-01 已在 Dart 中独立实现协议清单编码：** `LFTM1`（清单摘要）与 `LFTC1`（块清单摘要）按 `docs/protocol/v1.0-draft1.md` §5.2/§5.3 编写，与 Python 参考实现生成的三个固定向量（空文件、UTF-8 中文路径、4 MiB + 3 字节尾块）**逐字节一致**，Flutter 测试 84 项通过。协议**仍未冻结**：完整错误模型与版本协商属 T02-02，且非 NFC 路径强制尚未实现（已在台账 §5 登记）。
+
 上述结果**不包含任何传输、配对、发现、存储或恢复能力**——这些尚未实现，应用内的发送与接收入口被显式禁用并标注未实现。CI 通过也不代表真机、网络、耐久性或安全结论。目前没有可分发安装包（release APK 使用调试签名）、没有 Windows 11 或 iOS 结论，也没有三端兼容性结论。
 
 查看 **[项目现状与进度台账](docs/PROJECT_LEDGER.md)** · [T01-01 运行汇总](docs/testing/evidence/2026-09-20/t01-01-01/summary.md) · [T01-02 运行汇总](docs/testing/evidence/2026-09-20/t01-02-01/summary.md) · [S0 验证报告](docs/testing/S0-report.md) · [运行参考探针](tooling/s0/README.md)。
@@ -132,6 +134,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/check.ps1
 - [文档中心与推荐阅读顺序](docs/README.md)
 - [任务卡索引](docs/tasks/README.md)
 - [架构决策记录 ADR-0001 工程基线与标识](docs/decisions/ADR-0001-工程基线与标识.md)
+- [架构决策记录 ADR-0002 crypto 依赖与 SHA-256](docs/decisions/ADR-0002-crypto依赖与SHA256.md)
 - [Vibe Coding 开发流程](docs/DEVELOPMENT_WORKFLOW.md)
 - [系统架构](docs/architecture/SYSTEM_ARCHITECTURE.md)
 - [应用与端侧服务设计](docs/architecture/APP_AND_SERVICE_DESIGN.md)

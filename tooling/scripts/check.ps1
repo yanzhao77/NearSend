@@ -93,8 +93,11 @@ try {
         if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
 
         if ($python) {
+            # --strict: an untracked document means the verdict does not cover the
+            # working tree. Staging it is a one-line fix, and a misleading "pass"
+            # has twice sent a broken link to CI.
             Invoke-Step -Name 'Markdown relative links' -Command $python.Source `
-                -Arguments @('tooling/checks/check_links.py')
+                -Arguments @('tooling/checks/check_links.py', '--strict')
             Invoke-Step -Name 'Sensitive information' -Command $python.Source `
                 -Arguments @('tooling/checks/check_secrets.py')
             Invoke-Step -Name 'CI workflow invariants' -Command $python.Source `

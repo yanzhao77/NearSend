@@ -21,16 +21,19 @@ Windows、Linux、macOS 与 CI runner 上行为一致，不需要安装任何第
 - 处理 `#锚点`、`%xx` 百分号编码（本仓库文档名含中文）以及 `[文本](目标 "标题")` 形式。
 - **跳过代码块、行内代码与 HTML 注释**：文档为了举例而写出链接语法时，例子不是链接。
   （这一条是被 CI 抓出来的：本文件的示例文本最初被当成真实链接，报了一次假的坏链接。）
-- 若工作区存在**未跟踪**的 Markdown，会明确列出并提示「NOT CHECKED」。
-  本项目第一次跑 CI 时，本地检查看到 26 个文件、CI 看到 29 个——差额正是当时尚未 `git add`
-  的新文档。列出来比报告一个不覆盖工作区的「通过」要诚实。
+- 若工作区存在**未跟踪**的 Markdown，会明确列出并打印 `WARNING`，且最终结论行会注明
+  「tracked files only」。加 `--strict` 时**直接失败**，提示先 `git add`。
+  `check.ps1` 使用 `--strict`：一个不覆盖工作区的「通过」是误导性的，
+  而修好它只需要把文件暂存。（本项目两次把坏链接送进 CI，都是因为在文件仍未被跟踪时
+  跑了一次本地检查。）
 
 ```bash
 python3 tooling/checks/check_links.py
 python3 tooling/checks/check_links.py --verbose
+python3 tooling/checks/check_links.py --strict
 ```
 
-退出码：`0` 全部可解析，`1` 存在坏链接，`2` 用法错误。
+退出码：`0` 全部可解析，`1` 存在坏链接或（在 `--strict` 下）存在未跟踪的 Markdown，`2` 用法错误。
 
 ## `check_secrets.py`
 
