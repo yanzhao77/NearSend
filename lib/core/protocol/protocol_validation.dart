@@ -6,10 +6,17 @@
 /// encoder and later the API layer cannot disagree about what is legal.
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
+
+/// The UTF-8 byte length of [value].
+///
+/// §3, §4 and §5.1 all express their limits in UTF-8 bytes rather than characters, and a
+/// character count would let a name of multi-byte characters pass a limit it exceeds.
+int utf8BytesOf(String value) => utf8.encode(value).length;
 
 /// `0|[1-9][0-9]{0,18}`, value range `0..2^63-1` (§4).
 ///

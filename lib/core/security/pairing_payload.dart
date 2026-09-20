@@ -115,7 +115,7 @@ class PairingPayload {
   /// malformed payload is never partially accepted, because a partially accepted
   /// payload is how a scan of something else turns into a connection to somewhere else.
   static PairingPayload parse(String qrText) {
-    final int byteLength = utf8.encode(qrText).length;
+    final int byteLength = utf8BytesOf(qrText);
     if (byteLength > ProtocolLimits.pairingQrMaxBytes) {
       throw ProtocolViolation(
         ProtocolErrorCode.invalidField,
