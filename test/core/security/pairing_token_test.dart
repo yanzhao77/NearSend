@@ -511,6 +511,75 @@ void main() {
       );
     });
 
+    test('it reports how long to wait, which is what Retry-After carries', () {
+      expect(
+        issuer.retryAfterSeconds(source),
+        0,
+        reason: 'an unlimited source has nothing to wait for',
+      );
+
+      // Spread the failures so the oldest one leaves the window sooner.
+      for (
+        int i = 0;
+        i < PairingTokenIssuer.defaultPerSourceFailureLimit;
+        i++
+      ) {
+        issuer.consume(
+          source: source,
+          sessionId: otherSession,
+          pairToken: tokenText(i),
+        );
+        now += 10000;
+      }
+      now -= 10000;
+
+      final int wait = issuer.retryAfterSeconds(source);
+      expect(
+        wait,
+        greaterThan(0),
+        reason: '§11 attaches Retry-After to a 429 and prescribes backing off by it',
+      );
+      expect(
+        wait,
+        lessThanOrEqualTo(
+          PairingTokenIssuer.defaultFailureWindowMillis ~/ 1000,
+        ),
+      );
+
+      // Waiting exactly that long must actually lift the limit, or the header lied.
+      now += wait * 1000;
+      expect(issuer.isRateLimited(source), isFalse);
+    });
+
+    test('the wait follows the oldest failure, not the window length', () {
+      // Five failures in the same instant: the whole window is still ahead.
+      for (
+        int i = 0;
+        i < PairingTokenIssuer.defaultPerSourceFailureLimit;
+        i++
+      ) {
+        issuer.consume(
+          source: source,
+          sessionId: otherSession,
+          pairToken: tokenText(i),
+        );
+      }
+      final int fromStart = issuer.retryAfterSeconds(source);
+
+      // Twenty seconds later the same five are twenty seconds closer to ageing out.
+      now += 20000;
+      final int later = issuer.retryAfterSeconds(source);
+
+      expect(
+        later,
+        lessThan(fromStart),
+        reason:
+            'telling a client to wait a full minute when twenty seconds would do is its '
+            'own kind of wrong',
+      );
+      expect(later, greaterThan(0));
+    });
+
     test('a success does not clear the failure record', () {
       final IssuedPairingToken issued = issuer.issue(
         sessionId: sessionId,

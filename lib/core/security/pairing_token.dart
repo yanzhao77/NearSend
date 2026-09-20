@@ -244,6 +244,48 @@ class PairingTokenIssuer {
         (_failuresBySource[source]?.length ?? 0) >= perSourceFailureLimit;
   }
 
+  /// How long [source] must wait before an attempt would be accepted, in whole seconds.
+  ///
+  /// §11 attaches `Retry-After` to a 429 and prescribes backing off by it. A limit without
+  /// a delay leaves a caller with nothing to obey, so the value is derived from when
+  /// enough failures actually leave the window rather than from the window length: telling
+  /// a client to wait a full minute when one second would do is its own kind of wrong.
+  ///
+  /// Returns 0 when the source is not limited.
+  int retryAfterSeconds(String source) {
+    final int now = _clock();
+    _pruneFailures(now);
+
+    int waitMillis = 0;
+    final List<int>? perSource = _failuresBySource[source];
+    if (perSource != null && perSource.length >= perSourceFailureLimit) {
+      waitMillis = _millisUntilBelow(
+        perSource,
+        perSourceFailureLimit,
+        now,
+        waitMillis,
+      );
+    }
+    if (_globalFailures.length >= globalFailureLimit) {
+      waitMillis = _millisUntilBelow(
+        _globalFailures,
+        globalFailureLimit,
+        now,
+        waitMillis,
+      );
+    }
+    // Rounded up, so the delay never expires before the limit actually lifts.
+    return (waitMillis / 1000).ceil();
+  }
+
+  int _millisUntilBelow(List<int> times, int limit, int now, int current) {
+    // Failures are appended in time order, so the next one that has to age out sits at
+    // `length - limit`: dropping it takes the count from `limit` to `limit - 1`.
+    final int releaseAt = times[times.length - limit] + failureWindowMillis;
+    final int wait = releaseAt - now;
+    return wait > current ? wait : current;
+  }
+
   /// Consumes the token for [sessionId], if it is valid.
   ///
   /// [source] identifies the caller for the per-source failure limit. The rate limit is
