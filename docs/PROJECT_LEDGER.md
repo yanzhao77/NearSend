@@ -40,7 +40,7 @@
 | R01 | Flutter客户端与原生适配 | 部分完成：工程基线 | [T01-01](tasks/T01-01.md)、[T01-01 证据](testing/evidence/2026-09-20/t01-01-01/summary.md) | Android/Windows/iOS 工程可构建；Android 真机与 Windows 均启动同一版本壳应用；传输、配对、发现、存储、恢复未实现 |
 | R02 | 安装包、签名构建及发布CI | 待开始 | 无产物 | 当前只有发布策略，未发布任何版本 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | 四个作业在 GitHub Actions 真实通过；签名与发布作业仍属 T10 |
-| R04 | 接收方持久化层 | 部分完成：实现并测试 | [T04-01](tasks/T04-01.md)、[运行汇总](testing/evidence/2026-09-20/t04-01-04/summary.md) | schema v1、迁移与回滚、高版本拒绝、chunk 提交顺序与写入世代、幂等记录、任务/文件状态、导出记录、peer 授权均已实现；**未完成**：ENOSPC 注入、真实暂存损坏、多版本迁移、真机 `syncData` 耐久性（B04）。全部结论来自 Windows 桌面测试，不得当作真机结论 |
+| R04 | 接收方持久化层 | 部分完成：实现并测试 | [T04-01](tasks/T04-01.md)、[运行汇总](testing/evidence/2026-09-20/t04-01-04/summary.md) | schema v1、迁移与回滚、高版本拒绝、chunk 提交顺序与写入世代、幂等记录、任务/文件状态、导出记录、peer 授权、引擎真实 `SQLITE_FULL` 注入均已实现；**未完成**：真实暂存损坏、OS 层满盘（`ENOSPC`）、多版本迁移、真机 `syncData` 耐久性（B04）。全部结论来自 Windows 桌面测试，不得当作真机结论 |
 
 历史实验环境见[environment.json](testing/evidence/2026-09-20/environment.json)。20GiB整文件哈希通过；峰值RSS为18,944KiB，1GiB为18,816KiB。该口径不包含系统页缓存，不代表真机吞吐量或完整应用内存。
 
@@ -83,7 +83,7 @@
 | T01-02 CI 与检查 | T01-01 | 已完成 | format/analyze/test/build 可重复运行 |
 | T02-01 Dart canonical manifest | T01-01、D03/D04 | 已完成 | 固定向量正反例一致，不复制 Python 实现逻辑 |
 | T02-02 状态/错误/版本模型 | T01-01、D03 | 已完成 | 模型和序列化测试通过，未知字段规则明确 |
-| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 进行中（schema/迁移/chunk repository/幂等持久化/任务与文件状态/导出与 peer 授权已实现并测试；ENOSPC、真实暂存损坏、多版本迁移、真机 syncData 未完成） | durable 提交顺序、迁移和故障测试通过 |
+| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 进行中（schema/迁移/chunk repository/幂等持久化/任务与文件状态/导出与 peer 授权/磁盘满注入均已实现并测试；真实暂存损坏、OS 层满盘、多版本迁移、真机 syncData 未完成） | durable 提交顺序、迁移和故障测试通过 |
 | T03-01 同网二维码配对 | T01-01/T02-02/B02 | 阻塞 | pin 先于令牌，正负例和目标端网络绑定通过 |
 | T06-01 空间计划与导出 | T01-01/T04-01 | 待开始 | 分卷明细、unknown/不足、终检和幂等导出通过 |
 
@@ -104,6 +104,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | **NFC 路径强制** | 协议 §5.1 要求接收端拒绝非 NFC 规范的相对路径；检测需要 Unicode 规范化实现，Dart SDK 不提供 | **未实现，已登记为待人工决策**：选择实现属于依赖决策（`AGENTS.md` §3 禁止凭偏好定案）。候选：① 引入纯 Dart 规范化包；② 调用平台原生规范化 API；③ 由发送端负责并对摘要附加规范化声明。缺口以 `RelativePathRules.enforcesNfcNormalisation` 与一条断言显式暴露。**必须在协议冻结前解决** |
 | 加密原语依赖 | SHA-256 实现的选择必须记录理由、许可证与安全影响 | 已引入 `crypto` 3.0.7（Dart 团队、BSD-3、纯 Dart、不接触文件/网络/密钥），见 [ADR-0002](decisions/ADR-0002-crypto依赖与SHA256.md)；自制加密算法已被明确否决 |
 | SQLite 绑定 | `SYSTEM_ARCHITECTURE.md` §12 把 SQLite 插件列为待冻结；选择必须记录候选与验证结果 | 已选用 `sqlite3` 3.6.0（MIT、跨三端、可显式控制 PRAGMA 与事务），见 [ADR-0003](decisions/ADR-0003-SQLite绑定与耐久性配置.md)；探针在本机 5/5 通过（SQLite 3.53.4、`synchronous=FULL` 读回为 2）。**已移除已废弃且为空的 `sqlite3_flutter_libs`（`0.6.0+eol`）** |
+| 存储引擎错误分类 | 只有被测试真实产生过的引擎错误才可映射为特定语义，未映射的 `SQLITE_*` 会一律落到「可重试的提交失败」 | **部分复核**：`SQLITE_FULL`（主码 13）已映射为 `NS-STORAGE-008 spaceInsufficient` → `SPACE_INSUFFICIENT`（507，**不可重试**），由引擎真实产生并由测试固定。`SQLITE_READONLY` / `SQLITE_IOERR` / `SQLITE_CORRUPT` 等**尚未映射**，落点语义未必正确，**需人工判断是否逐项处理**；本次不凭推测扩充映射 |
 | 平台 durable sync 语义 | 协议要求「durable sync 后才提交块」；`syncData` 的真实平台语义须由真机验证 | **未验证**。ADR-0003 只证明 PRAGMA 被接受与事务原子性，**不得**据此声称断电耐久性已验证；该结论属 B04 真机故障注入 |
 | 导出/删除/迁移 | 不误删、不重复导出、迁移失败保留数据 | **部分复核**：导出**记录**层已实现并测试（仅在文件全部 committed 后记录；同一文件不静默产生第二份副本；失败的导出不覆盖已保存记录）；迁移失败保留数据与高版本拒绝先于任何 PRAGMA 已由测试覆盖。**导出文件本身的写入、删除与清理尚未实现（T06-01）**，不得据此声称「不误删」已复核 |
 | 平台目录边界 | `android`/`windows`/`ios` 相对 `flutter create` 生成结果只允许标识类差异，不得混入业务逻辑 | T01-01 已按 SHA-256 逐文件审计通过，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)；后续每个平台任务需重复复核 |
@@ -273,5 +274,6 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | T04-01 幂等持久化经 PR #15 合并入 `master`（合并提交 `2d964cb`）；CI 四个作业首次运行即全部通过（run 35527991092）。任务**保持「进行中」** | [PR #15](https://github.com/yanzhao77/NearSend/pull/15)、合并提交 `2d964cb`、T04-01 证据 |
 | 2026-09-20 | T04-01 任务/文件状态、导出记录与 peer 授权：实现 `transfer_repository.dart`、`peer_repository.dart` 及 22 项测试（Flutter 测试 214→236；存储测试 51→73）。状态迁移只走 T02-02 的已定义边；导出仅在文件全部 committed 后才记录且不静默产生第二份副本；peer 指纹变化只报告不吸收。**期间修复**：`NearSendDatabase.transaction` 把状态机抛出的 `ProtocolViolation` 包装成 `NS-STORAGE-*`，使「协议拒绝」被报告为「磁盘失败」，已改为原样重抛。任务仍为「进行中」 | [T04-01](tasks/T04-01.md)、[实现证据](testing/evidence/2026-09-20/t04-01-04/summary.md) |
 | 2026-09-20 | T04-01 上述实现经 PR #17 合并入 `master`（合并提交 `751b8a9`）；CI 四个作业在首次运行即全部通过（run 35528942547，head SHA `50810f1`）。任务**保持「进行中」**，退出门槛未满足 | [PR #17](https://github.com/yanzhao77/NearSend/pull/17)、合并提交 `751b8a9`、T04-01 证据 |
+| 2026-09-20 | T04-01 磁盘满与提交失败注入：以 `PRAGMA max_page_count` 让**引擎真实返回** `SQLITE_FULL`（result code 13），新增 8 项注入测试（Flutter 测试 236→244；存储 73→81）。探针给出一个否定结论：块提交是单行 `UPDATE`、不分配新页，**数据库写满也无法让它失败**，故注入位置在 sink，数据库侧另经事务原语验证。**期间修复**：真实的空间耗尽原先被包装为 `NS-STORAGE-006 commitFailed` → `DB_COMMIT_FAILED`（500，**可重试**），会让客户端对着写不进去的卷无限重试、且永不提示用户清理空间；已新增 `NS-STORAGE-008 spaceInsufficient` → `SPACE_INSUFFICIENT`（507，**不可重试**）。任务仍为「进行中」 | [T04-01](tasks/T04-01.md)、[实现证据](testing/evidence/2026-09-20/t04-01-05/summary.md) |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
