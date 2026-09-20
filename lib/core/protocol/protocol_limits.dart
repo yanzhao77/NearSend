@@ -51,4 +51,43 @@ abstract final class ProtocolLimits {
 
   /// Characters in the lowercase hexadecimal form of a SHA-256 digest.
   static const int sha256HexLength = 64;
+
+  // --- Pairing (§3). These are protocol values, not application settings. ---
+
+  /// Maximum size of the pairing QR payload, in UTF-8 bytes (§3).
+  static const int pairingQrMaxBytes = 4096;
+
+  /// Maximum candidate addresses in one pairing QR code (§3).
+  static const int pairingCandidatesMax = 8;
+
+  /// Number of random bytes in a pairing token (§3).
+  static const int pairTokenBytes = 32;
+
+  /// Characters in the unpadded base64url form of [pairTokenBytes] (§4).
+  ///
+  /// 32 bytes encode to 43 characters: ceil(32 / 3) * 4 = 44 with one `=` of padding,
+  /// which §4 removes.
+  static const int pairTokenChars = 43;
+
+  /// Number of random bytes in a session access token (§3).
+  static const int accessTokenBytes = 32;
+
+  /// Lifetime of a pairing token, in seconds (§3).
+  ///
+  /// §3 also says `expiresInSeconds` in the QR code is only a hint and the server's
+  /// state decides, so this is the value the issuer enforces rather than one the
+  /// scanner may rely on.
+  static const int pairTokenTtlSeconds = 300;
+
+  /// Lifetime of a session access token, in seconds (§3).
+  static const int sessionAccessTokenTtlSeconds = 1800;
+
+  /// Maximum length of `clientLabel`, in UTF-8 bytes (§3).
+  ///
+  /// It is shown to a person and is explicitly not an identity, so it is bounded but
+  /// never trusted.
+  static const int clientLabelMaxBytes = 128;
+
+  /// Highest port number a candidate may carry (§3).
+  static const int maxPort = 65535;
 }

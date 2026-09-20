@@ -35,14 +35,17 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T01-02](T01-02.md) | CI 与检查 | 已完成 | `feat/t01-02-ci-checks` → [#6](https://github.com/yanzhao77/NearSend/pull/6)、[#7](https://github.com/yanzhao77/NearSend/pull/7) |
 | [T02-01](T02-01.md) | Dart canonical manifest | 已完成 | `feat/t02-01-canonical-manifest` → [#8](https://github.com/yanzhao77/NearSend/pull/8)、[#9](https://github.com/yanzhao77/NearSend/pull/9) |
 | [T02-02](T02-02.md) | 状态、错误码和版本协商 | 已完成 | `feat/t02-02-protocol-model` → [#10](https://github.com/yanzhao77/NearSend/pull/10)、[#11](https://github.com/yanzhao77/NearSend/pull/11) |
+| [T03-01](T03-01.md) | 同网二维码配对与信任 | 进行中（目标端网络绑定阻塞于 B02） | `feat/t03-01-pairing-trust` |
 | [T04-01](T04-01.md) | SQLite schema、迁移框架与 chunk repository | 进行中 | `feat/t04-01-*` → [#13](https://github.com/yanzhao77/NearSend/pull/13)、[#15](https://github.com/yanzhao77/NearSend/pull/15)、[#17](https://github.com/yanzhao77/NearSend/pull/17)、[#19](https://github.com/yanzhao77/NearSend/pull/19) |
-| [T06-01](T06-01.md) | 空间计划、终检与导出 | 进行中 | `feat/t06-01-space-planning` |
+| [T06-01](T06-01.md) | 空间计划、终检与导出 | 进行中 | `feat/t06-01-*` → [#21](https://github.com/yanzhao77/NearSend/pull/21)、[#23](https://github.com/yanzhao77/NearSend/pull/23)、[#25](https://github.com/yanzhao77/NearSend/pull/25)、[#27](https://github.com/yanzhao77/NearSend/pull/27) |
 
 各任务的完成依据见对应运行汇总：T01-01 [证据](../testing/evidence/2026-09-20/t01-01-01/summary.md)、
 T01-02 [证据](../testing/evidence/2026-09-20/t01-02-01/summary.md)、
 T02-01 [证据](../testing/evidence/2026-09-20/t02-01-01/summary.md)、
 T02-02 [证据](../testing/evidence/2026-09-20/t02-02-01/summary.md)、
-T04-01 [证据](../testing/evidence/2026-09-20/t04-01-05/summary.md)。
+T03-01 [证据](../testing/evidence/2026-09-20/t03-01-01/summary.md)、
+T04-01 [证据](../testing/evidence/2026-09-20/t04-01-05/summary.md)、
+T06-01 [证据](../testing/evidence/2026-09-20/t06-01-04/summary.md)。
 
 **已完成仅表示该任务自身的退出门槛全部满足**，不表示任何传输、配对、存储或恢复能力已经实现；
 平台能力结论仍需目标设备证据。本表的状态必须与 [项目台账](../PROJECT_LEDGER.md) 一致。
