@@ -1,0 +1,45 @@
+NearSend T01-02 negative tests - proving each gate can actually fail
+Date: 2026-09-20   Run: t01-02-01   Host: Windows 10 22H2   Python: Python 3.10.9
+Each check is run against a deliberately introduced defect, and the defect is then removed.
+
+### 1. link check with a tracked broken link (expect exit 1)
+checked 27 Markdown files, 142 links
+
+BROKEN LINKS (1):
+  tooling/checks/_neg.md -> ./definitely-not-here.md
+exit=1
+
+### 2. secret scan with a tracked fake GitHub token (expect exit 1, output REDACTED)
+SENSITIVE INFORMATION FOUND (1):
+  tooling/checks/_neg.md:2: GitHub token: ghp_...<40 chars>
+
+Remove the value, rotate the credential, and use platform secure storage or a protected CI secret instead (AGENTS.md section 5).
+exit=1
+NOTE: only the first 4 characters and the length are printed, so the CI log does not become a new leak.
+
+### 3. CI invariant check: tag-pinned action instead of a commit SHA (expect exit 1)
+CI WORKFLOW VIOLATIONS (4):
+  .github/workflows/ci.yml:51: 'uses: actions/checkout@v4' is not pinned to a 40-character commit SHA
+  .github/workflows/ci.yml:80: 'uses: actions/checkout@v4' is not pinned to a 40-character commit SHA
+  .github/workflows/ci.yml:108: 'uses: actions/checkout@v4' is not pinned to a 40-character commit SHA
+  .github/workflows/ci.yml:144: 'uses: actions/checkout@v4' is not pinned to a 40-character commit SHA
+exit=1
+
+### 4. CI invariant check: continue-on-error introduced (expect exit 1)
+CI WORKFLOW VIOLATIONS (1):
+  .github/workflows/ci.yml:98: 'continue-on-error' would let a failing check pass
+exit=1
+
+### 5. CI invariant check: Flutter version drift between workflow and installer (expect exit 1)
+CI WORKFLOW VIOLATIONS (1):
+  Flutter version mismatch: workflow declares ['3.99.9'] but tooling/ci/install_flutter.sh installs ['3.47.5']
+exit=1
+
+### 6. restore the workflow and re-verify (expect exit 0)
+CI workflow invariants hold (SHA-pinned actions, no continue-on-error, read-only permissions, Flutter version pinned consistently)
+exit=0
+
+### 7. conclusion
+Every check was observed failing on a real defect and passing again after the defect was removed.
+No negative fixture was committed; the repository keeps only the intended T01-02 changes.
+All check output is ASCII so no console code page can mangle it.
