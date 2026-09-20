@@ -1,0 +1,29 @@
+test_20gib_offsets_and_tail (test_probes.ProtocolTests.test_20gib_offsets_and_tail) ... ok
+test_accept_10000_manifest_entries (test_probes.ProtocolTests.test_accept_10000_manifest_entries) ... ok
+test_chunk_order_length (test_probes.ProtocolTests.test_chunk_order_length) ... ok
+test_decimal_limits (test_probes.ProtocolTests.test_decimal_limits) ... ok
+test_file_count_limit_and_duplicate_id (test_probes.ProtocolTests.test_file_count_limit_and_duplicate_id) ... ok
+test_fixed_vectors (test_probes.ProtocolTests.test_fixed_vectors) ... ok
+test_json_depth_and_size_limits (test_probes.ProtocolTests.test_json_depth_and_size_limits) ... ok
+test_key_order_and_whitespace (test_probes.ProtocolTests.test_key_order_and_whitespace) ... ok
+test_path_rejections (test_probes.ProtocolTests.test_path_rejections) ... ok
+test_reject_duplicate_keys (test_probes.ProtocolTests.test_reject_duplicate_keys) ... ok
+test_standard_hash (test_probes.ProtocolTests.test_standard_hash) ... ok
+test_total_chunk_limit (test_probes.ProtocolTests.test_total_chunk_limit) ... ok
+test_unknown_fields_and_version (test_probes.ProtocolTests.test_unknown_fields_and_version) ... ok
+test_corruption_selective_repair (test_probes.StorageTests.test_corruption_selective_repair) ... ok
+test_crash_after_sync (test_probes.StorageTests.test_crash_after_sync) ... ok
+test_crash_after_write (test_probes.StorageTests.test_crash_after_write) ... ok
+test_crash_before_commit (test_probes.StorageTests.test_crash_before_commit) ... ok
+test_lost_ack_after_commit (test_probes.StorageTests.test_lost_ack_after_commit) ... ok
+test_stale_writer_and_idempotent_resume (test_probes.StorageTests.test_stale_writer_and_idempotent_resume) ... ok
+test_sync_failure_not_committed (test_probes.StorageTests.test_sync_failure_not_committed) ... ok
+test_wrong_content_and_range (test_probes.StorageTests.test_wrong_content_and_range) ... ok
+test_tls12_rejected (test_probes.TLSTests.test_tls12_rejected) ... ok
+test_tls13_correct_pin (test_probes.TLSTests.test_tls13_correct_pin) ... ok
+test_wrong_pin_sends_no_http (test_probes.TLSTests.test_wrong_pin_sends_no_http) ... ok
+
+----------------------------------------------------------------------
+Ran 24 tests in 1.583s
+
+OK

@@ -1,0 +1,19 @@
+{
+  "docs/protocol/v1.0-draft1.md": "3d1d9bf341c53ab6ca3735d9d91819b6b67fe0a7de3af7917ca9a18eb4834ed2",
+  "docs/protocol/vectors-v1.json": "d88ab988a519d0b693928e947fe74249e9962439b9ce22c9636dc62f11a7d29f",
+  "docs/testing/S0-report.md": "2f69c6d6504fab34107e33f09d8a092554164515619ba12cb50cfcd3258bc0b1",
+  "docs/testing/evidence/2026-09-20/environment.json": "93d65df0d38179264db73ca75c653b552ee0548986f39d57be90742186c37600",
+  "docs/testing/evidence/2026-09-20/unit-tests.log": "0fde2cbcf0d05b73c437b1089c822b12b9afe624186793cff520bc48e4837ffe",
+  "docs/testing/evidence/2026-09-20/large-1gib.json": "6bc12f0610518d4e93cea0b84974f1f468bdd02afe1eda6fd474e47dcd1bc7de",
+  "docs/testing/evidence/2026-09-20/summary.json": "ae58d7d170fa49e22f002cc4bb9af4fbacbac929e19aa7c5879c0532ece3db8e",
+  "docs/testing/evidence/2026-09-20/repository-import-tests.log": "40949cf13e30ada98a1e63764e65c78cc8b340908eae8273b47d123e4cc8485d",
+  "docs/testing/evidence/2026-09-20/large-20gib.json": "d0514784b4fcefae783540870c1ff5fb1f167dee8847eee127f67273ad08b7ce",
+  "docs/testing/evidence/2026-09-20/small-files.json": "b77e3de02ea3f2409f0acbb7c7cbfa224a9010805920cd5e0c1ac0ff92c794dd",
+  "tooling/s0/small_files_probe.py": "5b03a34e82e8bbe3a7ff2a19c74dc17b369c32d8095386b6d0243d87a9715a2e",
+  "tooling/s0/storage_probe.py": "1d4b5f528d596c6d2ecba9cd669f939b6088acb0811f6c462a95e4f9e7b26842",
+  "tooling/s0/make_vectors.py": "7bcc7ed1a17415b19d44ecd286dcd6951a9f461b4ceeab6aa2d8b4ff2750167e",
+  "tooling/s0/README.md": "3cf0324650ee9a745c365b65ac98e5b99c997f05d87d4568c314b9b110f34d83",
+  "tooling/s0/test_probes.py": "ee8b716ad5568fbf70205a039239a78db024b74b02d21e58aa2ee27989123579",
+  "tooling/s0/protocol_core.py": "0ff246f89023eecab1a78a52fc64c33087c119d474d377799fcd2cd9aa8be11b",
+  "tooling/s0/large_file_probe.py": "4f508dd0f0d4f4d835aae6b5c23c8979c22f088be64606d46e8e65a3c8868b12"
+}

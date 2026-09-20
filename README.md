@@ -88,7 +88,7 @@ flowchart TB
 | 阶段 | 目标 | 状态 |
 |---|---|---|
 | S0 | 验证 Flutter I/O、TLS、SQLite 耐久性、Android 热点/URI、Windows 组网及 iOS 文件/网络边界 | **当前阶段** |
-| S1 | 冻结协议 v1、清单规范、状态机、错误码和固定测试向量 | 待开始 |
+| S1 | 冻结协议 v1、清单规范、状态机、错误码和固定测试向量 | 草案与 Python 参考向量已完成；跨语言验证与冻结待完成 |
 | S2 | 打通 Android + Windows 端到端小文件与大文件传输 | 待开始 |
 | S3 | 完成暂停、故障恢复、重启续传、空间管理与安全验收 | 待开始 |
 | S4 | 完成 iOS 正式集成、设备矩阵测试及发布准备 | 待开始 |
@@ -103,18 +103,27 @@ flowchart TB
 
 NearSend 目前处于 **S0 技术验证与协议细化阶段**。仓库中的设计描述是目标和验收标准，不代表相应功能已经实现或经过真机验证。性能数据、兼容设备和最低系统版本会在实验完成后基于证据冻结。
 
+**截至 2026-09-20：** 已提交协议 v1.0-draft1、Python 参考探针及测试证据。24 项自动化检查通过；Linux 本地完成 20 GiB 实际落盘回读和 10,000 个小文件校验。上述结果不代表跨设备传输或真机验收通过；目前没有 Flutter 客户端、可安装包或三端兼容性结论。
+
+查看 **[项目现状与进度台账](docs/PROJECT_LEDGER.md)** · [S0 验证报告](docs/testing/S0-report.md) · [运行参考探针](tooling/s0/README.md)。
+
 当前优先事项：
 
-- 验证 20 GiB 级流式读写、哈希和内存上限。
-- 验证 checkpoint 的落盘顺序与崩溃恢复语义。
+- 在目标设备复验 20 GiB 流式读写、哈希、内存上限与完整导出；Linux 本地参考实验已通过。
+- 在真实平台存储后端验证 checkpoint、重启及故障恢复；Linux 子进程中断实验已通过。
 - 验证 Android LocalOnlyHotspot、网络绑定和 SAF URI 重启恢复。
 - 验证 Windows 离线组网路径、监听与防火墙行为。
-- 冻结协议 v1 与跨平台固定测试向量。
+- 独立实现并比对跨语言固定测试向量，再冻结协议 v1。
 
 ## 文档
 
 - [完整技术方案 V2.1](docs/跨平台离线文件互传系统技术方案_V2.1.md)
 - [AI 与贡献者开发规则](AGENTS.md)
+- [项目现状与进度台账](docs/PROJECT_LEDGER.md)
+- [协议 v1.0-draft1](docs/protocol/v1.0-draft1.md)
+- [固定测试向量](docs/protocol/vectors-v1.json)
+- [S0 验证报告与真机执行单](docs/testing/S0-report.md)
+- [S0 参考探针运行说明](tooling/s0/README.md)
 
 `AGENTS.md` 是本项目对 Cursor、Claude Code、Codex 等 AI 编码工具的最高优先级项目规则，包含架构边界、安全要求、目录规范、开发工作流与必做检查。
 
@@ -151,3 +160,4 @@ NearSend 目前处于 **S0 技术验证与协议细化阶段**。仓库中的设
 **NearSend — Your files. Your devices. No cloud required.**
 
 </div>
+

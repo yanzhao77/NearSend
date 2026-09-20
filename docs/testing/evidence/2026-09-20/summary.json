@@ -1,0 +1,7 @@
+{
+  "tests": 24,
+  "result": "passed",
+  "evidence": "unit-tests.log",
+  "scope": "Linux reference only",
+  "platform_s0": "blocked_pending_target_environments"
+}

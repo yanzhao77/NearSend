@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "sizeBytes": "21474836480",
+  "allocatedBytes": "21474840576",
+  "sha256": "e74f596776b6653cbda56d4bdd968e9bbff1cc14d4c8021adfd31288dd234edf",
+  "write_sync_hash_seconds": 116.754,
+  "read_hash_seconds": 101.605,
+  "peak_rss_kib_linux": 18944,
+  "chunkBytes": 4194304,
+  "syncEveryBytes": 16777216,
+  "scope": "Linux local synthetic file, no network, no SQLite, no export, no power-loss test"
+}
