@@ -272,5 +272,6 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | T04-01 幂等持久化：实现 `idempotency_repository.dart`，**记录与效果在同一事务提交**（以「效果写标记行 + 断言两者同时提交/同时回滚」直接验证），规则复用 T02-02 定义；Flutter 测试 201→214。任务仍为「进行中」 | [T04-01](tasks/T04-01.md)、[实现证据](testing/evidence/2026-09-20/t04-01-03/summary.md) |
 | 2026-09-20 | T04-01 幂等持久化经 PR #15 合并入 `master`（合并提交 `2d964cb`）；CI 四个作业首次运行即全部通过（run 35527991092）。任务**保持「进行中」** | [PR #15](https://github.com/yanzhao77/NearSend/pull/15)、合并提交 `2d964cb`、T04-01 证据 |
 | 2026-09-20 | T04-01 任务/文件状态、导出记录与 peer 授权：实现 `transfer_repository.dart`、`peer_repository.dart` 及 22 项测试（Flutter 测试 214→236；存储测试 51→73）。状态迁移只走 T02-02 的已定义边；导出仅在文件全部 committed 后才记录且不静默产生第二份副本；peer 指纹变化只报告不吸收。**期间修复**：`NearSendDatabase.transaction` 把状态机抛出的 `ProtocolViolation` 包装成 `NS-STORAGE-*`，使「协议拒绝」被报告为「磁盘失败」，已改为原样重抛。任务仍为「进行中」 | [T04-01](tasks/T04-01.md)、[实现证据](testing/evidence/2026-09-20/t04-01-04/summary.md) |
+| 2026-09-20 | T04-01 上述实现经 PR #17 合并入 `master`（合并提交 `751b8a9`）；CI 四个作业在首次运行即全部通过（run 35528942547，head SHA `50810f1`）。任务**保持「进行中」**，退出门槛未满足 | [PR #17](https://github.com/yanzhao77/NearSend/pull/17)、合并提交 `751b8a9`、T04-01 证据 |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
