@@ -1,7 +1,10 @@
 # NearSend 构建与检查脚本
 
-本目录的脚本让 T01-01 之后的每个任务都能用同一组命令复现「格式化 → 静态分析 → 测试 → 构建」，
+本目录的脚本让每个任务都能用同一组命令复现「格式化 → 静态分析 → 测试 → 构建」，
 并把 Git 提交注入产物，使安装包可以追溯到确切的源码版本（技术方案 V2.1 §17.3）。
+
+`.github/workflows/ci.yml` 调用的是**同一套脚本与检查**，因此本地通过意味着 CI 也会通过，
+不存在两套会逐渐分叉的规则。
 
 ## 前置条件
 
@@ -9,8 +12,10 @@
 - `flutter` 与 `dart` 在 `PATH` 中。
 - Windows 构建需要 Visual Studio 2022 的「使用 C++ 的桌面开发」工作负载。
 - Android 构建需要 Android SDK；`ANDROID_HOME` 指向 SDK 根目录。
+- 仓库级检查（链接、敏感信息、CI 不变量）需要 `python3` 或 `python`；缺失时会明确打印 SKIPPED。
 
-脚本本身不安装工具链，也不修改机器配置。
+脚本本身不安装工具链，也不修改机器配置。CI 中的 Flutter 安装由
+[`tooling/ci/install_flutter.sh`](../ci/install_flutter.sh) 完成（固定版本 + 校验 SHA-256）。
 
 ## 调用方式
 
@@ -20,11 +25,17 @@
 
 ## `check.ps1`
 
-按 `AGENTS.md` §7 的顺序运行必做检查，任一步失败立即以非零码退出并保留原始输出。
+按 `AGENTS.md` §7 的顺序运行必做检查，任一步失败立即以非零码退出并保留原始输出：
+
+```text
+flutter pub get → dart format 校验 → flutter analyze → flutter test
+                → Markdown 相对链接 → 敏感信息 → CI 工作流不变量
+```
 
 ```powershell
 pwsh -File tooling/scripts/check.ps1
-pwsh -File tooling/scripts/check.ps1 -SkipTest     # 只做格式化与分析
+pwsh -File tooling/scripts/check.ps1 -SkipTest          # 只做格式化与分析
+pwsh -File tooling/scripts/check.ps1 -SkipRepoChecks    # 跳过三项仓库级检查
 ```
 
 | 参数 | 作用 |
@@ -32,6 +43,7 @@ pwsh -File tooling/scripts/check.ps1 -SkipTest     # 只做格式化与分析
 | `-SkipFormat` | 跳过 `dart format` 检查 |
 | `-SkipAnalyze` | 跳过 `flutter analyze` |
 | `-SkipTest` | 跳过 `flutter test` |
+| `-SkipRepoChecks` | 跳过 Markdown 链接、敏感信息与 CI 工作流检查 |
 
 ## `build.ps1`
 

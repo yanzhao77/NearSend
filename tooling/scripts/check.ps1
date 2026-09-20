@@ -97,6 +97,8 @@ try {
                 -Arguments @('tooling/checks/check_links.py')
             Invoke-Step -Name 'Sensitive information' -Command $python.Source `
                 -Arguments @('tooling/checks/check_secrets.py')
+            Invoke-Step -Name 'CI workflow invariants' -Command $python.Source `
+                -Arguments @('tooling/checks/check_ci_workflow.py')
         }
         else {
             # Reported as skipped, never as passed (AGENTS.md §7: an unexecuted
