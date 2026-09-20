@@ -11,6 +11,7 @@ library;
 
 import 'package:sqlite3/sqlite3.dart';
 
+import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/storage_migrations.dart';
 import 'package:nearsend/core/storage/storage_schema.dart';
@@ -86,6 +87,12 @@ class NearSendDatabase {
   /// Rolls back and rethrows on any failure. A caller that sees an exception can rely on
   /// nothing from [body] having been committed, which is what lets a chunk be retried
   /// instead of being reported as acknowledged.
+  ///
+  /// A [StorageException] and a [ProtocolViolation] both pass through unchanged. The
+  /// violation case matters: a body that refuses an undefined state transition is
+  /// reporting a protocol error, and relabelling it as `NS-STORAGE-*` would tell the
+  /// caller the disk failed when the protocol did. Only genuinely unexpected errors are
+  /// wrapped, and the original is kept as `cause`.
   T transaction<T>(T Function() body) {
     db.execute('BEGIN IMMEDIATE;');
     try {
@@ -94,7 +101,7 @@ class NearSendDatabase {
       return result;
     } on Object catch (error) {
       _rollbackQuietly();
-      if (error is StorageException) {
+      if (error is StorageException || error is ProtocolViolation) {
         rethrow;
       }
       throw StorageException(
@@ -114,7 +121,7 @@ class NearSendDatabase {
       return result;
     } on Object catch (error) {
       _rollbackQuietly();
-      if (error is StorageException) {
+      if (error is StorageException || error is ProtocolViolation) {
         rethrow;
       }
       throw StorageException(
