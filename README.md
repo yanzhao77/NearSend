@@ -117,6 +117,13 @@ NearSend 目前处于 **S0 技术验证与协议细化阶段**。仓库中的设
 
 ## 文档
 
+- [文档中心与推荐阅读顺序](docs/README.md)
+- [Vibe Coding 开发流程](docs/DEVELOPMENT_WORKFLOW.md)
+- [系统架构](docs/architecture/SYSTEM_ARCHITECTURE.md)
+- [应用与端侧服务设计](docs/architecture/APP_AND_SERVICE_DESIGN.md)
+- [UI/UX 与视觉规范](docs/ui/UI_UX_SPEC.md)
+- [质量与验收策略](docs/testing/QUALITY_AND_ACCEPTANCE.md)
+- [Agent 任务手册](docs/AGENT_TASK_PLAYBOOK.md)
 - [完整技术方案 V2.1](docs/跨平台离线文件互传系统技术方案_V2.1.md)
 - [AI 与贡献者开发规则](AGENTS.md)
 - [项目现状与进度台账](docs/PROJECT_LEDGER.md)
@@ -135,7 +142,7 @@ NearSend 目前处于 **S0 技术验证与协议细化阶段**。仓库中的设
 探索 → 规划 → 实现 → 验证 → 提交
 ```
 
-贡献代码前请先阅读 [AGENTS.md](AGENTS.md)。复杂改动需要说明计划、风险和验收方式；每次交付必须报告实际测试结果、未执行项与剩余风险。协议、安全、存储、迁移和删除路径需要重点人工复核。
+贡献代码前请先阅读 [AGENTS.md](AGENTS.md)、[开发流程](docs/DEVELOPMENT_WORKFLOW.md) 和 [Agent 任务手册](docs/AGENT_TASK_PLAYBOOK.md)。复杂改动需要说明计划、风险和验收方式；每次交付必须报告实际测试结果、未执行项与剩余风险。协议、安全、存储、迁移和删除路径需要重点人工复核。
 
 ## 参与项目
 
