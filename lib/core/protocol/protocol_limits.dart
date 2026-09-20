@@ -13,6 +13,20 @@ abstract final class ProtocolLimits {
   /// `offset = index * chunkSizeBytes` (§8).
   static const int chunkSizeBytes = 4194304;
 
+  /// Most verified-but-uncommitted data one file may hold (§8).
+  ///
+  /// §8: "最多 16 MiB 待持久化有效数据，缓冲有界". The bound is on data that has been
+  /// written and durably synced but whose chunk rows are not yet committed, so it also
+  /// bounds how much verified work a crash can throw away: everything above stays
+  /// `missing` and is re-sent rather than trusted.
+  static const int maxPendingCheckpointBytes = 16777216;
+
+  /// How long a checkpoint may be deferred (§8): "每 16 MiB 或 1 秒 checkpoint".
+  ///
+  /// Reaching [maxPendingCheckpointBytes] checkpoints immediately; this is the limit for
+  /// a window that is filling slowly.
+  static const int checkpointIntervalMillis = 1000;
+
   /// Maximum files in one transfer (§5).
   static const int maxFilesPerTransfer = 10000;
 
