@@ -26,6 +26,15 @@ class NearSendDatabase {
   /// The schema version the database is at after opening.
   final int schemaVersion;
 
+  /// How many `transaction` calls are currently open on this connection.
+  ///
+  /// Zero means the next one is outermost and uses `BEGIN IMMEDIATE`; anything higher means it
+  /// is nested and uses a savepoint. Single-threaded, like the connection itself.
+  int _transactionDepth = 0;
+
+  /// Whether a transaction is currently open.
+  bool get inTransaction => _transactionDepth > 0;
+
   /// The path used for an in-memory database, which is what tests use.
   static const String inMemoryPath = ':memory:';
 
@@ -93,14 +102,37 @@ class NearSendDatabase {
   /// reporting a protocol error, and relabelling it as `NS-STORAGE-*` would tell the
   /// caller the disk failed when the protocol did. Only genuinely unexpected errors are
   /// wrapped, and the original is kept as `cause`.
+  ///
+  /// ## Nesting
+  ///
+  /// A `transaction` inside another `transaction` uses a SQLite **savepoint** rather than a
+  /// second `BEGIN`, which the engine refuses. That matters because the natural way to write
+  /// an idempotent endpoint is exactly this shape: `executeAtomically` opens the transaction
+  /// and the effect calls ordinary repository methods, each of which opens its own. Without
+  /// savepoints every such effect fails with an opaque "transaction rolled back", and the
+  /// only alternatives - a parallel set of transaction-free repository methods, or a rule
+  /// that every effect must avoid them - push the same trap onto every future caller.
+  ///
+  /// The nesting level decides the scope of the undo: an inner failure rolls back to its own
+  /// savepoint and rethrows, so the outer transaction still chooses whether to commit or
+  /// abandon the work around it. An outer failure rolls back everything, as before.
   T transaction<T>(T Function() body) {
-    db.execute('BEGIN IMMEDIATE;');
+    final bool nested = _transactionDepth > 0;
+    final String savepoint = 'ns_sp_$_transactionDepth';
+    db.execute(nested ? 'SAVEPOINT $savepoint;' : 'BEGIN IMMEDIATE;');
+    _transactionDepth++;
     try {
       final T result = body();
-      db.execute('COMMIT;');
+      _transactionDepth--;
+      db.execute(nested ? 'RELEASE $savepoint;' : 'COMMIT;');
       return result;
     } on Object catch (error) {
-      _rollbackQuietly();
+      _transactionDepth--;
+      if (nested) {
+        _rollbackToQuietly(savepoint);
+      } else {
+        _rollbackQuietly();
+      }
       if (error is StorageException || error is ProtocolViolation) {
         rethrow;
       }
@@ -109,7 +141,14 @@ class NearSendDatabase {
   }
 
   /// Runs [body] inside a deferred (read) transaction.
+  ///
+  /// Inside an already-open transaction this runs [body] directly: the reads are already in
+  /// one, and a second `BEGIN` would be refused. A read does not need its own savepoint,
+  /// because nothing here writes.
   T readTransaction<T>(T Function() body) {
+    if (_transactionDepth > 0) {
+      return body();
+    }
     db.execute('BEGIN;');
     try {
       final T result = body();
@@ -158,6 +197,24 @@ class NearSendDatabase {
       db.execute('ROLLBACK;');
     } on SqliteException {
       // The transaction was already aborted by SQLite; nothing left to undo.
+    }
+  }
+
+  /// Undoes one savepoint level and pops it, leaving the outer transaction open.
+  ///
+  /// Both statements are needed: `ROLLBACK TO` undoes the work but keeps the savepoint on the
+  /// stack, and the engine refuses a new savepoint with a name already on it - so a retry at
+  /// the same nesting level would fail without the `RELEASE`.
+  void _rollbackToQuietly(String savepoint) {
+    try {
+      db.execute('ROLLBACK TO $savepoint;');
+    } on SqliteException {
+      // Already aborted; the RELEASE below still has to run to pop the level.
+    }
+    try {
+      db.execute('RELEASE $savepoint;');
+    } on SqliteException {
+      // Nothing left to pop.
     }
   }
 }
