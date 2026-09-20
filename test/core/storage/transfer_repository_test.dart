@@ -8,6 +8,7 @@ import 'package:nearsend/core/protocol/chunk_manifest.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
+import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
@@ -111,14 +112,27 @@ void main() {
     }
   }
 
+  /// Staged bytes for the files this test commits, so a real receipt can be produced.
+  final Map<String, Uint8List> staged = <String, Uint8List>{};
+
   /// Registers a file and durably commits every chunk of it.
   ///
   /// Export is only reachable for a file whose bytes are all present, so a test that
   /// wants to exercise the export path has to actually get there rather than writing the
-  /// state directly.
+  /// state directly. It also has to pass verification, which is why the same bytes are
+  /// kept for the reader below: a receipt is produced by running verification, never by
+  /// constructing one.
   Future<void> registerAndCommit(String contents, {String id = fileId}) async {
     registerFile(contents, id: id);
     final Uint8List bytes = Uint8List.fromList(contents.codeUnits);
+    for (int offset = 0; offset < bytes.length; offset += chunkSize) {
+      final int end = offset + chunkSize > bytes.length
+          ? bytes.length
+          : offset + chunkSize;
+      staged['$id#${offset ~/ chunkSize}'] = Uint8List.fromList(
+        bytes.sublist(offset, end),
+      );
+    }
     final int epoch = chunks.revokeAndAdvanceLease(taskId);
     for (int offset = 0; offset < bytes.length; offset += chunkSize) {
       final int end = offset + chunkSize > bytes.length
@@ -134,6 +148,13 @@ void main() {
       );
     }
   }
+
+  /// Runs verification over [id] and returns the receipt the export path requires.
+  Future<FileVerificationResult> verify(String id) => FileVerifier(
+    database,
+    reader: _StagedMapReader(staged),
+    chunks: chunks,
+  ).verifyFile(fileId: id);
 
   group('task state', () {
     test('a defined transition is stored', () {
@@ -235,6 +256,7 @@ void main() {
       final int epoch = chunks.revokeAndAdvanceLease(taskId);
 
       // Commit only the first chunk.
+      staged['$fileId#0'] = Uint8List.fromList('abcd'.codeUnits);
       await chunks.commitChunkAfterSync(
         taskId: taskId,
         fileId: fileId,
@@ -244,10 +266,18 @@ void main() {
         sink: _DirectSink(),
       );
 
+      final FileVerificationResult receipt = await verify(fileId);
+      expect(
+        receipt.isExportable,
+        isFalse,
+        reason: 'only one of the two chunks arrived',
+      );
+
       expect(
         () => transfers.recordSavedExport(
           fileId: fileId,
           targetUri: 'content://a',
+          verification: receipt,
         ),
         throwsA(
           isA<StorageException>().having(
@@ -264,12 +294,94 @@ void main() {
       expect(transfers.fileState(fileId), FileState.exporting);
     });
 
+    test('an export is refused when verification did not pass', () async {
+      await registerAndCommit('abcdefgh');
+      driveFileTo(fileId, FileState.exporting);
+      // Every chunk is committed, so the old committed-count check alone would have
+      // recorded this export. The whole-file digest is what disagrees.
+      database.db.execute(
+        'UPDATE files SET file_sha256 = ? WHERE file_id = ?;',
+        <Object?>['0' * 64, fileId],
+      );
+
+      final FileVerificationResult receipt = await verify(fileId);
+      expect(receipt.isComplete, isTrue);
+      expect(receipt.isExportable, isFalse);
+
+      expect(
+        () => transfers.recordSavedExport(
+          fileId: fileId,
+          targetUri: 'content://a',
+          verification: receipt,
+        ),
+        throwsA(isA<StorageException>()),
+        reason:
+            'this is the case the committed-count check could not see: all the bytes are '
+            'present and they are the wrong bytes',
+      );
+      expect(transfers.existingExport(fileId), isNull);
+    });
+
+    test('a receipt is only accepted for the file it was taken over', () async {
+      const String otherId = '00000000-0000-4000-8000-0000000000f2';
+      await registerAndCommit('abcd');
+      await registerAndCommit('abcdefgh', id: otherId);
+      driveFileTo(fileId, FileState.exporting);
+      driveFileTo(otherId, FileState.exporting);
+
+      final FileVerificationResult receiptForFirst = await verify(fileId);
+
+      expect(
+        () => transfers.recordSavedExport(
+          fileId: otherId,
+          targetUri: 'content://b',
+          verification: receiptForFirst,
+        ),
+        throwsA(
+          isA<StorageException>().having(
+            (StorageException e) => e.detail,
+            'detail',
+            contains('is for'),
+          ),
+        ),
+        reason:
+            'reusing another file\'s receipt proves nothing about this export',
+      );
+      expect(transfers.existingExport(otherId), isNull);
+    });
+
+    test(
+      'a receipt stops applying when the file changes underneath it',
+      () async {
+        await registerAndCommit('abcd');
+        driveFileTo(fileId, FileState.exporting);
+        final FileVerificationResult receipt = await verify(fileId);
+
+        // The file is replaced by a different one after verification.
+        database.db.execute(
+          'UPDATE files SET size_bytes = 8 WHERE file_id = ?;',
+          <Object?>[fileId],
+        );
+
+        expect(
+          () => transfers.recordSavedExport(
+            fileId: fileId,
+            targetUri: 'content://a',
+            verification: receipt,
+          ),
+          throwsA(isA<StorageException>()),
+          reason: 'a digest taken over four bytes says nothing about a file that is now eight',
+        );
+      },
+    );
+
     test('a failed export does not overwrite a saved record', () async {
       await registerAndCommit('abcd');
       driveFileTo(fileId, FileState.exporting);
       final ExportRecord saved = transfers.recordSavedExport(
         fileId: fileId,
         targetUri: 'content://a',
+        verification: await verify(fileId),
       );
       expect(saved.isSaved, isTrue);
       expect(transfers.fileState(fileId), FileState.completed);
@@ -291,14 +403,17 @@ void main() {
     test('recording the same target twice is idempotent', () async {
       await registerAndCommit('abcd');
       driveFileTo(fileId, FileState.exporting);
+      final FileVerificationResult receipt = await verify(fileId);
 
       final ExportRecord first = transfers.recordSavedExport(
         fileId: fileId,
         targetUri: 'content://a',
+        verification: receipt,
       );
       final ExportRecord second = transfers.recordSavedExport(
         fileId: fileId,
         targetUri: 'content://a',
+        verification: receipt,
       );
 
       expect(second.targetUri, first.targetUri);
@@ -316,12 +431,18 @@ void main() {
     test('a second copy at a different target is refused', () async {
       await registerAndCommit('abcd');
       driveFileTo(fileId, FileState.exporting);
-      transfers.recordSavedExport(fileId: fileId, targetUri: 'content://a');
+      final FileVerificationResult receipt = await verify(fileId);
+      transfers.recordSavedExport(
+        fileId: fileId,
+        targetUri: 'content://a',
+        verification: receipt,
+      );
 
       expect(
         () => transfers.recordSavedExport(
           fileId: fileId,
           targetUri: 'content://b',
+          verification: receipt,
         ),
         throwsA(
           isA<StorageException>().having(
@@ -357,12 +478,28 @@ void main() {
         final ExportRecord saved = transfers.recordSavedExport(
           fileId: fileId,
           targetUri: 'content://a',
+          verification: await verify(fileId),
         );
         expect(saved.isSaved, isTrue);
         expect(transfers.fileState(fileId), FileState.completed);
       },
     );
   });
+}
+
+/// Serves the bytes the test staged, so verification runs for real.
+class _StagedMapReader implements StagedChunkReader {
+  _StagedMapReader(this.staged);
+
+  final Map<String, Uint8List> staged;
+
+  @override
+  Stream<Uint8List> read({required String fileId, required int index}) async* {
+    final Uint8List? bytes = staged['$fileId#$index'];
+    if (bytes != null) {
+      yield bytes;
+    }
+  }
 }
 
 /// Writes nothing but reports the correct digest, which is enough here because these
