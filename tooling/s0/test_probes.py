@@ -22,7 +22,12 @@ ROOT = Path(__file__).resolve().parent
 
 class ProtocolTests(unittest.TestCase):
     def setUp(self):
-        self.vectors = json.loads((ROOT.parents[1] / "docs/protocol/vectors-v1.json").read_text())
+        # The vector file is UTF-8 and carries non-ASCII paths. Relying on the
+        # process locale here decodes it with cp936 on Windows and silently
+        # changes the canonical bytes, so the encoding must be explicit.
+        self.vectors = json.loads(
+            (ROOT.parents[1] / "docs/protocol/vectors-v1.json").read_text(encoding="utf-8")
+        )
 
     def test_fixed_vectors(self):
         for v in self.vectors:
@@ -194,7 +199,9 @@ class TLSTests(unittest.TestCase):
         subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                         "-subj", "/CN=localhost", "-keyout", str(d/"key.pem"), "-out", str(d/"cert.pem")],
                        check=True, capture_output=True)
-        cls.pin = hashlib.sha256(ssl.PEM_cert_to_DER_cert((d/"cert.pem").read_text())).hexdigest()
+        cls.pin = hashlib.sha256(
+            ssl.PEM_cert_to_DER_cert((d / "cert.pem").read_text(encoding="utf-8"))
+        ).hexdigest()
         class Handler(http.server.BaseHTTPRequestHandler):
             def handle(self):
                 try:
