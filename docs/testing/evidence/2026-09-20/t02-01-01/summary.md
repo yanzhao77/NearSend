@@ -87,7 +87,36 @@
 [ADR-0002](../../../../decisions/ADR-0002-crypto依赖与SHA256.md)。自制 SHA-256 被明确否决
 （`AGENTS.md` §5 禁止自制加密算法）；平台原生实现因三端一致性与流式增量成本被否决。
 
-## 6. 已知缺口与限制
+## 6. GitHub Actions 真实运行结果
+
+| 项 | 第一次 | 第二次 |
+| --- | --- | --- |
+| run | [35523704674](https://github.com/yanzhao77/NearSend/actions/runs/35523704674) | [35524537530](https://github.com/yanzhao77/NearSend/actions/runs/35524537530) |
+| 结论 | **failure** | **success** |
+| 通过 | Format/analyze/test、Android 构建、Windows 构建 | 四个作业全部通过 |
+| 失败 | Repository checks → `Markdown relative links` | — |
+| 记录 | `ci-run-35523704674-FAILED.json`（保留未覆盖） | `ci-run-35524537530-SUCCESS.json` |
+
+### 这次失败暴露的问题与修复
+
+失败原因是一个**链接层级写错**：`t02-01-01/summary.md` 指向 ADR-0002 时只上溯了三级目录，
+而正确层级是四级。
+
+更值得注意的是为什么本地没有发现：本地确实跑过链接检查并报告「all relative links resolve」，
+但检查范围是**已跟踪文件**，而当时这些新文档还没有 `git add`。
+检查器其实打印了未跟踪文件的警告，但它位于结论行之上 —— 用 `Select-Object -Last 2` 看输出时，
+警告被当成普通行略过了。
+
+**这是同一类问题第二次把坏链接送进 CI**（T01-02 首次运行是第一次）。因此这次不只是修链接，
+而是改变了检查行为：
+
+- `check_links.py` 增加 `--strict`：存在未跟踪 Markdown 时**直接失败**而不是只警告；
+- `check.ps1`（本地「一次跑完全部门禁」的入口）使用 `--strict`；
+- 结论行本身带上 `(tracked files only - see the warning above)`，使截断日志也无法掩盖它。
+
+把文件暂存是一行操作，而不覆盖工作区的「通过」是误导性的。
+
+## 7. 已知缺口与限制
 
 1. **NFC 未强制。** 协议 §5.1 要求接收端拒绝非 NFC 路径；检测需要 Unicode 规范化数据，
    Dart SDK 不提供，选择实现属于依赖决策。本任务**未实现**该拒绝，

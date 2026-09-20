@@ -1,0 +1,218 @@
+﻿{
+    "note":  "First T02-01 run: repository checks failed on a wrong-depth relative link in the evidence summary. Kept, not overwritten.",
+    "runId":  35523704674,
+    "url":  "https://github.com/yanzhao77/NearSend/actions/runs/35523704674",
+    "event":  "pull_request",
+    "headSha":  "e9e235f8d45973e69fec00b3315781a72003a2e7",
+    "headBranch":  "feat/t02-01-canonical-manifest",
+    "status":  "completed",
+    "conclusion":  "failure",
+    "createdAt":  "2026-09-20T16:45:24Z",
+    "updatedAt":  "2026-09-20T16:49:52Z",
+    "jobs":  [
+                 {
+                     "name":  "Repository checks (vectors, links, secrets, lock file)",
+                     "conclusion":  "failure",
+                     "runner":  "GitHub Actions 1000002061",
+                     "startedAt":  "2026-09-20T16:45:27Z",
+                     "completedAt":  "2026-09-20T16:45:32Z",
+                     "steps":  [
+                                   {
+                                       "name":  "Set up job",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Set up Python",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Dependency lock file is tracked and non-empty",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Protocol fixed vectors",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Markdown relative links",
+                                       "conclusion":  "failure"
+                                   },
+                                   {
+                                       "name":  "Sensitive information",
+                                       "conclusion":  "skipped"
+                                   },
+                                   {
+                                       "name":  "Post Set up Python",
+                                       "conclusion":  "skipped"
+                                   },
+                                   {
+                                       "name":  "Post Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Complete job",
+                                       "conclusion":  "success"
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Format, analyze and test",
+                     "conclusion":  "success",
+                     "runner":  "GitHub Actions 1000002059",
+                     "startedAt":  "2026-09-20T16:45:27Z",
+                     "completedAt":  "2026-09-20T16:46:10Z",
+                     "steps":  [
+                                   {
+                                       "name":  "Set up job",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Cache Flutter SDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Install pinned Flutter",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Resolve dependencies from the committed lock file",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Verify formatting",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Static analysis",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Unit and widget tests",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Cache Flutter SDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Complete job",
+                                       "conclusion":  "success"
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Build Windows application",
+                     "conclusion":  "success",
+                     "runner":  "GitHub Actions 1000002062",
+                     "startedAt":  "2026-09-20T16:45:27Z",
+                     "completedAt":  "2026-09-20T16:48:06Z",
+                     "steps":  [
+                                   {
+                                       "name":  "Set up job",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Cache Flutter SDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Install pinned Flutter",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Build Windows release",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Upload artifact digests",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Cache Flutter SDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Complete job",
+                                       "conclusion":  "success"
+                                   }
+                               ]
+                 },
+                 {
+                     "name":  "Build Android APKs",
+                     "conclusion":  "success",
+                     "runner":  "GitHub Actions 1000002060",
+                     "startedAt":  "2026-09-20T16:45:28Z",
+                     "completedAt":  "2026-09-20T16:49:50Z",
+                     "steps":  [
+                                   {
+                                       "name":  "Set up job",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Set up JDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Cache Flutter SDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Install pinned Flutter",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Build debug APK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Build release APK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Upload artifact digests",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Cache Flutter SDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Set up JDK",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Post Check out",
+                                       "conclusion":  "success"
+                                   },
+                                   {
+                                       "name":  "Complete job",
+                                       "conclusion":  "success"
+                                   }
+                               ]
+                 }
+             ]
+}
