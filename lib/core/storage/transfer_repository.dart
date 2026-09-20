@@ -23,6 +23,34 @@ import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/storage_schema.dart';
 
+/// What a staging transfer was created with (§7's `POST /transfers`).
+///
+/// Held so a second creation proposing the same `transferId` can be told apart from a
+/// genuine retry: the first is a client reusing an identifier for a different transfer, the
+/// second must succeed without changing anything.
+class TransferDeclaration {
+  const TransferDeclaration({
+    required this.transferId,
+    required this.direction,
+    required this.manifestDigest,
+    required this.protocolMajor,
+    required this.protocolMinor,
+  });
+
+  final String transferId;
+
+  /// The wire value of the task's direction, as stored.
+  final String direction;
+
+  final String? manifestDigest;
+  final int protocolMajor;
+  final int protocolMinor;
+
+  @override
+  String toString() =>
+      'TransferDeclaration($transferId, $direction, digest=${manifestDigest ?? 'none'})';
+}
+
 /// A recorded export of one file.
 class ExportRecord {
   const ExportRecord({
@@ -88,6 +116,30 @@ class TransferRepository {
       );
     }
     return _parseTransferState(rows.first['state'] as String, taskId);
+  }
+
+  /// What a transfer was created with, or null when no such task exists.
+  ///
+  /// Returns null rather than throwing, because "absent" is the answer the creation path
+  /// needs: §7 lets a client propose the `transferId`, so the first thing a second creation
+  /// has to know is whether that identifier is already taken.
+  TransferDeclaration? readDeclaration(String transferId) {
+    final ResultSet rows = database.db.select(
+      'SELECT direction, manifest_digest, protocol_major, protocol_minor FROM tasks '
+      'WHERE task_id = ?;',
+      <Object?>[transferId],
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    final Row row = rows.first;
+    return TransferDeclaration(
+      transferId: transferId,
+      direction: row['direction'] as String,
+      manifestDigest: row['manifest_digest'] as String?,
+      protocolMajor: row['protocol_major'] as int,
+      protocolMinor: row['protocol_minor'] as int,
+    );
   }
 
   /// Moves a task to [to], refusing an undefined transition.
