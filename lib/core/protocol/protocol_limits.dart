@@ -51,6 +51,13 @@ abstract final class ProtocolLimits {
   /// stops a peer from using the field as a channel.
   static const int wireMessageMaxBytes = 256;
 
+  /// How long a staging proposal may stay incomplete (§6).
+  ///
+  /// §6: "首次收到内容后 30 分钟 staging 未完成则清理并撤销该提议；不影响已经冻结的任务".
+  /// The window runs from the first content, not from the offer, so a proposal nobody
+  /// started uploading does not expire underneath a client that is still deciding.
+  static const int stagingTimeoutSeconds = 1800;
+
   /// Highest protocol minor version this implementation understands (§3).
   static const int protocolMajor = 1;
   static const int protocolMinor = 0;
