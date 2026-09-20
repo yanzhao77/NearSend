@@ -1,5 +1,7 @@
 # NearSend UI/UX 与视觉规范
 
+> 视觉交付入口：[UI 设计交付](README.md) · [样式指南](STYLE_GUIDE.md) · [移动端核心流程](mockups/mobile-core-flow.svg) · [Windows 传输页](mockups/windows-transfer.svg)
+
 状态：MVP 实施基线。视觉值可在品牌设计后微调，但关键状态、信息层级和安全文案不得删除。
 
 ## 1. 体验原则

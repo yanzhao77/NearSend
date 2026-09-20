@@ -34,7 +34,7 @@
 | D07 | Vibe Coding 开发流程 | 已完成：治理 | [流程](DEVELOPMENT_WORKFLOW.md) | 后续任务须形成需求—PR—证据—台账闭环 |
 | D08 | 系统架构 | 已完成：实施草案 | [架构](architecture/SYSTEM_ARCHITECTURE.md) | 平台依赖与部分接口待 S0 冻结 |
 | D09 | 应用与端侧服务设计 | 已完成：实施草案 | [端侧设计](architecture/APP_AND_SERVICE_DESIGN.md) | NearSend 无中心云后台；具体库待验证 |
-| D10 | UI/UX 与视觉规范 | 已完成：设计 | [UI规范](ui/UI_UX_SPEC.md) | 需在 Flutter 组件和真机可访问性中验证 |
+| D10 | UI/UX 与视觉基线 | 已完成：视觉设计 | [设计入口](ui/README.md)、[样式指南](ui/STYLE_GUIDE.md) | 已提供组件、移动端和 Windows SVG 视觉稿；待 Flutter 实现与可访问性验证 |
 | D11 | 质量与验收策略 | 已完成：设计 | [质量策略](testing/QUALITY_AND_ACCEPTANCE.md) | 设备阈值待目标端基线形成后冻结 |
 | D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡应进入 Issue 或 docs/tasks，并保持统一 |
 | R01 | Flutter客户端与原生适配 | 待开始 | 尚无lib/android/windows/ios产品工程 | 优先Android+Windows闭环 |
@@ -102,6 +102,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 
 ## 6. 本次仓库交付与验证
 
+- 新增 UI Baseline 1.0：精确 Design Token、组件规格、移动端四屏核心流程和 Windows 双栏传输页；SVG 已实际渲染检查。该状态只表示视觉设计完成，不表示 Flutter 页面已实现。
 - 新增文档中心、Vibe Coding 流程、系统架构、应用与端侧服务、UI/UX、质量策略和 Agent 任务手册，并在 README 建立入口。
 - 文档明确 NearSend 无中心云后台；“后台”是每台设备内嵌的本地 HTTPS 服务、传输引擎、SQLite 与平台适配。
 - 建立需求/规格 → 任务 ID → 分支/PR → 测试证据 → 台账状态的追踪链，并拆出首批可领取子任务。
@@ -123,5 +124,6 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-20 | 完成Linux参考实验及协议draft1 | 原始日志、JSON结果和报告 |
 | 2026-09-20 | 导入仓库、完成24项复测、建立本台账 | 本次Git提交/PR、repository-import-tests.log |
 | 2026-09-20 | 建立 Vibe Coding 研发流程、实施架构、端侧/UI/质量规格和 Agent 任务手册 | D06–D12、本次文档 PR |
+| 2026-09-20 | 完成 UI Baseline 1.0、组件样式和移动端/Windows视觉稿 | D10、UI设计PR |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
