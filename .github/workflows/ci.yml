@@ -1,0 +1,165 @@
+# NearSend continuous integration.
+#
+# Implements the CI gate described by docs/testing/QUALITY_AND_ACCEPTANCE.md §7 and
+# the mandatory checks in AGENTS.md §7:
+#
+#   format -> analyze -> unit/widget tests -> protocol vectors
+#          -> link and secret checks -> build Android/Windows artifacts
+#
+# Design decisions:
+#
+# * Every `uses:` is pinned to a full commit SHA with the readable version in a
+#   comment. A moved tag would otherwise silently change what runs with access to
+#   this repository. Only GitHub first-party actions are used; all are MIT licensed
+#   and actively maintained, which satisfies the dependency record required by
+#   docs/architecture/APP_AND_SERVICE_DESIGN.md §12.
+#
+# * Flutter is installed by tooling/ci/install_flutter.sh, which pins the version
+#   and verifies the archive SHA-256. That keeps the toolchain pinned in reviewable
+#   source instead of adding a third-party action to the supply chain.
+#
+# * No job uses `continue-on-error`. A gate that cannot fail is not a gate.
+#
+# * `permissions` is read-only: nothing in this workflow needs to write to the
+#   repository. Signing keys and store credentials belong to the release workflow
+#   (T10) in a protected environment, never here.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+
+jobs:
+  repository-checks:
+    name: Repository checks (vectors, links, secrets, lock file)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.3.0
+        with:
+          python-version: '3.12'
+
+      - name: Dependency lock file is tracked and non-empty
+        run: |
+          set -euo pipefail
+          git ls-files --error-unmatch pubspec.lock
+          test -s pubspec.lock
+          echo "pubspec.lock is tracked and non-empty"
+
+      - name: Protocol fixed vectors
+        working-directory: tooling/s0
+        run: python -m unittest -v test_probes
+
+      - name: Markdown relative links
+        run: python tooling/checks/check_links.py
+
+      - name: Sensitive information
+        run: python tooling/checks/check_secrets.py
+
+  flutter-checks:
+    name: Format, analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+
+      - name: Install pinned Flutter
+        run: bash tooling/ci/install_flutter.sh
+
+      - name: Resolve dependencies from the committed lock file
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Static analysis
+        run: flutter analyze
+
+      - name: Unit and widget tests
+        run: flutter test
+
+  build-android:
+    name: Build Android APKs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Set up JDK
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+
+      - name: Install pinned Flutter
+        run: bash tooling/ci/install_flutter.sh
+
+      - name: Build debug APK
+        run: pwsh -NoProfile -File tooling/scripts/build.ps1 -Target android -BuildChannel ci -EvidenceDir docs/testing/evidence/ci/${{ github.run_id }}
+
+      - name: Build release APK
+        run: pwsh -NoProfile -File tooling/scripts/build.ps1 -Target android -Release -BuildChannel ci -EvidenceDir docs/testing/evidence/ci/${{ github.run_id }}
+
+      - name: Upload artifact digests
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: android-digests-${{ github.run_id }}
+          path: docs/testing/evidence/ci/${{ github.run_id }}/artifacts-sha256.json
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows application
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+
+      - name: Install pinned Flutter
+        shell: bash
+        run: bash tooling/ci/install_flutter.sh
+
+      - name: Build Windows release
+        run: pwsh -NoProfile -File tooling/scripts/build.ps1 -Target windows -Release -BuildChannel ci -EvidenceDir docs/testing/evidence/ci/${{ github.run_id }}
+
+      - name: Upload artifact digests
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: windows-digests-${{ github.run_id }}
+          path: docs/testing/evidence/ci/${{ github.run_id }}/artifacts-sha256.json
+          if-no-files-found: error
+          retention-days: 14

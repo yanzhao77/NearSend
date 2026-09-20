@@ -110,11 +110,13 @@ try {
     }
 
     # Artifact discovery. PowerShell 5.1 does not support '**' globs, so each
-    # target names a search root plus a filter and recurses.
+    # target names a search root plus a filter and recurses. Search roots use
+    # forward slashes so the same script runs on Windows, Linux and macOS CI
+    # runners; .NET and PowerShell accept forward slashes on Windows too.
     $search = switch ($Target) {
-        'android' { @{ Root = 'build\app\outputs\flutter-apk'; Filter = '*.apk' } }
-        'windows' { @{ Root = 'build\windows'; Filter = '*.exe' } }
-        'ios' { @{ Root = 'build\ios'; Filter = '*.app' } }
+        'android' { @{ Root = 'build/app/outputs/flutter-apk'; Filter = '*.apk' } }
+        'windows' { @{ Root = 'build/windows'; Filter = '*.exe' } }
+        'ios' { @{ Root = 'build/ios'; Filter = '*.app' } }
     }
 
     $searchRoot = Join-Path $repoRoot $search.Root
@@ -149,13 +151,13 @@ try {
     $records = @()
     foreach ($artifact in $artifacts) {
         $hash = (Get-FileHash -Path $artifact.FullName -Algorithm SHA256).Hash
-        $relative = $artifact.FullName.Substring($repoRoot.Length).TrimStart('\')
+        $relative = $artifact.FullName.Substring($repoRoot.Length).TrimStart('\', '/')
         Write-Host $relative
         Write-Host "  bytes  : $($artifact.Length)"
         Write-Host "  sha256 : $hash"
 
         $records += [pscustomobject]@{
-            path         = $relative.Replace('\', '/')
+            path         = $relative.Replace('\', '/').Replace('//', '/')
             bytes        = $artifact.Length
             sha256       = $hash
             target       = $Target
