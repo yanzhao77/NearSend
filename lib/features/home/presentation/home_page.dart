@@ -33,7 +33,7 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NearSendPalette palette = NearSendPalette.of(
+    final NearSendColors palette = NearSendColors.of(
       Theme.of(context).brightness,
     );
 
@@ -85,7 +85,7 @@ class HomePage extends StatelessWidget {
 class _BaselineNotice extends StatelessWidget {
   const _BaselineNotice({required this.palette});
 
-  final NearSendPalette palette;
+  final NearSendColors palette;
 
   @override
   Widget build(BuildContext context) {

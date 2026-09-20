@@ -148,6 +148,13 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   在本机 `cp936` locale 下不可复现（实际 21 项运行、1 项失败）。已显式指定 UTF-8，并验证
   在 cp936 机器上重新生成向量得到字节相同的文件。原始失败日志保留未覆盖，见
   [S0 探针 Windows 复现](testing/evidence/2026-09-20/t01-01-01/s0-probe-baseline-on-windows.md)。
+- **并入 UI Baseline 1.0**：本任务期间 PR #3 合并了 `docs/ui/STYLE_GUIDE.md` 并使其成为视觉权威。
+  该指南推翻了原实现采用的两处数值（卡片圆角 12→**16**、按钮圆角 10→**12**），并新增
+  `canvas`/`border`/`textMuted`/`primaryHover`/`primarySoft` 与三个语义 soft 背景、七级精确排版比例。
+  `lib/app/theme/design_tokens.dart` 已按指南重写（`NearSendPalette` → `NearSendColors`），
+  Flutter 测试由 29 项增至 36 项，并新增 canvas/card 区分、卡片 1dp 边框与语义色对比度检查。
+  按 `AGENTS.md`「合并前处理基线变化并重新运行相关检查」，`origin/master` 已并入分支并解决
+  §7 冲突后完整重跑全部检查与两端构建。
 - 未执行/未完成：iOS 构建（本机无 macOS/Xcode，B06/T09 仍阻塞）；Windows 11 验证（本机为 Win10）；
   正式签名（T10）；深色模式、动态字体、屏幕阅读器与一万项列表性能（后续 UI 任务）；
   以及全部传输、配对、发现、存储与恢复能力（尚未实现）。

@@ -17,7 +17,7 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NearSendPalette palette = NearSendPalette.of(
+    final NearSendColors palette = NearSendColors.of(
       Theme.of(context).brightness,
     );
 
