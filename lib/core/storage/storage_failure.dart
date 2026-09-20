@@ -25,6 +25,10 @@ enum StorageFailureCode {
   backupFailed('NS-STORAGE-003', 'storage.backupFailed'),
 
   /// A durable-sync receipt did not match the chunk it claims to describe.
+  ///
+  /// The bytes that arrived disagree with the frozen manifest, which is exactly the
+  /// condition §8 answers with `CHUNK_HASH_MISMATCH` - including for a block that was
+  /// already committed, because §8 says a repeat "不可因『已有块』就无条件成功".
   syncReceiptMismatch('NS-STORAGE-004', 'storage.syncReceiptMismatch'),
 
   /// A chunk commit was refused because the write generation is not current.
@@ -63,8 +67,9 @@ enum StorageFailureCode {
   /// `staleLease` maps to `STALE_LEASE`; `commitFailed` to `DB_COMMIT_FAILED`, which §11
   /// says must not acknowledge the commit and must leave the state recoverable;
   /// `spaceInsufficient` to `SPACE_INSUFFICIENT` (507), whose prescribed remedy is the
-  /// user freeing space or choosing another location. The rest are local-only and have
-  /// no honest wire equivalent.
+  /// user freeing space or choosing another location; `syncReceiptMismatch` to
+  /// `CHUNK_HASH_MISMATCH`, which §8 names for bytes that disagree with the frozen
+  /// manifest. The rest are local-only and have no honest wire equivalent.
   ProtocolErrorCode? get protocolCode {
     switch (this) {
       case StorageFailureCode.staleLease:
@@ -75,10 +80,11 @@ enum StorageFailureCode {
         return ProtocolErrorCode.manifestMismatch;
       case StorageFailureCode.spaceInsufficient:
         return ProtocolErrorCode.spaceInsufficient;
+      case StorageFailureCode.syncReceiptMismatch:
+        return ProtocolErrorCode.chunkHashMismatch;
       case StorageFailureCode.schemaTooNew:
       case StorageFailureCode.migrationFailed:
       case StorageFailureCode.backupFailed:
-      case StorageFailureCode.syncReceiptMismatch:
         return null;
     }
   }
@@ -86,9 +92,9 @@ enum StorageFailureCode {
   /// Whether retrying the same operation could succeed.
   ///
   /// Only a failed commit is retryable: §11 keeps the state recoverable in that case.
-  /// A schema refusal will not improve by retrying, a receipt mismatch means the
-  /// caller's ordering was wrong so retrying would repeat it, and an exhausted volume
-  /// stays exhausted until something is deleted.
+  /// A schema refusal will not improve by retrying, a receipt mismatch means the bytes
+  /// disagree with the frozen manifest so resending the same ones repeats it, and an
+  /// exhausted volume stays exhausted until something is deleted.
   bool get retryable => this == StorageFailureCode.commitFailed;
 }
 

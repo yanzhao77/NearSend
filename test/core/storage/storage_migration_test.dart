@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/storage_migrations.dart';
@@ -600,6 +601,20 @@ void main() {
         507,
       );
       expect(StorageFailureCode.spaceInsufficient.retryable, isFalse);
+      expect(
+        StorageFailureCode.syncReceiptMismatch.protocolCode,
+        ProtocolErrorCode.chunkHashMismatch,
+        reason:
+            '§8 names CHUNK_HASH_MISMATCH for bytes that disagree with the frozen manifest, '
+            'including on a resend of an already committed block; leaving it unmapped made '
+            'toProtocolError fall back to DB_COMMIT_FAILED, which is retryable and would '
+            'invite the resend §11 forbids',
+      );
+      expect(
+        StorageFailureCode.syncReceiptMismatch.protocolCode?.httpStatus,
+        422,
+      );
+      expect(StorageFailureCode.syncReceiptMismatch.retryable, isFalse);
       expect(
         StorageFailureCode.schemaTooNew.protocolCode,
         isNull,
