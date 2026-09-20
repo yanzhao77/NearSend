@@ -38,6 +38,7 @@ import 'package:nearsend/core/network/control_message.dart';
 import 'package:nearsend/core/protocol/api_routes.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
+import 'package:nearsend/core/security/credential_fingerprint.dart';
 
 /// The credential §7 requires before a route runs.
 enum ControlCredential {
@@ -166,6 +167,27 @@ class RejectingAuthenticator implements ControlAuthenticator {
   @override
   ControlGrant? authenticate({required String token, required int nowMillis}) =>
       null;
+}
+
+/// The §9 scope component for [request]: its credential, fingerprinted rather than held.
+///
+/// Read from the request because the pipeline hands a handler a *grant*, not the secret - by
+/// design, since a grant must never carry one. It lives here rather than in each endpoint
+/// because §9's scope is one rule: two endpoints computing it differently would give one
+/// credential two scopes, and a retry would stop replaying.
+///
+/// Throws [StateError] when no bearer reached the handler. That is a programming error rather
+/// than a request error: the caller is an endpoint registered against a route the credential
+/// table says needs a bearer, so reaching here without one means the two disagree.
+String credentialFingerprintOf(ControlRequest request) {
+  final String? token = request.bearerToken();
+  if (token == null) {
+    throw StateError(
+      'a bearer route reached its handler with no credential; the §7 credential table and '
+      'the endpoint disagree',
+    );
+  }
+  return credentialFingerprint(token);
 }
 
 /// The direction a route's operation requires of the task, when §7 names one.
