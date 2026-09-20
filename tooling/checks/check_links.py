@@ -33,7 +33,24 @@ from urllib.parse import unquote, urlsplit
 # `[text](target)` and `[text](target "title")`, plus the image form `![alt](src)`.
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 
+# Fenced code blocks and inline code spans are removed before links are extracted.
+# Documentation legitimately *shows* link syntax as an example, and an example is
+# not a link: treating `[text](target "title")` inside backticks as a real target
+# produced a false failure the first time this check ran in CI. HTML comments are
+# removed for the same reason.
+FENCED_CODE_RE = re.compile(r"^[ \t]*(?:```|~~~).*?^[ \t]*(?:```|~~~)[ \t]*$", re.DOTALL | re.MULTILINE)
+INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
 EXTERNAL_SCHEMES = ("http:", "https:", "mailto:", "tel:", "data:")
+
+
+def strip_non_link_text(text: str) -> str:
+    """Remove regions where link syntax is illustrative rather than real."""
+    text = FENCED_CODE_RE.sub("", text)
+    text = HTML_COMMENT_RE.sub("", text)
+    text = INLINE_CODE_RE.sub("", text)
+    return text
 
 
 def tracked_markdown(root: Path) -> list[Path]:
@@ -55,10 +72,35 @@ def tracked_markdown(root: Path) -> list[Path]:
     return [root / n for n in names]
 
 
+def untracked_markdown(root: Path) -> list[str]:
+    """Markdown files present in the working tree but not tracked by Git."""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "ls-files",
+                "-z",
+                "--others",
+                "--exclude-standard",
+                "--",
+                "*.md",
+                "*.markdown",
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return []
+
+    return [n for n in result.stdout.decode("utf-8").split("\0") if n]
+
+
 def check_file(path: Path, root: Path) -> list[str]:
     """Return a list of problem descriptions for one Markdown file."""
     problems: list[str] = []
-    text = path.read_text(encoding="utf-8")
+    text = strip_non_link_text(path.read_text(encoding="utf-8"))
 
     for match in LINK_RE.finditer(text):
         raw = match.group(1)
@@ -112,9 +154,24 @@ def main() -> int:
         if args.verbose:
             status = "FAIL" if file_problems else "ok"
             print(f"  [{status}] {path.relative_to(root).as_posix()}")
-        total_links += len(LINK_RE.findall(path.read_text(encoding="utf-8")))
+        total_links += len(
+            LINK_RE.findall(strip_non_link_text(path.read_text(encoding="utf-8")))
+        )
 
     print(f"checked {len(files)} Markdown files, {total_links} links")
+
+    # Only tracked files are checked. That is the right scope for CI, but locally it
+    # means a new document is invisible until it is staged - which is exactly how a
+    # broken link reached CI the first time. Say so out loud instead of reporting a
+    # clean result that does not cover the working tree.
+    untracked = untracked_markdown(root)
+    if untracked:
+        print(
+            f"\nNOT CHECKED: {len(untracked)} untracked Markdown file(s). "
+            "Stage them to include them:\n"
+        )
+        for name in untracked:
+            print(f"  {name}")
 
     if problems:
         print(f"\nBROKEN LINKS ({len(problems)}):")
