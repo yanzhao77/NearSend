@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:nearsend/core/protocol/transfer_state.dart';
+
 /// What the transfer screen is allowed to show, and where each figure comes from.
 ///
 /// `docs/ui/UI_UX_SPEC.md` §5 requires the transfer screen to show the transferred bytes, the
@@ -33,7 +35,16 @@ enum TransferPhase {
   verifying('校验中'),
   exporting('保存中'),
   completed('已完成'),
-  failed('失败');
+  failed('失败'),
+
+  /// The link dropped, and §10 gives a resume as the way out rather than a restart.
+  interrupted('已中断'),
+
+  /// Something outside the protocol is in the way: permissions, space, a changed source.
+  ///
+  /// Its exit is a user action - §11 pairs SPACE_INSUFFICIENT with freeing space or changing the
+  /// location - so it must not read as a failure.
+  blocked('需要处理');
 
   const TransferPhase(this.label);
 
@@ -252,3 +263,41 @@ String formatBytes(int bytes) {
       ? '${value.round()} ${units[unit]}'
       : '${value.toStringAsFixed(1)} ${units[unit]}';
 }
+
+/// The phase the screen should show for a task's protocol state.
+///
+/// This is the join the UI was missing: `TransferProgress` had a phase and the engine had a
+/// `TransferState`, and nothing connected them, so a screen could only ever show what a caller
+/// guessed. The switch is exhaustive over [TransferState], so a state added to the protocol fails to
+/// compile here rather than rendering as the wrong word.
+///
+/// Three mappings are worth stating because they are not one-to-one:
+///
+/// * **`staging` and `preparing` are both 准备中.** §10 keeps them apart because one is sender-local
+///   and the other means pages are arriving, but the user is waiting either way and telling them
+///   which side is working is not actionable.
+/// * **`ready` shows as 传输中.** §10 makes it "accepted and authorised; a write generation
+///   exists", which is the first moment bytes may move - so it is the first moment a progress bar
+///   means anything, and calling it "preparing" would hide that the transfer has started.
+/// * **`interrupted` and `blocked` are their own words** rather than folded into 失败. §10 gives
+///   them different exits - a resume and a user action respectively - and §11 pairs `BLOCKED` with
+///   "free space or change location, then retry". Showing either as a failure would tell the user the
+///   transfer is over when the protocol says it is not.
+TransferPhase phaseForTransferState(TransferState state) => switch (state) {
+  TransferState.preparing => TransferPhase.preparing,
+  TransferState.staging => TransferPhase.preparing,
+  TransferState.waitingAccept => TransferPhase.waitingAccept,
+  TransferState.ready => TransferPhase.transferring,
+  TransferState.transferring => TransferPhase.transferring,
+  TransferState.pausing => TransferPhase.paused,
+  TransferState.paused => TransferPhase.paused,
+  TransferState.checkingResume => TransferPhase.checkingResume,
+  TransferState.interrupted => TransferPhase.interrupted,
+  TransferState.verifying => TransferPhase.verifying,
+  TransferState.exporting => TransferPhase.exporting,
+  TransferState.completed => TransferPhase.completed,
+  TransferState.partiallyCompleted => TransferPhase.failed,
+  TransferState.blocked => TransferPhase.blocked,
+  TransferState.failed => TransferPhase.failed,
+  TransferState.cancelled => TransferPhase.failed,
+};

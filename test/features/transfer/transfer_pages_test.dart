@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// The transfer screen's figures.
@@ -18,6 +19,8 @@ void main() {
   const String fingerprint =
       'abababababababababababababababababababababababababababababababab';
   const String token = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+  group('protocol state to phase', _phaseMappingTests);
 
   group('progress figures', () {
     test('a fraction needs a known total', () {
@@ -280,5 +283,83 @@ void main() {
       await tester.pump();
       expect(find.text('连接'), findsOneWidget);
     });
+  });
+}
+
+/// The join between the protocol's task states and the words the screen shows.
+///
+/// `TransferProgress` had a phase and the engine had a `TransferState`, and nothing connected them,
+/// so a screen could only show what its caller guessed. These cases pin the mapping, and the most
+/// important ones are the two the protocol explicitly says are **not** failures: §11 pairs `BLOCKED`
+/// with "free space or change the location, then retry", and `INTERRUPTED` has a resume as its exit -
+/// rendering either as 失败 would tell the user the transfer is over when it is not.
+void _phaseMappingTests() {
+  test('every task state maps to a phase, and the two recoverable ones are not failures', () {
+    expect(phaseForTransferState(TransferState.blocked), TransferPhase.blocked);
+    expect(
+      phaseForTransferState(TransferState.interrupted),
+      TransferPhase.interrupted,
+    );
+    expect(
+      TransferPhase.blocked.label,
+      isNot(TransferPhase.failed.label),
+      reason: 'a blocked transfer is waiting on the user, not over',
+    );
+    expect(TransferPhase.interrupted.canInterrupt, isFalse);
+    expect(
+      TransferPhase.blocked.canInterrupt,
+      isFalse,
+      reason: '§10 gives blocked a user action as its exit, not a pause',
+    );
+  });
+
+  test('the states a user cannot tell apart collapse to one word', () {
+    expect(
+      phaseForTransferState(TransferState.preparing),
+      phaseForTransferState(TransferState.staging),
+      reason:
+          'one is sender-local and the other means pages are arriving, but the user is waiting '
+          'either way and which side is working is not actionable',
+    );
+    expect(phaseForTransferState(TransferState.pausing), TransferPhase.paused);
+    expect(
+      phaseForTransferState(TransferState.ready),
+      TransferPhase.transferring,
+      reason:
+          '§10 makes READY the first moment a write generation exists, so it is the first moment '
+          'a progress bar means anything',
+    );
+  });
+
+  test(
+    'the two states with real work left are distinct from the transfer itself',
+    () {
+      // §5 wants 校验中 and 保存中 to be told apart from 传输中: they are disk waits, and a user
+      // watching a stalled bar deserves to know which one is slow.
+      expect(
+        phaseForTransferState(TransferState.verifying),
+        TransferPhase.verifying,
+      );
+      expect(
+        phaseForTransferState(TransferState.exporting),
+        TransferPhase.exporting,
+      );
+      expect(TransferPhase.verifying.isActive, isTrue);
+      expect(TransferPhase.exporting.isActive, isTrue);
+    },
+  );
+
+  test('a partial completion is reported as a failure rather than as done', () {
+    expect(
+      phaseForTransferState(TransferState.partiallyCompleted),
+      TransferPhase.failed,
+      reason:
+          'some files are not on the receiver disk; calling that 已完成 is the false completion '
+          'AGENTS.md §2 rule 11 forbids',
+    );
+    expect(
+      phaseForTransferState(TransferState.cancelled),
+      TransferPhase.failed,
+    );
   });
 }
