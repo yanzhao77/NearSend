@@ -23,6 +23,10 @@ import java.nio.channels.FileChannel
  * and both directions of a transfer need the user's own files: a sender reads what they picked, and
  * a receiver writes where they chose.
  *
+ * The channel also answers one non-SAF question: `applicationDirectory`, the application's own
+ * `filesDir`. The node's database and staging belong there rather than in a shared or cache
+ * location, and Android is the only platform in scope where `dart:io` cannot work that out.
+ *
  * ## The rule this must not break
  *
  * `AGENTS.md` §2 rule 4 forbids reading a whole file into memory, and the obvious SAF shortcut does
@@ -65,6 +69,9 @@ class MainActivity : FlutterActivity() {
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
+                "applicationDirectory" -> result.success(
+                    applicationContext.filesDir.absolutePath,
+                )
                 "pickFiles" -> pickFiles(result)
                 "probe" -> result.success(probe(uriOf(call)))
                 "readChunk" -> result.success(

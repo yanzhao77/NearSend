@@ -254,7 +254,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: buildNearSendTheme(Brightness.light),
-          home: const ConnectionPage(payload: null),
+          home: ConnectionPage(payload: null, onConnect: (_) {}),
         ),
       );
 
@@ -277,6 +277,113 @@ void main() {
       await tester.pump();
       expect(find.text('连接'), findsOneWidget);
     });
+
+    testWidgets('a node that is starting is not reported as having none', (
+      tester,
+    ) async {
+      // "still starting" and "did not start" are different answers, and the second sends a user to
+      // look for a fault in the other device.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildNearSendTheme(Brightness.light),
+          home: const ConnectionPage(payload: null, starting: true),
+        ),
+      );
+
+      expect(find.text(ConnectionPage.startingNote), findsOneWidget);
+      expect(find.text(ConnectionPage.emptySessionNote), findsNothing);
+    });
+
+    testWidgets(
+      'a node that failed says why instead of showing an empty code',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: const ConnectionPage(
+              payload: null,
+              unavailableReason: '本机没有可用的局域网地址，无法出示连接信息。请先连接 Wi-Fi。',
+            ),
+          ),
+        );
+
+        expect(find.text('本机没有可用的局域网地址，无法出示连接信息。请先连接 Wi-Fi。'), findsOneWidget);
+        expect(find.text(ConnectionPage.emptySessionNote), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'the connect action is absent, with a reason, when there is none',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: const ConnectionPage(payload: null),
+          ),
+        );
+        await tester.enterText(
+          find.byType(TextField),
+          '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
+          '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
+          '"sessionId":"11111111-2222-4333-8444-555555555555",'
+          '"candidates":[{"host":"10.0.0.9","port":18443}],'
+          '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
+        );
+        await tester.pump();
+
+        expect(
+          find.text('连接'),
+          findsNothing,
+          reason:
+              'a button that cannot act is a placeholder; the page states the gap instead of '
+              'offering a control that silently does nothing',
+        );
+        expect(find.text(ConnectionPage.noConnectorNote), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a connection attempt is shown as it proceeds and when it ends',
+      (tester) async {
+        Future<void> pump(ConnectionAttempt attempt) => tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: ConnectionPage(
+              payload: null,
+              onConnect: (_) {},
+              connection: attempt,
+            ),
+          ),
+        );
+
+        await pump(
+          const ConnectionAttempt(phase: ConnectionAttemptPhase.connecting),
+        );
+        expect(find.text(ConnectionPage.connectingNote), findsOneWidget);
+
+        await pump(
+          const ConnectionAttempt(phase: ConnectionAttemptPhase.connected),
+        );
+        expect(find.text(ConnectionPage.connectedNote), findsOneWidget);
+
+        await pump(
+          ConnectionAttempt(
+            phase: ConnectionAttemptPhase.failed,
+            reason: '无法连接到对方设备。',
+            peerFingerprint: 'cd' * 32,
+            pinMismatched: true,
+          ),
+        );
+        expect(find.textContaining('无法连接到对方设备。'), findsOneWidget);
+        expect(
+          find.textContaining('cd' * 32),
+          findsOneWidget,
+          reason:
+              'a mismatch is the one failure where the user needs the value they are disagreeing '
+              'about, and it is not a secret: the peer publishes it in its own payload',
+        );
+      },
+    );
   });
 }
 

@@ -40,17 +40,81 @@ class PairingImportState {
   bool get isAccepted => payload != null;
 }
 
+/// Where the attempt to reach another device is.
+enum ConnectionAttemptPhase { idle, connecting, connected, failed }
+
+/// The connection attempt, as this screen renders it.
+///
+/// A plain value rather than the session that produced it: a screen that held a live session would
+/// need a real socket to render, and the interesting states here - a mismatched fingerprint, a peer
+/// that does not answer - are exactly the ones a widget test must be able to state.
+class ConnectionAttempt {
+  const ConnectionAttempt({
+    this.phase = ConnectionAttemptPhase.idle,
+    this.reason,
+    this.peerFingerprint,
+    this.pinMismatched = false,
+  });
+
+  final ConnectionAttemptPhase phase;
+
+  /// Why it failed, as a sentence a user can act on.
+  final String? reason;
+
+  /// The fingerprint the peer's certificate produced, when one was seen and did not match.
+  ///
+  /// Shown because it is the only way a person can see that two devices disagree about a
+  /// certificate rather than merely that a connection failed. It is not a secret: it is the value
+  /// the peer publishes in its own connection information.
+  final String? peerFingerprint;
+
+  /// Whether the refusal was a fingerprint mismatch rather than an unreachable peer.
+  final bool pinMismatched;
+
+  bool get isBusy => phase == ConnectionAttemptPhase.connecting;
+  bool get isConnected => phase == ConnectionAttemptPhase.connected;
+  bool get hasFailed => phase == ConnectionAttemptPhase.failed;
+}
+
 class ConnectionPage extends StatefulWidget {
-  const ConnectionPage({super.key, required this.payload, this.onConnect});
+  const ConnectionPage({
+    super.key,
+    required this.payload,
+    this.onConnect,
+    this.starting = false,
+    this.unavailableReason,
+    this.connection = const ConnectionAttempt(),
+  });
 
   /// The payload this device publishes, or null when it has not opened a session.
   final PairingPayload? payload;
 
   /// Called with a payload the user pasted, when it parsed.
+  ///
+  /// Null when this build has nothing to connect with, in which case the connect button is **not
+  /// rendered**: a control that cannot act is the placeholder this project's rules forbid, and an
+  /// absent control with a stated reason is the honest version.
   final void Function(PairingPayload payload)? onConnect;
+
+  /// Whether this device's own node is still starting.
+  final bool starting;
+
+  /// Why this device has no connection information, when it has none for a reason.
+  final String? unavailableReason;
+
+  /// The state of the attempt to reach the other device.
+  final ConnectionAttempt connection;
 
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
+  static const String startingNote = '正在启动本机节点，稍后这里会显示本机连接信息…';
+  static const String noConnectorNote = '本机尚未接入配对能力，无法发起连接。';
+
+  /// Shown while a connection attempt is in flight.
+  static const String connectingNote = '正在连接对方设备…';
+
+  /// Shown once the peer proved the identity the payload named (§2).
+  static const String connectedNote = '已连接：对方证书指纹与连接信息一致。';
 
   /// Shown under the published pin, because that pin is not stable across launches.
   ///
@@ -97,6 +161,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       Theme.of(context).brightness,
     );
     final PairingPayload? payload = widget.payload;
+    final ConnectionAttempt attempt = widget.connection;
 
     return Scaffold(
       appBar: AppBar(title: const Text('连接信息')),
@@ -109,7 +174,19 @@ class _ConnectionPageState extends State<ConnectionPage> {
             child: ListView(
               padding: const EdgeInsets.all(NearSendSpacing.lg),
               children: <Widget>[
-                if (payload == null)
+                // The order is the order of the questions a user has: can this device be connected
+                // to at all, and if not, why. "Not started yet" and "could not start" are different
+                // answers, and showing the first while the second is true would send them looking
+                // for a fault in the other device.
+                if (widget.unavailableReason != null)
+                  _Notice(
+                    text: widget.unavailableReason!,
+                    palette: palette,
+                    isError: true,
+                  )
+                else if (payload == null && widget.starting)
+                  _Notice(text: ConnectionPage.startingNote, palette: palette)
+                else if (payload == null)
                   _Notice(
                     text: ConnectionPage.emptySessionNote,
                     palette: palette,
@@ -140,11 +217,43 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     palette: palette,
                     isError: true,
                   ),
-                if (_import.isAccepted)
+                if (_import.isAccepted && widget.onConnect != null)
                   FilledButton.icon(
-                    onPressed: () => widget.onConnect?.call(_import.payload!),
+                    onPressed: attempt.isBusy
+                        ? null
+                        : () => widget.onConnect?.call(_import.payload!),
                     icon: const Icon(Icons.link),
                     label: const Text('连接'),
+                  )
+                else if (_import.isAccepted)
+                  _Notice(
+                    text: ConnectionPage.noConnectorNote,
+                    palette: palette,
+                  ),
+                if (attempt.isBusy)
+                  Padding(
+                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                    child: _Notice(
+                      text: ConnectionPage.connectingNote,
+                      palette: palette,
+                    ),
+                  ),
+                if (attempt.isConnected)
+                  Padding(
+                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                    child: _Notice(
+                      text: ConnectionPage.connectedNote,
+                      palette: palette,
+                    ),
+                  ),
+                if (attempt.hasFailed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                    child: _Notice(
+                      text: _failureText(attempt),
+                      palette: palette,
+                      isError: true,
+                    ),
                   ),
               ],
             ),
@@ -152,6 +261,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ),
       ),
     );
+  }
+
+  /// The failure sentence, with the fingerprint the peer actually presented when there was one.
+  ///
+  /// The fingerprint is appended rather than replacing the reason: a mismatch and a peer that does
+  /// not answer need different actions, and the value itself is what lets a person see that the two
+  /// devices disagree about a certificate rather than that something went wrong.
+  String _failureText(ConnectionAttempt attempt) {
+    final String reason = attempt.reason ?? ConnectionPage.emptySessionNote;
+    final String? presented = attempt.peerFingerprint;
+    if (!attempt.pinMismatched || presented == null) {
+      return reason;
+    }
+    return '$reason\n对方出示的指纹：$presented';
   }
 }
 

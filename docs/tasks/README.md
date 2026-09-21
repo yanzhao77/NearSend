@@ -40,7 +40,7 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T06-01](T06-01.md) | 空间计划、终检与导出 | 进行中 | `feat/t06-01-*` → [#21](https://github.com/yanzhao77/NearSend/pull/21)、[#23](https://github.com/yanzhao77/NearSend/pull/23)、[#25](https://github.com/yanzhao77/NearSend/pull/25)、[#27](https://github.com/yanzhao77/NearSend/pull/27) |
 | [T03-02](T03-02.md) | Android→Windows 局域网端到端单文件闭环 | 进行中 | `feat/t03-02-lan-e2e` → [#56](https://github.com/yanzhao77/NearSend/pull/56) |
 | [T11-01](T11-01.md) | MVP 双向数据面（Android ↔ Windows） | 进行中（UI 与真机端到端未完成） | `feat/mvp-bidirectional-transfer` |
-| [T11-02](T11-02.md) | UI 装配：节点生命周期与「发送」接通会话 | 就绪 | 待开分支（建议 `feat/t11-02-ui-assembly`） |
+| [T11-02](T11-02.md) | UI 装配：节点生命周期与「发送」接通会话 | 进行中（节点生命周期、真实 pin 上屏与配对已交付；选择→会话→进度、接收侧与真机第 6 项未完成） | `feat/mvp-bidirectional-transfer` |
 
 各任务的完成依据见对应运行汇总：T01-01 [证据](../testing/evidence/2026-09-20/t01-01-01/summary.md)、
 T01-02 [证据](../testing/evidence/2026-09-20/t01-02-01/summary.md)、
