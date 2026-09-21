@@ -29,7 +29,7 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 5;
+  static const int currentVersion = 6;
 
   /// The table holding one staging proposal per transfer (§6, ADR-0004).
   static const String manifestStagingTable = 'manifest_staging';
@@ -323,7 +323,31 @@ CREATE TABLE task_receiver_mirror (
         'task_credentials (kind, expires_at);',
   };
 
-  /// Indexes this schema version defines.
+  /// The table holding where a sending task reads each file from (§7's chunk `GET`).
+  ///
+  /// A server that is the sender has to serve chunks from the user's files, and §8 lets a
+  /// transfer be resumed after a process restart - so the location has to outlive the process.
+  /// It is an **opaque reference**: a full local path is what §7 keeps out of an error body and
+  /// `AGENTS.md` §5 keeps out of diagnostics, so what is stored is a handle the platform
+  /// adapter resolves.
+  static const String taskSourcesTable = 'task_sources';
+
+  /// Tables schema version 6 adds.
+  static const Map<String, String> version6Tables = <String, String>{
+    taskSourcesTable: '''
+CREATE TABLE task_sources (
+  transfer_id  TEXT    NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+  file_id      TEXT    NOT NULL,
+  source_ref   TEXT    NOT NULL,
+  size_bytes   INTEGER NOT NULL,
+  PRIMARY KEY (transfer_id, file_id)
+);''',
+  };
+
+  /// Indexes schema version 6 adds.
+  static const Map<String, String> version6Indexes = <String, String>{};
+
+  /// The indexes this schema version defines.
   static const Map<String, String> indexes = <String, String>{
     'chunks_missing':
         'CREATE INDEX chunks_file_state ON chunks (file_id, state);',
@@ -402,11 +426,26 @@ CREATE TABLE task_receiver_mirror (
     }
   }
 
+  /// Applies schema version 6 to [db]: where a sending task reads each file from.
+  ///
+  /// New table only. A task that existed before this version has no recorded source, so a
+  /// chunk `GET` for it cannot be served - which is the correct answer rather than reading
+  /// from a guessed location.
+  static void applyVersion6(Database db) {
+    for (final String ddl in version6Tables.values) {
+      db.execute(ddl);
+    }
+    for (final String ddl in version6Indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
   /// The names of every table in this schema version, including the metadata table.
   static Set<String> get tableNames => <String>{
     metaTable,
     ...tables.keys,
     ...version4Tables.keys,
     ...version5Tables.keys,
+    ...version6Tables.keys,
   };
 }

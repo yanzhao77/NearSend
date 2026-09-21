@@ -221,6 +221,68 @@ class ChunkGetResponseHeaders {
   String toString() => 'ChunkGetResponseHeaders($contentLength B)';
 }
 
+/// The headers a chunk `GET` request carries (§7, §8).
+///
+/// §7's row for the download names "taskAccessToken、lease、manifest headers", which is the same
+/// set the upload carries minus the body framing: a `GET` has no body, so §8's length and
+/// content-type rules do not apply to it, and demanding them would refuse a correct request.
+///
+/// It is a separate type from [ChunkPutHeaders] for that reason. Sharing one parser would have
+/// to relax the framing checks for both, and those checks are the ones §8 says must run before a
+/// single byte is read.
+class ChunkGetRequestHeaders {
+  const ChunkGetRequestHeaders({
+    required this.taskAccessToken,
+    required this.leaseEpoch,
+    required this.manifestDigest,
+  });
+
+  /// The task access token from `Authorization: Bearer`.
+  final String taskAccessToken;
+
+  /// The write generation the requester believes it holds.
+  final int leaseEpoch;
+
+  /// The manifest the chunk is expected to belong to.
+  final String manifestDigest;
+
+  /// Reads and validates the headers of a chunk `GET`.
+  static ChunkGetRequestHeaders parse(Map<String, String> headers) {
+    final Map<String, String> lowered = _lowercaseHeaders(headers);
+
+    final String taskAccessToken = BearerHeader.parse(lowered['authorization']);
+
+    final String? epoch = lowered[leaseEpochHeader.toLowerCase()];
+    if (epoch == null) {
+      throw const ProtocolViolation(
+        ProtocolErrorCode.invalidField,
+        'a chunk download must carry $leaseEpochHeader',
+      );
+    }
+    final int leaseEpoch = parseDecimalString(epoch, leaseEpochHeader);
+
+    final String? digest = lowered[manifestDigestHeader.toLowerCase()];
+    if (digest == null) {
+      throw const ProtocolViolation(
+        ProtocolErrorCode.invalidField,
+        'a chunk download must carry $manifestDigestHeader',
+      );
+    }
+    sha256HexToBytes(digest, manifestDigestHeader);
+
+    _rejectUnknownProjectHeaders(lowered);
+
+    return ChunkGetRequestHeaders(
+      taskAccessToken: taskAccessToken,
+      leaseEpoch: leaseEpoch,
+      manifestDigest: digest,
+    );
+  }
+
+  @override
+  String toString() => 'ChunkGetRequestHeaders(epoch $leaseEpoch)';
+}
+
 /// §8: "body 长度必须等于该块预期长度，末尾额外数据拒绝并关闭连接".
 ///
 /// [receivedBytes] is how much the body actually produced and [expectedBytes] what the

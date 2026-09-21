@@ -695,6 +695,22 @@ class ChunkRepository {
     return rows.first['c'] as int;
   }
 
+  /// Committed bytes across every file of a task.
+  ///
+  /// §9's status body carries `committedBytes`. Note what this is **not**: it is a display
+  /// figure derived from the committed rows, never a recovery input. `AGENTS.md` §2 rule 5
+  /// forbids deriving recovery from a byte counter, and the recovery query in this class is
+  /// [missingChunkIndices], which looks only at `state`.
+  int committedBytesForTask(String taskId) {
+    final ResultSet rows = database.db.select(
+      'SELECT COALESCE(SUM(c.length_bytes), 0) AS total FROM chunks AS c '
+      'JOIN files AS f ON f.file_id = c.file_id '
+      "WHERE f.task_id = ? AND c.state = 'committed';",
+      <Object?>[taskId],
+    );
+    return rows.first['total'] as int;
+  }
+
   /// Whether every chunk of a file is committed.
   ///
   /// Note what this is *not*: it is not proof the file is correct. The whole-file digest

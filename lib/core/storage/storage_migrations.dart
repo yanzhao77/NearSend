@@ -73,6 +73,11 @@ abstract final class StorageMigrations {
       description: 'task credentials by digest, and the receiver authorisation record (§3, §6)',
       apply: StorageSchema.applyVersion5,
     ),
+    MigrationStep(
+      version: 6,
+      description: 'a sending task remembers where it reads each file from (§7 chunk GET)',
+      apply: StorageSchema.applyVersion6,
+    ),
   ];
 
   /// The version a fresh database reaches by applying every step.

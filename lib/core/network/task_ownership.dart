@@ -119,4 +119,18 @@ class SqliteTaskOwnership implements TaskOwnership {
     );
     return rows.isEmpty ? null : rows.first['peer_id'] as String;
   }
+
+  /// Every transfer bound to [peerId], ascending by transfer id.
+  ///
+  /// §7's `offers` needs this, and §6 bounds it: "`GET /offers` 仅向已配对会话列出指定给该会话的
+  /// 任务描述；**未知会话不能枚举 offers**". Ordering by id rather than by insertion keeps the
+  /// cursor a stable comparison rather than a position in a list that can shift underneath it.
+  List<String> assignedTransfers(String peerId) {
+    final ResultSet rows = database.db.select(
+      'SELECT transfer_id FROM ${StorageSchema.taskAssignmentsTable} '
+      'WHERE peer_id = ? ORDER BY transfer_id;',
+      <Object?>[peerId],
+    );
+    return <String>[for (final Row row in rows) row['transfer_id'] as String];
+  }
 }
