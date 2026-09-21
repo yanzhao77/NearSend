@@ -904,3 +904,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
    工作」写在这里）。
 
 在补上其中一半之前，**不得**声称 Android↔Windows 互传可用。
+
+**CI（`t11-01-24`）**：接收界面与其说明推送后，
+[run 35660194924](https://github.com/yanzhao77/NearSend/actions/runs/35660194924)（head `ac9d297`）
+**四作业全部通过**；同一分支两次连续推送各产生一次 `cancelled`（`concurrency.cancel-in-progress`
+取消上一轮），非失败结论。
