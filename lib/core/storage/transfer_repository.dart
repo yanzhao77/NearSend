@@ -122,6 +122,21 @@ class TransferRepository {
     );
   }
 
+  /// The tasks currently in [state], oldest first.
+  ///
+  /// The receiving **server** needs this and nothing else could give it: a client that proposes a
+  /// transfer creates the row on this node, and §6 makes acceptance this node's own decision - so
+  /// the only way its user can be shown "someone is offering you something" is to ask its own
+  /// database. Offers over the wire are a *client's* view (`GET /v1/offers` lists what a session is
+  /// being offered); this is the other side of the same question.
+  List<String> taskIdsInState(TransferState state) {
+    final ResultSet rows = database.db.select(
+      'SELECT task_id FROM tasks WHERE state = ? ORDER BY created_at, task_id;',
+      <Object?>[StorageStateCodec.encodeTransfer(state)],
+    );
+    return <String>[for (final Row row in rows) row['task_id'] as String];
+  }
+
   /// What a transfer was created with, or null when no such task exists.
   ///
   /// Returns null rather than throwing, because "absent" is the answer the creation path
