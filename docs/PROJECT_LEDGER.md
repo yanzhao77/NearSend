@@ -1007,3 +1007,18 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 [run 35660194924](https://github.com/yanzhao77/NearSend/actions/runs/35660194924)（head `ac9d297`）
 **四作业全部通过**；同一分支两次连续推送各产生一次 `cancelled`（`concurrency.cancel-in-progress`
 取消上一轮），非失败结论。
+
+#### `t11-01-29`：把本阶段的验证证据收敛成一处，并记下第 12 次安装尝试
+
+- **新增证据汇总**：[T11-01 MVP 验证证据](testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md)。
+  它把「哪条用例证明了什么、端到端到什么程度」逐条列出（含两处限制：界面级用例是**单块 4 KiB** 载荷、
+  空间按 `unknown` 呈现），并把**没有验证的**单列一节——避免长篇台账被摘引成更强的结论。
+- **第 12 次真机安装尝试失败，原样记录**：设备 `22081283C` 已连接、屏幕已点亮，
+  `adb install -r build/app/outputs/flutter-apk/app-debug.apk` 仍为
+  `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`。这是设备上的**安装确认弹窗**
+  （或开发者选项的「USB 安装」开关），不是配置错误：`adb_install_need_confirm=0` 与
+  `verifier_verify_adb_installs=0` 均已确认无效。**结论不变**：本项目**从未在 Android 上运行过**，
+  `applicationDirectory` 与 SAF 通道同样未在设备上执行过。
+- **本阶段的收尾口径**：两个方向的数据面与界面都有「真实两个节点 + 真实 TLS + 两端都是产品代码」
+  的验证，**但没有真机证据**；真机双向验证是唯一剩余的人工环节，步骤见证据文件第 3 节。
+  在取得那份记录之前，**不得**声称 Android↔Windows 互传已验证。
