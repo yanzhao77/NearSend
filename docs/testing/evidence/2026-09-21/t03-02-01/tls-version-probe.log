@@ -1,4 +1,4 @@
-﻿=== external verification of the TLS version floor ===
+=== external verification of the TLS version floor ===
 server: dart:io HttpServer.bindSecure with minimumTlsProtocolVersion = tls1_3
 client: openssl s_client (a different implementation, so this is not circular)
 
