@@ -206,6 +206,15 @@ class NearSendNode {
   /// Re-issuing invalidates the previous session's access token, which §3 requires: a screenshot
   /// of the old code must stop working the moment a new one exists.
   PairingPayload openPairingSession({String? sessionId}) {
+    // The candidates are re-pointed at the bound port first: a node that asked the system for a free
+    // port published   until this existed, and a payload offering port 0 is one no peer can use -
+    // the connection screen would have shown an address that could never connect.
+    if (server.isRunning) {
+      pairing.repointCandidates(<PairingCandidate>[
+        for (final PairingCandidate candidate in pairing.candidates)
+          PairingCandidate(host: candidate.host, port: server.boundPort),
+      ]);
+    }
     final PairingPayload issued = pairing.openSession(sessionId: sessionId);
     _payload = issued;
     return issued;

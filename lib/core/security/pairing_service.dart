@@ -79,7 +79,14 @@ class PairingService implements ControlAuthenticator {
   final String serverFingerprint;
 
   /// The addresses the QR code offers, in order (§3).
-  final List<PairingCandidate> candidates;
+  /// The addresses the QR code offers.
+  ///
+  /// **Mutable on purpose.** A server that asks the system for a free port does not know it until
+  /// the socket is bound, so a payload issued before then would offer port `0` - an address no peer
+  /// can connect to. The node re-points these once it is listening, and nothing else may: the pin,
+  /// the session and the token are what a payload's trust rests on, and this only changes where the
+  /// peer is told to look.
+  List<PairingCandidate> candidates;
 
   final MonotonicMillis _clock;
   final int _sessionTtlMillis;
@@ -106,6 +113,17 @@ class PairingService implements ControlAuthenticator {
 
   /// Whether [source] has exhausted its pairing failure allowance.
   bool isRateLimited(String source) => _issuer.isRateLimited(source);
+
+  /// Re-points the candidates at the port the socket actually bound.
+  ///
+  /// Called by the node once it is listening, and only then: a payload issued while the port was
+  /// still unknown would offer `0`, which no peer can connect to. Kept as an explicit method rather
+  /// than a settable field so the one caller that may do this is visible, and so its comment can say
+  /// what it must not be used for - changing identity or credentials, which live elsewhere in the
+  /// payload and are what trust rests on.
+  void repointCandidates(List<PairingCandidate> bound) {
+    candidates = List<PairingCandidate>.unmodifiable(bound);
+  }
 
   /// Opens a new pairing session and returns what the QR code should carry.
   ///
