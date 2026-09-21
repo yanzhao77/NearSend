@@ -4,7 +4,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v3、终检与导出编排均已有实现和测试。当前只有 `POST /transfers`、`PUT /manifest`、`POST /seal` 3 个控制端点可用；真实 HTTP/TLS、Android 指定 Network、块传输、平台 FileSource/FileSink/ExportSink、UI 业务装配和端到端恢复尚未完成，因此还不能真实传输文件或声称支持跨重启续传。没有正式分发或发布版本；协议与关键平台选型尚未冻结。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。**但仍然没有真实文件字节在两个方向端到端传过**：本地文件端口、发送/接收编排、平台文件选择（Android SAF）与 UI 业务装配尚未完成，因此**还不能声称 NearSend 可以互发文件**。没有正式分发或发布版本；协议与关键平台选型尚未冻结。**
 
 ## 1. 状态口径
 
@@ -40,7 +40,7 @@
 | R01 | Flutter客户端与原生适配 | 部分完成：工程基线与核心层 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md) | 三端工程、Dart 协议/配对/存储/终检核心已有实现；首页仍是禁用壳，真实网络、平台文件端口、任务编排、恢复与 UI 业务链路未装配 |
 | R02 | 安装包、签名构建及发布CI | 待开始 | 无产物 | 当前只有发布策略，未发布任何版本 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | 四个作业在 GitHub Actions 真实通过；签名与发布作业仍属 T10 |
-| R04 | 接收方持久化层 | 部分完成：schema v3 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2、v2→v3、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权及 `SQLITE_FULL` 注入已测试；**manifest staging 尚未落 SQLite**，真实暂存损坏、OS `ENOSPC`、真机 `syncData` 和应用运行时装配未完成 |
+| R04 | 接收方持久化层 | 部分完成：schema v6 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2→v3→v4→v5→v6、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权、`SQLITE_FULL` 注入、**manifest staging 落 SQLite（v4）**、**任务凭证按摘要持久化与授权记录（v5）**、**发送端来源引用（v6）** 均已实现并测试；真实 OS `ENOSPC`、真机 `syncData` 与断电耐久性仍未验证 |
 
 历史实验环境见[environment.json](testing/evidence/2026-09-20/environment.json)。20GiB整文件哈希通过；峰值RSS为18,944KiB，1GiB为18,816KiB。该口径不包含系统页缓存，不代表真机吞吐量或完整应用内存。
 
@@ -64,6 +64,7 @@
 | 任务 | 当前状态 | 退出门槛 |
 | --- | --- | --- |
 | T00 文档与研发治理 | 已完成：设计 | 文档索引、流程、架构、端侧、UI、质量和 Agent 手册已提交；后续持续维护 |
+| T11-01 MVP 双向数据面 | **进行中**（`t11-01-01` 数据面）：详见下方 §6 交付记录 | 真机双向传完真实文件、UI 装配、SAF 端口 |
 | T01 工程/构建/配置 | 已完成 | 两端可安装/运行、版本可追踪（§6.1）；检查与双端构建已固化为 CI 门禁（§6.2） |
 | T02 协议/模型/向量 | 部分完成：模型已收敛，但**发现三处草案缺口** | 草案、Python 向量与 Dart 独立实现逐字节一致（T02-01）；错误码/状态机/协议协商/幂等已实现（T02-02）；**冻结被 §5 登记的三项草案缺口阻塞**，另需原生实现比对 |
 | T03 配对与单文件链路 | **部分完成**：配对载荷、信任上下文、令牌生命周期、`/v1/pair` 模型、`/v1` 线上契约层、§7 路由表、§6 清单分页/seal、§7 响应体、**§8 块头规则、批量 checkpoint 窗口（schema v3）与写入栅栏**、**§7 请求管线、鉴权决定与控制响应包**、**HTTPS 传输层（TLS 1.3 下限 + 严格帧定界）**、**4 个可用端点（`POST /pair`、`POST /transfers`、`PUT /manifest`、`POST /seal`）**已实现；**并且真实控制面已在真机与真实局域网上跑通**（`t03-02-05`）。**但尚未传输任何文件字节**——chunk 端点未实现；其余 15 个端点、指定网络绑定与 UI 未做 | 用户授权后端到端收发、鉴权负例通过 |
@@ -393,8 +394,74 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-21 | T03-02 **第二批 `t03-02-02` 完成 TLS 身份层**（Flutter 测试 1003→1012；身份编码 4 项 + 真实握手 5 项）。`lib/core/security/tls_identity.dart` 在 Dart 内生成 P-256 自签叶证书与 PKCS#8 密钥：**模块没有任何写文件的路径**，私钥只以字节返回由调用方交给平台安全存储（`AGENTS.md` §5）；pin 复用既有权威实现 `serverFingerprintOf`，不新增第二处指纹定义；序列号随机、SAN 按地址生成、有效期刻意写满 UTC 可表达跨度（2000→2049），因为离线设备时钟不可信，一年期证书会让时钟错乱的设备**连不上自己**，而这正是 §2「不因离线时钟错误改成接受任意证书」要避免的失败。**本批推翻了自己上一批的结论**：ADR-0005 初稿写「信任库只装 pin 证书 + 回调**恒返回 false**」，按此写的测试**以 `CERTIFICATE_VERIFY_FAILED: IP address mismatch` 失败**——**dart:io 即使证书已被信任库接受仍会校验 SAN/IP**，故回调恒 false 会让一个指纹完全正确的连接因「换网段」而被拒。实测给出四个方向的边界并全部写成测试：信任库命中且名字匹配 → 回调调用 **0** 次并放行；信任库装别的证书 → 拒绝且**服务端未收到任何请求**；信任库命中但名字不匹配 → 回调**被调用**并比对同一个 pin 后放行；指纹不同 → 拒绝。形态因此定为「信任库保证『不是 pin 就连不上』+ 回调把『名字』移出身份判定」，两者比对同一 pin，没有任何路径能放行指纹不同的证书。**独立验证**：`openssl` 3.5.7 解析该证书并算出 `SHA-256(DER)`，与 Dart 的 pin 逐字符一致（`MATCH: True`），公私钥一致性亦为真。新增依赖 `pointycastle` 4.0.0（ADR-0005 §2 记录许可证 MIT、维护状态与「纯 Dart 无常数时间保证、私钥在堆内存」的代价）。**残余**：握手全在 Windows 完成，**Android 侧 `X509Certificate.der` 是否给出同一摘要、回调调用时机是否一致仍无真机证据**；身份**尚未持久化**（当前每次调用都生成新身份，「同一安装一个身份」是下一步）；`pointycastle` 的 CVE 状态未检索；无 HTTP 服务器、无端点接线、无 UI、无真实传输 | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-02/summary.md)、[openssl 验证日志](testing/evidence/2026-09-21/t03-02-02/tls-identity-openssl-verify.log)、[ADR-0005](decisions/ADR-0005-TLS引擎与证书供给.md)、[实现](../lib/core/security/tls_identity.dart) |
 | 2026-09-21 | T03-02 **第三批 `t03-02-03` 完成 HTTPS 传输层，`POST /transfers` 首次真的过网**（Flutter 测试 1012→1020；传输 8 项，全部经真实 TLS）。新增 `https_control_server.dart`（TLS 终止 + §8 帧定界 + 接到既有 `ControlPipeline`，1.3 下限设在 **context** 上故不能协商的连接在握手阶段即被拒）与 `https_control_client.dart`（按 pin 连接、**不跟随重定向**、**关闭透明解压**）。**先测后写**：`tooling/spikes/http_framing/main.dart` 用裸 socket 测出 **dart:io 在处理器看到之前规范化掉了什么**——两个 `Content-Length`（含两种拼写）**由引擎直接拒绝，处理器从不运行**；`Transfer-Encoding: chunked` **被引擎接受并解帧**、头部仍可见；`Content-Length` 与 `Transfer-Encoding` **同时出现时引擎按 chunked 定界并移除 `Content-Length`**；`Content-Encoding: gzip` 头部可见且 body **未被解压**。第四行值得单独记住：**想靠"两个都看见"来拒绝"两者同时"的实现做不到**，它被拒是因为「拒绝任何 `Transfer-Encoding`」覆盖了它——规则成立，但**理由与 §8 字面写法不同**，已写进服务端注释以免后来者当成冗余检查。测试断言包括「正确 pin → 201 且**数据库里确有 1 行任务**」「错误 pin → `PAIR_REJECTED` 且**任务数为 0**（一个请求都没发出）」「无处理器路由 → 404 而非 500」「chunked / gzip → 400 且未创建任务」。**期间发现并修正一处真实缺陷**：`HttpsControlClient` 用 `add()` 写 body 却**未声明 `contentLength`**，`dart:io` 因而回落到 **chunked 编码**（§8 明令拒绝的帧形态），端点经网络调用返回 `400 INVALID_FIELD` 而同一端点在不经网络的单测里是绿的——**服务端的拒绝是对的，错的是客户端**；修法为显式声明长度（空 body 也声明）。这处缺陷同时是「帧定界规则真的起作用」的实证。**ADR-0005 再补一节 §1b**：二维码只带 `serverFingerprint` **不带证书**，故「信任库装 pin 证书」只适用于已持有证书的一方；配对客户端必须**保持信任库为空**并让回调承担比对（空信任库使回调必然对每个证书触发，正是该形态安全的原因）。**残余**：**其余 16 个端点未实现**、**未传输任何文件字节**（chunk 端点与背压未做）、**身份未持久化**故服务端每次启动都换 pin、未做二维码/空间预检/导出/UI、**未在真机运行**（全部握手在本机 loopback） | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-03/summary.md)、[帧定界实测日志](testing/evidence/2026-09-21/t03-02-03/http-framing-probe.log)、[服务端](../lib/core/network/https_control_server.dart)、[客户端](../lib/core/network/https_control_client.dart)、[传输测试](../test/core/network/https_control_transport_test.dart) |
 | 2026-09-21 | T03-02 **第四批 `t03-02-04` 完成 §3 配对端点与会话令牌**（Flutter 测试 1020→1035；配对服务 11 项 + 真实 TLS 闭环 4 项）。`lib/core/security/pairing_service.dart` 开启配对会话、处理 `POST /v1/pair`、签发会话访问令牌，并**同时实现 `ControlAuthenticator`**——签发方与校验方是同一个类**不是因为省事**：一个产出自己校验方不接受的令牌，会**在两侧的单测里都是绿的**，直到真机首次配对才失败，而那是由用户遇到的。测试因此**跟着凭证走**而不只是断言状态码（从响应体取出令牌再交给 `authenticate`）。**`ControlRequest` 新增 `peerAddress`**，因为 §3 要求「每来源每分钟 5 次失败、全局 30 次」而请求原本不携带对端地址；地址由传输层提供，并写明三条纪律：**不是身份、从不用于授权**（局域网上易伪造且每次重连都变，这正是 §2 把身份与地址分开的原因）、`null` 只允许全局限流、调用方**不得**把「无地址」当成「从未失败」；无地址者共用一个桶，方向是 fail-closed。**限流先于令牌检查**有专门用例：5 次失败后**持正确令牌也只得 `429`**（否则可用错误码探测令牌有效性）且 `Retry-After > 0`，另一来源不受影响。**重新签发的 QR 立即作废旧会话令牌**（否则旧二维码的截图仍是可用凭证）；**未知会话与错误令牌返回同一个 `PAIR_REJECTED`**（更细的答案会变成探测会话存在性的工具）。**真实 TLS 闭环**：配对 `200` → 用返回的令牌创建传输 `201` → **数据库里确有 1 行任务**，且**配对本身不创建任何东西**；另固定「无法证明 pin 的客户端根本到不了 `/v1/pair`」，此处断言的是 `liveSessionCount == 0` 而非"什么都没发生"——**配对令牌仍未消费、仍可能被持有二维码的人使用**，这是更准确的描述。顺带把「平台 CSPRNG 字节」收敛为一处定义（`generateSecureRandomBytes`，配对令牌与会话令牌共用）。**仍未解决**：§3 的 `capabilities:[...]` 词表规范从未枚举，故本服务端**宣告空能力集且不做协商**（`AGENTS.md` §3 禁止凭偏好定夺；缺口仍登记在 §5）。**残余**：**仍未在真机运行，Android 尚未参与——这是本任务最大的未知**；**仍未传输任何文件字节**；其余 15 个端点未实现；身份未持久化；未做二维码/空间预检/导出/UI | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-04/summary.md)、[配对服务](../lib/core/security/pairing_service.dart)、[单元测试](../test/core/security/pairing_service_test.dart)、[闭环测试](../test/core/network/pairing_over_transport_test.dart) |
+| 2026-09-21 | T11-01 **第一批 `t11-01-01` … `t11-01-03` 实现双向数据面**（schema v4→v6，`manifest_staging` 落 SQLite、decision/authorization/resume、`PUT`/`GET chunk` 与生命周期端点、本地文件层）。Flutter 测试 1035→1095。**期间发现并修正一个真实缺陷**：`dart:io` 没有不截断地打开已有文件写入的模式，按偏移写单一暂存文件会让第 2 块截断第 1 块（数据库说 committed、暂存文件是零），改为一块一 part 文件后 resume 才真的可用；导出组装改按数值索引排序，否则 `10.part` 会排在 `2.part` 前。**本批不标记任何任务为完成**：发送/接收编排、Android SAF 通道、UI 装配与真机双向端到端**均未完成**，因此不得声称 NearSend 可以互发文件 | [T11-01](tasks/T11-01.md)、本台账 §6.4、`lib/core/storage/manifest_staging_store.dart`、`lib/core/network/task_authorization_endpoint.dart`、`lib/core/network/chunk_transfer_endpoint.dart`、`lib/core/network/transfer_lifecycle_endpoint.dart`、`lib/core/storage/local_file_layer.dart` |
 | 2026-09-21 | T03-02 **第五批 `t03-02-05` 完成 Android 平台 spike：真机首次与真实服务端在真实局域网上完成控制面**（新增 `integration_test/`，2 项真机用例全部通过）。回答三个只有真机能回答的问题：**（1）Android 的 `SHA-256(X509Certificate.der)` 等于 Windows 生成证书时算出的 pin**——测试断言 Android 每一次呈现的指纹都等于二维码里的值；**这是最容易悄悄出错处**：两个平台若对 DER 理解不同，pin 会一边匹配一边永远不匹配，而**桌面上的全部测试仍然全绿**。**（2）`badCertificateCallback` 在 Android 上的调用时机与 Windows 一致**：正确 pin 的用例断言回调确实被调用过，错误 pin 的用例断言回调看到了真实证书且连接随后被我们自己的比较拒绝。**（3）应用真的能经 Wi-Fi 到达这台 Windows**：配对 `200`、用会话令牌创建传输 `201` 且 `state=STAGING`（这两个响应只可能来自真实端点的真实实现）。服务端使用**真实的** transport + `PairingService` + `TransferCreationEndpoint`，无桩；载荷由与扫码器同一个严格解析器解析。**期间发现并修正一处真实缺陷**：`flutter create` 只在 **debug/profile** 清单放入 `INTERNET` 权限，**主清单没有**，因此 **release 构建完全无法联网**——而联网正是这个产品的全部意义，且**任何 debug 模式的测试都看不见它**，会一直潜伏到第一次 release 安装；已将权限加入主清单并写明理由（这会让平台目录审计出现一处**有意的、产品必需的**非标识类差异，下次复跑应如此接受）。**环境前提是条件而非给定**：本轮开始时上一台真机掉线，接入的新设备 **Wi-Fi 处于关闭状态**、走蜂窝数据且把 `192.168.10.100` 的路由送去运营商网关，**首轮失败与服务端和代码无关**；启用 Wi-Fi 后自动连上同一 AP 并取得 `192.168.10.4/24`，印证了 B01/B02 的立场。**如实说明未取到的证据**：测试 isolate 的 `stdout` 不被 `flutter test` 转发、设备 logcat 被启动器的 `flutter` 标签刷满，故**两个指纹的字符串没有进日志**，本运行不声称有该证据；替代它的是断言本身（打印的值可以是错的，被校验过的不会）。**残余**：**仍未传输任何文件字节**（chunk 端点未实现）；其余 15 个端点未实现；**无 UI 与扫码**（载荷经命令行 base64 传入，因二维码的引号与花括号在「PowerShell → flutter test → ADB 启动」链路上会被 mangled，首次尝试即因此失败）；身份未持久化；未做空间预检/终检接入/导出/进度显示 | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-05/summary.md)、[真机运行日志](testing/evidence/2026-09-21/t03-02-05/android-lan-pairing.log)、[真机测试源码](../integration_test/android_lan_pairing_test.dart)、[局域网服务端探针](../tooling/spikes/lan_server/main.dart)、[主清单](../android/app/src/main/AndroidManifest.xml) |
 | 2026-09-21 | **T03-02 前五批（`t03-02-01` … `t03-02-05`）整体提交评审**：本分支把「Windows 侧真实 HTTPS 控制面 + Android 真机接入」作为一个可评审单元交付，32 个文件、+4145/−10。评审口径的三条边界写在这里，以免被后续引用时放大：**（1）这是控制面，不是文件传输——没有任何一个文件字节被传输过**；（2）真机证据覆盖「同 AP 真实局域网 + pin 比对 + 配对 + 创建任务」，**不覆盖**热点路径、指定 Network、多网络选择、UI 与扫码；（3）`t03-02-05` 的指纹一致性由**测试断言**证明，**不是**由日志中的指纹字符串证明。**同期修正证据文件编码**：`t03-02-01/02/03/05` 的四个 `.log` 由 PowerShell `Tee-Object` 写成了 **UTF-16LE（其中一个是带 BOM 的 UTF-8）**，被 git 判为二进制、无法 diff 与检索——本项目在 T01-01 已记录过一次同类编码缺陷（S0 探针在 `cp936` 下不可复现）。四个文件已转为 **UTF-8 无 BOM**，内容逐行保留（校验方式：转换后重新检索关键行，如三个 spike 判定、`Protocol version: TLSv1.3`、`All tests passed`、两处 `NEVER REACHED`）。**台账同步**：B01 由「探针未执行」改为**真实同 AP 控制面样本通过**并明确**不标记完成**；B02 记为 **DER pin/TLS 真机验证通过、指定 Network 仍未完成**；T03 保持**部分完成**并注明**尚未传输任何文件字节**；§5「平台目录边界」登记 `INTERNET` 权限为**有意的、产品必需的非标识类差异** | [T03-02](tasks/T03-02.md)、[ADR-0005](decisions/ADR-0005-TLS引擎与证书供给.md)、证据 `t03-02-01` … `t03-02-05`、[真机测试](../integration_test/android_lan_pairing_test.dart) |
 | 2026-09-21 | T03-02 前五批（`t03-02-01` … `t03-02-05`）经 **PR [#56](https://github.com/yanzhao77/NearSend/pull/56) 合并入 `master`**（合并提交 `253f2a597c02eda61d2930fef9f43e51a1238975`）。**CI 四个作业在首次运行即全部通过**（run [35609916726](https://github.com/yanzhao77/NearSend/actions/runs/35609916726)，head SHA `cbcd6ac`）：仓库检查 6s、格式/分析/测试 1m4s、Windows 构建 2m12s、**Android 构建 4m58s**。Android 作业值得单独记一笔——这是**本项目的 Android 构建第一次在干净 runner 上被验证**，同时确认了 `INTERNET` 权限的主清单改动不会破坏构建（此前该改动只有本机证据）。合并后本地 `master` 已快进至 `253f2a5`。**任务状态不变**：T03-02 仍「进行中」，因为**数据面一行未写、没有一个文件字节被传输过**；B01 仍不标记完成（热点路径从未跑过）；B02 的「指定 Network」仍未完成 | [PR #56](https://github.com/yanzhao77/NearSend/pull/56)、[合并提交 `253f2a5`](https://github.com/yanzhao77/NearSend/commit/253f2a597c02eda61d2930fef9f43e51a1238975)、[CI run 35609916726](https://github.com/yanzhao77/NearSend/actions/runs/35609916726)、[T03-02](tasks/T03-02.md) |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
+
+### 6.4 T11-01 MVP 双向数据面（本批交付）
+
+任务卡：[T11-01](tasks/T11-01.md)　分支：`feat/mvp-bidirectional-transfer`。
+
+本批把仓库从「控制面可用」推进到「数据面已实现」，但**没有**推进到「已经互发文件」。
+下面按「代码已实现／单元测试通过／集成测试通过／真机通过／实机通过／端到端通过」逐项区分。
+
+#### `t11-01-01` SQLite manifest staging（schema v4）
+
+- `manifest_staging`、`manifest_files`、`manifest_chunks` 三张表；页按索引主键存储，
+  因此「重传相同页不能虚增计数」是 schema 的性质而不是调用方的纪律。
+- seal 时把冻结清单以 JSON 写入 `sealed_manifest`，`decision`／块校验／`resume` 重启后可读；
+  seal 通过一次性把行物化进 `ManifestStaging` 复用既有 §6 校验顺序，**不长期持有内存清单**。
+- 过期提议写 `released_at` 而不是删除：删除会让下一次请求从任务行重建并重开一个 §6 说已撤销的提议。
+- 状态：代码已实现；单元测试通过（注册表 22 项，含真实 reopen 的「未 seal 续传」「已 seal 可读」
+  「窗口起点跨重启」三段）；真机未涉及（纯存储层）。
+
+#### `t11-01-02` decision / authorization / resume（schema v5）
+
+- `POST /decision`、`GET /authorization`、`POST /authorization/receipt`、`POST /resume` 接线；
+  空间预检（`507 SPACE_INSUFFICIENT`）、保存位置、空间估算随批准持久化；`leaseEpoch` 由首次
+  `resume` 分配；`checkpointSeq` 来自存储层。
+- **会话到任务的映射**（`task_assignments`）：补上台账 §5 登记的「能力缺口」。默认 ownership
+  什么都不拥有，因此失败关闭方向不变，既有授权测试原样通过；方向随 owner 一起返回，
+  所以「每个文件请求验证操作方向」这条也覆盖了 session 路径。
+- **凭证只存摘要**：`task_credentials` 只有 SHA-256，明文只存在于进程内有界 vault，收到 receipt 后丢弃。
+  重启发生在签发与 receipt 之间时**拒绝重发**而不是重新签发（重新签发会静默作废客户端已保存的那一份）。
+- 状态：代码已实现；单元测试通过（端点 27 项 + 授权 6 项，均断言数据库状态而非仅状态码）；
+  真机未验证。
+
+#### `t11-01-03` 数据面：`PUT`/`GET chunk` 与生命周期端点（schema v6）
+
+- `PUT`/`GET chunk`：§8 帧定界先于任何字节读取，长度、清单摘要、世代逐项校验；
+  写入顺序复用已在 T03-01 测试过的 `writeChunkWithFileLock`；答案区分 `verified_pending` 与
+  `committed`；`GET` 返回 `Content-Length` 与 `X-LFT-Chunk-SHA256`。
+- 生命周期：`offers`、manifest 读取（含 §7 的 `nextIndex`）、`status`（含 §9 的 `authority` 标记，
+  且 `missingChunkRanges` **按草案留白故意未建模**）、`checkpoint`（只写显示镜像）、
+  `pause`（先强制 checkpoint 再迁移状态）、`cancel`（同事务撤销凭证）、`complete`
+  （区分 §10 的两种角色）、`control` 与 receipt。
+- 本地文件层：**每个块一个 part 文件**的分块暂存、流式读取发送（规划与发送各一次单块内存）、
+  按数值索引组装导出。
+- 状态：代码已实现；单元测试通过（chunk 13 项，断言 SQLite 块状态、暂存文件内容、窗口计数）；
+  真机与实机端到端**未执行**。
+
+#### 期间发现并修正的真实缺陷
+
+- **`dart:io` 没有「不截断地打开已有文件写入」的模式**（`write`/`writeOnly`/`writeOnlyAppend`
+  要么截断要么强制写到末尾）。第一版按偏移写单一暂存文件，于是写第 2 块时截断了第 1 块：
+  **数据库说块已提交，暂存文件却是零**——正是 §8 与 `AGENTS.md` §2 规则 5 要防的状态。
+  改为一**块一文件**后，每个 part 只被一个写入者完整写一次，截断是正确的；且已正确的 part
+  在重启后不受影响，`resume` 因此真的可用。代价（目录项数量）写进了类注释。
+- **导出组装必须按数值索引排序**：字符串序下 `10.part` 排在 `2.part` 前面，会产出一个
+  「字节一个不少、位置全错」的文件——任何长度校验都发现不了。
+
+#### 未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
+
+- 发送/接收**编排**（把两侧端点串成一次真实传输的应用层服务）。
+- **Android SAF 平台通道**（生产文件选择与授权）。
+- **基础 UI**：首页仍是禁用壳，进度/速度/剩余时间、接收确认、空间不足、暂停/继续/取消、
+  校验中/保存成功/失败重试等页面未接线。
+- **真机双向端到端验证**：一个文件字节都还没有在两个方向的真实设备间传过。
+- 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` 1095 项通过、
+  `check_links`/`check_secrets`/`check_ci_workflow` 通过、`git diff --check` 干净。
+  **这些都只是本机自动化，不含真机结论。**
