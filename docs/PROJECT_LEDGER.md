@@ -604,10 +604,26 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 
 | 事项 | 为什么必需 | 具体改动点 |
 | --- | --- | --- |
-| **把发送路径改到 `SourceBytes` 上** | 这是「**Android 能作为发送方**」的那一步：当前 `prepareOutgoing` 只接受本地路径，设备因此能收不能发 | `SourceFilePlan.file` → `.source`；`LocalSourceReader.plan`/`streamChunks` 改用 `readAt`；`OutgoingFileChoice.path` → `SourceBytes` + `sourceRef`；`TransferEngine.planFor` 需要 `SourceResolver`（默认 `FileSourceBytes`，Android 传入由 `AndroidFileGateway` 构造的 `SafSourceBytes`）；三处测试同步 |
+| **把发送路径改到 `SourceBytes` 上** | **已完成（`t11-01-12`/`t11-01-13`）** | 见下方对应条目 |
 | **把选择结果接进引擎编排** | 让 UI 的「选择→提议→密封→恢复→发送」成为一条真实链路 | `FileSelectionReport` → `prepareOutgoing` → `pagesFor` → `TransferClient` 提议/密封 → `resume` → `sendFile` |
-| **传输各阶段的页面装配** | 阶段五要求准备/扫描/传输/校验/导出是可区分状态 | 把 `TransferProgress.phase` 接到真实引擎状态 |
+| ~~**传输各阶段的页面装配**~~ | **已完成（`t11-01-15`）** | 见下方 `t11-01-15` |
 | ~~**一条经节点、以 SAF 文档为来源的传输测试**~~ | **已完成（`t11-01-14`）** | 见下方 `t11-01-14`，其中记录了它发现的真实缺陷 |
+
+#### `t11-01-15`：协议任务状态 → 屏幕阶段
+
+- 关闭了「`TransferProgress` 有 phase、引擎有 `TransferState`，两者之间没有任何连接」这个缺口——
+  在此之前界面只能显示调用方猜的东西。`phaseForTransferState` 是**穷尽 switch**，
+  因此协议新增状态会**编译失败**，而不是渲染成错误的词。
+- 三个有意为之的映射：
+  - **`staging` 与 `preparing` 都是「准备中」**：§10 分开它们是因为一个是发送端本地、另一个表示页正在到达，
+    但用户无论哪种都在等，**「是哪一侧在干活」不是可行动的信息**。
+  - **`ready` 是「传输中」**：§10 定义它是「已接受并授权；写入世代已存在」——**字节可以开始移动的第一刻，
+    也因此是进度条第一次有意义的时刻**；叫它「准备中」会掩盖传输已经开始。
+  - **`interrupted` 与 `blocked` 各有自己的词，不并入失败**：§10 给它们不同出口（恢复 / 用户操作），
+    §11 给 `BLOCKED` 的处方是「清理空间或更换位置后重试」。**把二者任一显示成失败，就是在协议说
+    「还没结束」时告诉用户已经结束。** 为此枚举新增这两项。
+- **部分完成 → 失败**而不是完成：这正是 `AGENTS.md` §2 规则 11 禁止的假完成。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1157 项通过**（新增 4 项）；CI 四作业全绿。
 
 #### `t11-01-14`：文档来源经真实 TLS 的双向传输（并修正它发现的缺陷）
 
