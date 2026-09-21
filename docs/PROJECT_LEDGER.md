@@ -847,3 +847,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   因此应用里仍然没有任何东西调用它；`client_to_server` 方向（本机作为**服务端**接收，需要
   本机自己的「谁在向我提供」视图与 `acceptLocally`）未做；**部分接收后的中断续传没有测试覆盖**
   （序列是幂等的，但断言尚未写出）；发送端**没有**查询对方完成状态的通路。
+- **CI（本批）**：`t11-01-18` … `t11-01-23` 六个提交推送后，
+  [run 35658888277](https://github.com/yanzhao77/NearSend/actions/runs/35658888277)（head `493eaee`）
+  **首轮四作业全部通过**。此前一批中另有一次 `cancelled`
+  （[35658533993](https://github.com/yanzhao77/NearSend/actions/runs/35658533993)）：同一分支连续推送时
+  `concurrency.cancel-in-progress` 取消了上一轮运行，属工作流设计行为，不是失败结论。
