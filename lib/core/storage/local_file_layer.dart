@@ -463,8 +463,41 @@ class LocalDirectoryExportSink implements ExportSink {
     if (!target.existsSync()) {
       await target.create(recursive: true);
     }
+
+    // The safe name comes from the naming policy, and this sink is the last thing between it and
+    // the filesystem, so the shape is re-checked here rather than trusted: an absolute name or a
+    // `..` segment would write outside the directory the user chose, and §5.1's "路径必须规范化
+    // 并防止绝对路径、`..` 穿越" is exactly this rule. The first attempt at this sink interpolated
+    // the name straight into a path and failed on a nested name - which is how the missing check
+    // was found.
+    final List<String> segments = safePath
+        .split(RegExp(r'[\\/]+'))
+        .where((String s) => s.isNotEmpty)
+        .toList();
+    if (segments.isEmpty ||
+        segments.any((String s) => s == '.' || s == '..') ||
+        safePath.startsWith('/') ||
+        safePath.startsWith(r'\') ||
+        RegExp(r'^[A-Za-z]:').hasMatch(safePath)) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'the export name is not a plain name inside the chosen target; refusing to write it',
+      );
+    }
+
+    final Directory destinationDirectory = segments.length == 1
+        ? target
+        : Directory(
+            '${target.path}${Platform.pathSeparator}'
+            '${segments.sublist(0, segments.length - 1).join(Platform.pathSeparator)}',
+          );
+    if (!destinationDirectory.existsSync()) {
+      // Created only *under* the target the user chose, after the segments above were checked, so
+      // this cannot become a way out of it.
+      await destinationDirectory.create(recursive: true);
+    }
     final File destination = File(
-      '${target.path}${Platform.pathSeparator}$safePath',
+      '${destinationDirectory.path}${Platform.pathSeparator}${segments.last}',
     );
     if (destination.existsSync()) {
       // The naming policy already chose a free name; a file appearing here means something

@@ -686,6 +686,34 @@ class ChunkRepository {
     return <int>[for (final Row row in rows) row['idx'] as int];
   }
 
+  /// Whether a file row exists, without throwing when it does not.
+  ///
+  /// Needed by a receiver that is registering a manifest it fetched from a peer: the same
+  /// transfer can be resumed, so a file may already be registered, and using [isFullyCommitted]
+  /// to find that out would throw instead of answering.
+  bool isFileRegistered(String fileId) {
+    final ResultSet rows = database.db.select(
+      'SELECT 1 FROM files WHERE file_id = ? LIMIT 1;',
+      <Object?>[fileId],
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// The task a file belongs to.
+  String taskIdOfFile(String fileId) {
+    final ResultSet rows = database.db.select(
+      'SELECT task_id FROM files WHERE file_id = ?;',
+      <Object?>[fileId],
+    );
+    if (rows.isEmpty) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'file $fileId is not registered',
+      );
+    }
+    return rows.first['task_id'] as String;
+  }
+
   /// Number of committed chunks for a file.
   int committedChunkCount(String fileId) {
     final ResultSet rows = database.db.select(
