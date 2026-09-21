@@ -138,6 +138,9 @@ class _NearSendAppState extends State<NearSendApp> {
       return;
     }
     _flow?.dispose();
+    // The session this device published: a peer that pairs with it becomes a client of this node,
+    // which is what makes an offer of ours visible to it (§6 lists offers to the bound session).
+    final String? ownSessionId = widget.session?.payload?.sessionId;
     _flow = SendingFlow(
       session: SendingSession(engine: node.engine, wire: peer.client!),
       // The gateway is the platform's own, and null on a platform whose files are paths - which is
@@ -145,6 +148,12 @@ class _NearSendAppState extends State<NearSendApp> {
       selection: FileSelectionController(gateway: widget.session?.gateway),
       now: () => DateTime.now().millisecondsSinceEpoch,
       transferIdFactory: widget.transferIdFactory,
+      // Asked at send time, not now: the peer may pair with this device after this screen exists,
+      // and that is precisely the moment the answer changes.
+      ownSessionId: ownSessionId,
+      peerHasPaired: () =>
+          ownSessionId != null && node.pairing.hasPairedClient(ownSessionId),
+      mirror: node.mirror,
     );
     _receiving?.dispose();
     _receiving = ReceivingFlow(

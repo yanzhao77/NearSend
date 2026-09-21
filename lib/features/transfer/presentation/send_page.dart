@@ -61,14 +61,20 @@ class SendPage extends StatelessWidget {
   static const String emptyNote = '还没有选择文件。';
   static const String waitingNote = '对方还没有确认这次传输，正在等待。';
 
+  /// Shown while this device is the one offering. The next move is the peer's, and saying so is the
+  /// difference between a wait and a hang.
+  static const String offeredNote = '文件已提供给对方，正在等对方取走并保存；请让对方在“接收文件”里接受。';
+
   /// The phase's own words.
   static String phaseLabel(SendPhase phase) => switch (phase) {
     SendPhase.empty => '待选择',
     SendPhase.ready => '可以发送',
     SendPhase.preparing => '正在准备（读取并校验来源）',
     SendPhase.waitingForPeer => '等待对方接受',
+    SendPhase.offeredToPeer => '已提供给对方，等待对方取走',
     SendPhase.sending => '传输中',
     SendPhase.awaitingVerification => '已送达，等待对方校验并保存',
+    SendPhase.savedByPeer => '对方已保存',
     SendPhase.failed => '未完成',
   };
 
@@ -76,6 +82,7 @@ class SendPage extends StatelessWidget {
   String get actionLabel => switch (phase) {
     SendPhase.preparing => '正在准备…',
     SendPhase.waitingForPeer => '等待对方接受…',
+    SendPhase.offeredToPeer => '等待对方取走…',
     SendPhase.sending => '传输中…',
     SendPhase.failed => '重新发送',
     _ => '发送',
@@ -84,6 +91,7 @@ class SendPage extends StatelessWidget {
   bool get isBusy =>
       phase == SendPhase.preparing ||
       phase == SendPhase.waitingForPeer ||
+      phase == SendPhase.offeredToPeer ||
       phase == SendPhase.sending;
 
   @override
@@ -204,6 +212,14 @@ class _PhaseSection extends StatelessWidget {
             padding: const EdgeInsets.only(top: NearSendSpacing.xxs),
             child: Text(
               SendPage.waitingNote,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        if (phase == SendPhase.offeredToPeer)
+          Padding(
+            padding: const EdgeInsets.only(top: NearSendSpacing.xxs),
+            child: Text(
+              SendPage.offeredNote,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

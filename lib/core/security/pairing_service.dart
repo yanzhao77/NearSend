@@ -114,6 +114,29 @@ class PairingService implements ControlAuthenticator {
   /// Whether [source] has exhausted its pairing failure allowance.
   bool isRateLimited(String source) => _issuer.isRateLimited(source);
 
+  /// Whether a peer has paired with the session [sessionId] this device published.
+  ///
+  /// This is not a security decision and does not gate anything: it answers "has anybody become a
+  /// **client of mine**", which is a question the sending side has to ask before it can choose how
+  /// to move a file. §6 lists offers to the session a transfer is bound to, so a transfer this
+  /// device proposes as a **server** is invisible to a peer that never paired with it - and a sender
+  /// that chose that path blindly would wait for a peer that cannot see it.
+  ///
+  /// Expiry is applied here rather than left to the caller: an expired session is one whose access
+  /// token no longer authenticates, so counting it as a live client would produce exactly the wait
+  /// this getter exists to avoid.
+  bool hasPairedClient(String sessionId) {
+    final String? digest = _digestBySession[sessionId];
+    if (digest == null) {
+      return false;
+    }
+    final _PairedSession? session = _sessionsByDigest[digest];
+    if (session == null || session.sessionId != sessionId) {
+      return false;
+    }
+    return session.expiresAtMillis > _clock();
+  }
+
   /// Re-points the candidates at the port the socket actually bound.
   ///
   /// Called by the node once it is listening, and only then: a payload issued while the port was

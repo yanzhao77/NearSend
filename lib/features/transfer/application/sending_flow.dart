@@ -6,7 +6,10 @@ import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/manifest.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/relative_path.dart';
+import 'package:nearsend/core/protocol/transfer_direction.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/security/pairing_service.dart';
+import 'package:nearsend/core/storage/receiver_mirror_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
@@ -44,6 +47,11 @@ class SendingFlow extends ChangeNotifier {
     required this.session,
     required this.selection,
     required this.now,
+    this.mirror,
+    this.ownSessionId,
+    this.peerHasPaired = _noPeerYet,
+    this.peerFetchInterval = const Duration(milliseconds: 500),
+    this.peerFetchTimeout = const Duration(seconds: 120),
     this.authorizationPollInterval = const Duration(milliseconds: 750),
     this.authorizationTimeout = const Duration(seconds: 120),
     String Function()? transferIdFactory,
@@ -57,6 +65,35 @@ class SendingFlow extends ChangeNotifier {
 
   /// The clock, injected so a test can state timestamps instead of racing them.
   final int Function() now;
+
+  /// What the receiver has reported about this transfer (§9's mirror on the sending side).
+  ///
+  /// Needed by the offering mode and not by the pushing one: when this device is the **server**, the
+  /// peer pulls the bytes, so the only figure this side has is the one the peer sends back. The
+  /// mirror is exactly what §9 creates for that.
+  final ReceiverMirrorRepository? mirror;
+
+  /// The session this device published, which a peer becomes a client of by pairing with it (§3).
+  final String? ownSessionId;
+
+  /// Whether a peer has actually paired with [ownSessionId].
+  ///
+  /// This is what decides the mode. §6 lists offers to the session a transfer is bound to, so an
+  /// offer made as a server is invisible to a peer that never paired with this device - and a sender
+  /// that chose that path without asking would be waiting for something the other end cannot see.
+  ///
+  /// A callback rather than a value because the answer arrives from outside: a peer may pair with
+  /// this device after the screen was built, and a decision taken at construction time would be
+  /// stale exactly when it matters.
+  final bool Function() peerHasPaired;
+
+  static bool _noPeerYet() => false;
+
+  /// How often the offering mode asks whether the peer has taken anything yet.
+  final Duration peerFetchInterval;
+
+  /// How long the offering mode waits for the peer to finish before giving up.
+  final Duration peerFetchTimeout;
 
   /// How often the sender asks whether the peer has accepted yet.
   final Duration authorizationPollInterval;
@@ -73,8 +110,12 @@ class SendingFlow extends ChangeNotifier {
   TransferFlow? _flow;
   OutgoingPlan? _plan;
   int _currentIndex = 0;
+  SendMode _mode = SendMode.push;
 
   SendPhase get phase => _phase;
+
+  /// How this transfer is being moved: pushed by this device, or offered for the peer to pull.
+  SendMode get mode => _mode;
 
   List<SelectedFile> get files => List<SelectedFile>.unmodifiable(_files);
 
@@ -161,11 +202,18 @@ class SendingFlow extends ChangeNotifier {
     _notify();
   }
 
-  /// Runs the whole sequence, returning whether every file's bytes were acknowledged.
+  /// Runs the whole sequence, returning whether the transfer reached the peer.
   ///
-  /// One offer, one decision and one write generation for the transfer; the files are then streamed
-  /// in order. The proposal is not repeated per file because the sealed manifest is what the peer
-  /// verifies against, and proposing again would ask it to accept a second transfer.
+  /// Two modes, chosen before anything is proposed. **Pushing** is the client's: this device uploads
+  /// a manifest to the peer and sends chunks, and §6 makes the peer's decision a step it waits for.
+  /// **Offering** is the server's: this device stages the manifest and lists it to the session the
+  /// peer paired with, and the peer pulls - so progress here is whatever the peer reports back, and
+  /// the end is not "the bytes left" but "the peer said it saved them".
+  ///
+  /// Offering is preferred whenever a peer has actually paired with this device, because it is the
+  /// one path whose other end exists in this application: the receiving screen answers offers, while
+  /// a push needs the peer to accept as a *server*, which this build does not do. Choosing by what
+  /// the other end can see is the difference between a transfer and a wait.
   Future<bool> send() async {
     if (!canSend) {
       return false;
@@ -175,59 +223,114 @@ class SendingFlow extends ChangeNotifier {
     _set(SendPhase.preparing);
 
     try {
-      final OutgoingPlan plan = await session.plan(
-        transferId: _transferIdFactory(),
-        choices: selection.choicesFor(chosen),
-      );
-      _plan = plan;
-      await session.propose(plan);
-      _set(SendPhase.waitingForPeer);
-
-      final ResumeGranted granted = await _awaitAcceptance(plan);
-      _set(SendPhase.sending);
-
-      for (int index = 0; index < plan.manifest.files.length; index++) {
-        final ManifestFile file = plan.manifest.files[index];
-        _currentIndex = index;
-        _flow = TransferFlow.forTotal(
-          totalBytes: file.sizeBytes,
-          atMillis: now(),
-        );
-        _notify();
-
-        await session.sendFile(
-          plan: plan,
-          granted: granted,
-          fileId: file.fileId,
-          onProgress: (int acknowledged, int totalChunks) {
-            // The protocol's chunk length rather than the bytes that were sent: §8 makes the frozen
-            // manifest the authority on what a chunk is, so the figure is derived from the same
-            // lengths the receiver is checking against, and [TransferProgress] clamps the short
-            // last chunk to the file's frozen length.
-            _flow?.applyChunkAcknowledged(
-              acknowledged: acknowledged,
-              chunkBytes: ProtocolLimits.chunkSizeBytes,
-              atMillis: now(),
-            );
-            _notify();
-          },
-        );
-        // Deliberately **not** `applyCompleted`: every chunk acknowledged means the bytes reached
-        // the peer, not that the file was verified against the frozen manifest and saved. Marking
-        // the file complete here would put 已完成 on a sending screen, which is the one word this
-        // whole flow is arranged to avoid - the figure instead reads that the bytes of this file are
-        // all sent, and the phase stays 传输中 until the transfer moves to its own last state.
-        _notify();
-      }
-
-      _set(SendPhase.awaitingVerification);
-      return true;
+      return peerHasPaired() && ownSessionId != null
+          ? await _offer(chosen)
+          : await _push(chosen);
     } on Object catch (error) {
       _failureReason = failureText(error);
       _flow?.applyFailure(_failureReason!, atMillis: now());
       _set(SendPhase.failed);
       return false;
     }
+  }
+
+  /// Offers the transfer and waits for the peer to take it (§6, server side).
+  Future<bool> _offer(FileSelectionReport chosen) async {
+    _mode = SendMode.offer;
+    final OutgoingPlan plan = await session.engine.prepareOutgoing(
+      transferId: _transferIdFactory(),
+      direction: TransferDirection.serverToClient,
+      peerId: ownSessionId,
+      choices: selection.choicesFor(chosen),
+    );
+    _plan = plan;
+    _flow = TransferFlow.forTotal(
+      totalBytes: plan.manifest.totalBytes,
+      atMillis: now(),
+    );
+    _currentIndex = 0;
+    _set(SendPhase.offeredToPeer);
+
+    // The other end has to find it, accept it, pull it and save it. Nothing here can be hurried:
+    // every step after this one belongs to the peer, and the only figure this side has is the one
+    // the peer reports (§9's mirror).
+    final Stopwatch waited = Stopwatch()..start();
+    while (waited.elapsed < peerFetchTimeout) {
+      final ReceiverMirror? reported = mirror?.read(plan.transferId);
+      if (reported != null) {
+        _flow?.applyReportedBytes(reported.committedBytes, atMillis: now());
+        _notify();
+      }
+      final TransferState state = session.engine.transfers.taskState(
+        plan.transferId,
+      );
+      if (state == TransferState.completed) {
+        _flow?.applyCompleted(atMillis: now());
+        _set(SendPhase.savedByPeer);
+        return true;
+      }
+      if (state == TransferState.cancelled ||
+          state == TransferState.failed ||
+          state == TransferState.partiallyCompleted) {
+        throw SendingRefused('对方没有完成这次传输（${state.wireName}）。');
+      }
+      await Future<void>.delayed(peerFetchInterval);
+    }
+    throw SendingRefused(
+      '等待对方取走文件超时（${peerFetchTimeout.inSeconds} 秒）：对方可能还没有连接到本机。',
+    );
+  }
+
+  /// Pushes the transfer to the peer and waits for its decision (§6, client side).
+  Future<bool> _push(FileSelectionReport chosen) async {
+    _mode = SendMode.push;
+    final OutgoingPlan plan = await session.plan(
+      transferId: _transferIdFactory(),
+      choices: selection.choicesFor(chosen),
+    );
+    _plan = plan;
+    await session.propose(plan);
+    _set(SendPhase.waitingForPeer);
+
+    final ResumeGranted granted = await _awaitAcceptance(plan);
+    _set(SendPhase.sending);
+
+    for (int index = 0; index < plan.manifest.files.length; index++) {
+      final ManifestFile file = plan.manifest.files[index];
+      _currentIndex = index;
+      _flow = TransferFlow.forTotal(
+        totalBytes: file.sizeBytes,
+        atMillis: now(),
+      );
+      _notify();
+
+      await session.sendFile(
+        plan: plan,
+        granted: granted,
+        fileId: file.fileId,
+        onProgress: (int acknowledged, int totalChunks) {
+          // The protocol's chunk length rather than the bytes that were sent: §8 makes the frozen
+          // manifest the authority on what a chunk is, so the figure is derived from the same
+          // lengths the receiver is checking against, and [TransferProgress] clamps the short
+          // last chunk to the file's frozen length.
+          _flow?.applyChunkAcknowledged(
+            acknowledged: acknowledged,
+            chunkBytes: ProtocolLimits.chunkSizeBytes,
+            atMillis: now(),
+          );
+          _notify();
+        },
+      );
+      // Deliberately **not** `applyCompleted`: every chunk acknowledged means the bytes reached
+      // the peer, not that the file was verified against the frozen manifest and saved. Marking
+      // the file complete here would put 已完成 on a sending screen, which is the one word this
+      // whole flow is arranged to avoid - the figure instead reads that the bytes of this file are
+      // all sent, and the phase stays 传输中 until the transfer moves to its own last state.
+      _notify();
+    }
+
+    _set(SendPhase.awaitingVerification);
+    return true;
   }
 
   /// Asks whether the peer has accepted, until it has or the bound runs out.
@@ -298,6 +401,16 @@ class SendingFlow extends ChangeNotifier {
   void _notify() => notifyListeners();
 }
 
+/// How a sending flow moves the bytes.
+enum SendMode {
+  /// This device is the client: it proposes to the peer, uploads the manifest and pushes chunks.
+  push,
+
+  /// This device is the server: it stages the manifest, lists the offer to the peer's session, and
+  /// the peer pulls. §6 has no push, so the peer finds it by asking.
+  offer,
+}
+
 /// Where a sending flow is.
 enum SendPhase {
   /// Nothing sendable is selected.
@@ -313,11 +426,22 @@ enum SendPhase {
   /// The offer is sealed and the peer has not accepted yet (§6).
   waitingForPeer,
 
+  /// The offer is staged and listed to the peer's session; the peer has not taken it yet (§6, server
+  /// side). Nothing can be hurried from here - the next move is the peer's.
+  offeredToPeer,
+
   /// The peer accepted; chunks are moving.
   sending,
 
   /// Every chunk was acknowledged. **Not** 完成: verifying and saving are the receiver's work.
   awaitingVerification,
+
+  /// The peer reported that it verified and saved the file.
+  ///
+  /// This is the one sending state where the completion is **earned**, because it is not this
+  /// device's opinion: the receiver said so through §10's `complete`, and §9's mirror is where the
+  /// figure came from.
+  savedByPeer,
 
   /// Stopped, with a reason the user can act on.
   failed,

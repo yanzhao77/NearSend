@@ -33,21 +33,20 @@ class HomePage extends StatelessWidget {
   /// Shown under each action. States the remaining gap rather than "not implemented", which is
   /// no longer true of the button itself.
   ///
-  /// The last sentence is the one that matters most: each of the two flows is wired and tested, and
-  /// **they do not meet in the middle yet** - the sending side pushes as a client
-  /// (`client_to_server`) while the receiving screen answers offers made *to this device as a
-  /// client*. Until one of the two missing halves exists, two installations of this application
-  /// cannot actually exchange a file, and a note that said only 已接通 would be read as "互传可用".
+  /// The middle sentence is the one that matters: a transfer between two installations works when
+  /// **both** devices have pasted the other's connection information, because then each is a client
+  /// of the other and the sending side offers the file for the other to pull. With only one paste,
+  /// only the pasted-into device can send (the other direction would need a server-side acceptance
+  /// this build does not have yet). A note that said only 已接通 would be read as "随便哪一端都能发".
   static const String remainingWorkNote =
-      '发送与接收各自已接线（Android 用系统选择器，Windows 输入路径），但两端尚未在中途相遇；'
-      '续传、Windows 取件器与真机双向验证仍未完成。';
+      '两端需要互相粘贴对方的连接信息才能互传；续传、Windows 取件器与真机双向验证仍未完成。';
 
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
 
   static const String baselineNotice =
-      '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试；“发送”与“接收”两条界面路径也各自接通，'
-      '但发送端按客户端推送、接收端只受理发给本客户端（作为客户端）的提供，两者尚未对接，'
-      '因此两台设备之间还不能真正互传文件。续传、Windows 取件器与真机验证同样未完成。';
+      '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试，“发送”与“接收”两条界面路径已接通，'
+      '两台设备互相粘贴连接信息后即可经真实 TLS 互传并各自校验落盘。尚未完成：断点续传、'
+      'Windows 取件器、以及只粘贴一侧时的推送受理（需本机作为服务端受理，未做）。';
 
   @override
   Widget build(BuildContext context) {

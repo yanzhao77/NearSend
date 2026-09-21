@@ -106,8 +106,41 @@ void main() {
         isNot(SendPage.phaseLabel(SendPhase.waitingForPeer)),
         reason: 'one is local work and the other is the peer, and they are not interchangeable',
       );
+
+      await pump(tester, phase: SendPhase.offeredToPeer);
+      expect(
+        find.text(SendPage.offeredNote),
+        findsOneWidget,
+        reason:
+            'here the next move is the peer taking the file, which is a third kind of wait and '
+            'needs its own sentence rather than the one about a decision',
+      );
+      expect(
+        SendPage.phaseLabel(SendPhase.offeredToPeer),
+        isNot(SendPage.phaseLabel(SendPhase.waitingForPeer)),
+      );
     },
   );
+
+  testWidgets('the one sending state that may say the peer saved it', (
+    tester,
+  ) async {
+    await pump(tester, phase: SendPhase.savedByPeer);
+
+    expect(
+      find.text(SendPage.phaseLabel(SendPhase.savedByPeer)),
+      findsOneWidget,
+    );
+    expect(
+      SendPage.phaseLabel(SendPhase.savedByPeer),
+      isNot(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+      reason:
+          'these are different claims: one is "the bytes arrived", the other is "the peer said it '
+          'verified and saved them" - and only the second can be believed, because §10 makes the '
+          'receiver the side that says it',
+    );
+    expect(SendPage.phaseLabel(SendPhase.savedByPeer), contains('对方'));
+  });
 
   testWidgets(
     'the figures come from the flow and the action is disabled while busy',

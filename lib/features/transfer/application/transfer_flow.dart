@@ -59,6 +59,18 @@ class TransferFlow {
     );
   }
 
+  /// Records a figure the **peer** reported for how much it has committed.
+  ///
+  /// Used where this device is the server and the peer pulls: §9 makes the receiver the only
+  /// authority on progress, and the mirror is where its reports arrive. Nothing here derives the
+  /// number - taking it from anywhere else would be this side inventing the other side's state.
+  void applyReportedBytes(int committedBytes, {required int atMillis}) {
+    _progress = _progress.updated(
+      transferredBytes: committedBytes,
+      atMillis: atMillis,
+    );
+  }
+
   /// Records that the peer accepted one chunk of a file whose frozen length is [chunkBytes].
   ///
   /// [chunkBytes] comes from the frozen manifest rather than from the bytes that were sent, so a
