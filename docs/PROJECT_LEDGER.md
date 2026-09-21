@@ -581,6 +581,25 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   诊断标签是字面量 `"file"`/`"saf"`，因此**路径或 document id 无法经由它进入诊断**（§5）。
 - 状态：代码已实现；单元测试通过（6 项）。**本批是加法式改动：引擎仍从 `File` 规划。**
 
+#### `t11-01-12` / `t11-01-13`：发送路径改到 `SourceBytes`，节点可解析自己的文档来源
+
+- **`t11-01-12`（引擎接线）**：`LocalSourceReader` 改用 `readAt`、不再持有文件句柄，同一段规划代码
+  既哈希桌面文件也哈希 SAF 文档；`SourceFilePlan.file` 变为可空便利字段；`OutgoingFileChoice`
+  接受 `path` 与 `source` **二选一**并在**构造时**拒绝「都给／都不给」（否则不可读来源会以
+  「哈希失败」浮现且说不出原因）；`TransferEngine.sourceResolver` 让文件即文档的平台为**自己的
+  scheme** 作答，引擎无需知道自己在哪个平台上运行。
+- **最重要的测试**：**一份文档与一个持有相同字节的文件产生相同的块清单摘要与整文件摘要**。
+  这正是这个端口存在的理由——接收端据以校验的东西**不能取决于发送端从哪里读的字节**。
+  另一条用例流式发送文档并记录见过的最大块必须等于**一个协议块**（整文档读取会在这里显出完整长度），
+  因此内存上界是被**断言**而非被假设的。
+- **`t11-01-13`（节点接线）**：`NearSendNode.open` 新增 `sourceResolver` 并传给引擎，默认仍是路径解析器。
+  **没有这一步，前两轮的 SAF 支持从应用里根本够不到**：节点会用默认解析器把记录下来的 `content://`
+  引用当成路径去打开。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1153 项通过**（本机 TLS 双向传输测试
+  在新代码路径上仍然通过）；Android debug/release 在 CI 干净 runner 上构建通过。
+  **仍然未验证**：没有任何一条测试让 SAF 来源的传输**经过一个节点**；SAF 通道与这一切
+  **从未在设备上运行过**。
+
 #### 明确登记的下一步（未完成，不得当作已完成）
 
 | 事项 | 为什么必需 | 具体改动点 |
@@ -588,10 +607,12 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | **把发送路径改到 `SourceBytes` 上** | 这是「**Android 能作为发送方**」的那一步：当前 `prepareOutgoing` 只接受本地路径，设备因此能收不能发 | `SourceFilePlan.file` → `.source`；`LocalSourceReader.plan`/`streamChunks` 改用 `readAt`；`OutgoingFileChoice.path` → `SourceBytes` + `sourceRef`；`TransferEngine.planFor` 需要 `SourceResolver`（默认 `FileSourceBytes`，Android 传入由 `AndroidFileGateway` 构造的 `SafSourceBytes`）；三处测试同步 |
 | **把选择结果接进引擎编排** | 让 UI 的「选择→提议→密封→恢复→发送」成为一条真实链路 | `FileSelectionReport` → `prepareOutgoing` → `pagesFor` → `TransferClient` 提议/密封 → `resume` → `sendFile` |
 | **传输各阶段的页面装配** | 阶段五要求准备/扫描/传输/校验/导出是可区分状态 | 把 `TransferProgress.phase` 接到真实引擎状态 |
+| **一条经节点、以 SAF 文档为来源的传输测试** | `t11-01-12`/`t11-01-13` 只验证到「默认解析器下全绿」，SAF 经节点的可用性尚无证据 | 在现成的真实 TLS 双向测试基础上，把发送方的来源换成 `SafSourceBytes`（由内存网关支撑），并给两个节点都传入 `sourceResolver`；该文件的两处用例共用同一段 `choices` 与 helper，改动需一次做完，**不要只改一半** |
 
 #### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
 
 - **SAF 通道的设备验证**：代码与契约测试齐备，但**从未在真机上执行过**（安装被设备弹窗阻塞）。
+- **SAF 经节点的验证**：见上表第三行；这是 `t11-01-12`/`t11-01-13` 之后仍缺的证据。
 - **基础 UI 其余部分**：把选择结果接进「开始传输」的引擎编排（`prepareOutgoing` + `pagesFor` +
   `sendFile`），以及传输各阶段的完整页面装配。已完成的页面：首页接线、连接页、传输详情页、
   进度模型、接收确认+空间不足、文件选择结果、SAF 通道与选择控制器。
