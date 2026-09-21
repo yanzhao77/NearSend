@@ -498,6 +498,28 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 状态：**代码已实现；单元测试通过（1103 项）**。**这是一次真实的双向传输，但发生在同一台机器上
   的两个节点之间**——台账把它与真机运行记为两个不同的结论。**真机仍未执行**。
 
+#### `t11-01-06` 真机运行：Android → Windows 已通过，Windows → Android 未完成
+
+- `tooling/spikes/lan_server/main.dart` 重写为**完整节点夹具**：跑真实 `NearSendNode`（同一套端点、
+  存储与传输），自己按观察本机数据库的循环行动，因为设备测试无法读取 Windows 进程的输出；
+  它以一行 JSON 公布配对载荷、它准备的出站 transfer，以及送达内容的摘要。
+- `integration_test/android_bidirectional_transfer_test.dart`：真机同时作为发送方与接收方，
+  两端用同一个确定性公式生成内容，因此各自都能独立说出期望摘要。
+
+**真机结论（`22081283C` / Android 14，Windows `192.168.10.100`，同一 AP）：**
+
+| 方向 | 状态 | 证据 |
+| --- | --- | --- |
+| **Android → Windows** | ✅ **真机通过** | Windows 节点输出 `{"kind":"inbound-complete","verifiedBytes":4199304,"wholeFileDigestMatches":true,"savedPath":"…\\exports\\android-中方文件.bin","savedSha256":"d2a18353…","exportSaved":true}`——字节数与设备声明的清单一致、整文件摘要复算一致、**中文文件名经 §5.1 规则后保留**、导出已提交 |
+| **Windows → Android** | ❌ **未完成** | 首次尝试**败在测试的 30 秒预算上而不是传输上**（已改为每例 6 分钟）；此后每次尝试都在安装阶段被 `INSTALL_FAILED_USER_RESTRICTED` 拒绝 |
+
+**外部阻塞（如实记录，不标记为通过也不标记为失败）**：`INSTALL_FAILED_USER_RESTRICTED`
+是**设备自身的确认弹窗**，需要人工点击。本轮期间它**曾经成功过一次**（唤醒屏幕后 `adb install` 成功），
+说明它不是永久性配置问题，但**无法在无人值守时稳定通过**。这类阻塞按 `AGENTS.md` 属于
+「系统授权弹窗必须人工点击」，留待用户在场时执行。
+
+另一条应记住的运行事实：**设备熄屏/锁屏时 adb 会报同一个 user-restricted 失败**，而构建本身没有任何问题。
+
 #### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
 
 - **Android SAF 平台通道**（生产文件选择与授权）与**基础 UI**：首页仍是禁用壳，
