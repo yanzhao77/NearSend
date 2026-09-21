@@ -4,8 +4,7 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 
 /// NearSend home shell.
 ///
-/// Scope for T01-01 is deliberately limited to the information architecture of
-/// `docs/ui/UI_UX_SPEC.md` §4 "首页":
+/// Scope is the information architecture of `docs/ui/UI_UX_SPEC.md` §4 "首页":
 ///
 /// * 发送文件 / 接收文件 as the two primary actions with equal visual weight;
 /// * 继续任务 only when recoverable tasks exist — none exist yet, so it is not
@@ -13,24 +12,32 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 /// * the empty-state sentence explaining that no internet is needed but a
 ///   local Wi-Fi link is.
 ///
-/// The primary actions are **disabled on purpose**. Protocol, pairing and
-/// storage cores exist, but no real transport flow is wired to this shell;
-/// `docs/AGENT_TASK_PLAYBOOK.md` §9
-/// forbids presenting a static shell as a finished capability.
+/// ## The actions now do something, and the note says how much
 ///
-/// Two things UI_UX_SPEC §4 asks for are *not* shown because their real data
-/// source does not exist yet: the local device name and the current network
-/// availability. Faking either would be a false claim, so the page instead
-/// states plainly what is not implemented.
+/// They were disabled shells while no transport existed. Both are now wired to real routes: the
+/// send action opens the connection screen, which publishes this device's real pairing payload
+/// and accepts one that the user pastes, and the receive action opens the same screen with the
+/// receive wording. So the buttons are no longer a placeholder.
+///
+/// The note underneath is **not** removed, because the flows below this screen are not finished:
+/// choosing files still needs the platform picker, and the transfer screen has no engine behind it
+/// yet on a device. A reviewer must not read an enabled button as "file transfer works", and
+/// `docs/AGENT_TASK_PLAYBOOK.md` §9 forbids presenting a partial capability as a finished one. So
+/// the note stays and says precisely what is still missing.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
-  static const String notImplementedNote = '功能尚未实现（T03-01 / T03-02）';
+  static const String connectRoute = '/connect';
+  static const String transferRoute = '/transfer';
+
+  /// Shown under each action. States the remaining gap rather than "not implemented", which is
+  /// no longer true of the button itself.
+  static const String remainingWorkNote = '连接与配对已接线；文件选择与传输编排仍在接入中。';
 
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
 
   static const String baselineNotice =
-      '当前仍为工程壳：协议、配对和存储核心已有实现，但发送、接收、发现、恢复与导出业务链路尚未接入。';
+      '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试，但设备端文件选择与传输编排尚未接入。';
 
   @override
   Widget build(BuildContext context) {
@@ -65,14 +72,20 @@ class HomePage extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: NearSendSpacing.xl),
-                const _PrimaryAction(
+                _PrimaryAction(
                   icon: Icons.upload_file_outlined,
                   label: '发送文件',
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pushNamed(connectRoute, arguments: 'send'),
                 ),
                 const SizedBox(height: NearSendSpacing.sm),
-                const _PrimaryAction(
+                _PrimaryAction(
                   icon: Icons.download_outlined,
                   label: '接收文件',
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pushNamed(connectRoute, arguments: 'receive'),
                 ),
               ],
             ),
@@ -111,15 +124,21 @@ class _BaselineNotice extends StatelessWidget {
   }
 }
 
-/// A disabled primary action with an explicit "not implemented" note.
+/// A primary action with an explicit note about what still lies below it.
 ///
-/// Kept disabled rather than wired to a placeholder route so that no user or
-/// reviewer can mistake the shell for working functionality.
+/// The enabled state and the note are deliberately kept together: a button that works is not the
+/// same claim as a flow that works, and separating them is how the second gets implied by the
+/// first.
 class _PrimaryAction extends StatelessWidget {
-  const _PrimaryAction({required this.icon, required this.label});
+  const _PrimaryAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
 
   final IconData icon;
   final String label;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -127,14 +146,14 @@ class _PrimaryAction extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         FilledButton.icon(
-          onPressed: null,
+          onPressed: onPressed,
           icon: Icon(icon),
           label: Text(label),
         ),
         Padding(
           padding: const EdgeInsets.only(top: NearSendSpacing.xxs),
           child: Text(
-            HomePage.notImplementedNote,
+            HomePage.remainingWorkNote,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),

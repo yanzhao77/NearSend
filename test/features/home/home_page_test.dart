@@ -31,12 +31,14 @@ void main() {
     )) {
       expect(
         button.onPressed,
-        isNull,
-        reason: 'the shell must not offer an action that has no implementation',
+        isNotNull,
+        reason:
+            'both actions are now wired to the real connection screen; the note below them '
+            'states what is still missing rather than the button pretending to work',
       );
     }
 
-    expect(find.text(HomePage.notImplementedNote), findsNWidgets(2));
+    expect(find.text(HomePage.remainingWorkNote), findsNWidgets(2));
   });
 
   testWidgets('explains that no internet is required but a local link is', (
