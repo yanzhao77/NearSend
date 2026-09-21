@@ -13,9 +13,13 @@ import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
+import 'package:nearsend/core/transfer/transfer_client.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
+import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
+import 'package:nearsend/features/transfer/application/sending_session.dart';
+import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
@@ -477,6 +481,164 @@ void main() {
       await tester.runAsync(() async {
         await peer.stop();
         peer.close();
+      });
+    },
+  );
+
+  testWidgets(
+    'a transfer pushed to this device is accepted from the interface',
+    (tester) async {
+      const String fileId = '00000000-0000-4000-8000-000000000006';
+      const String transferId = '66666666-7777-4888-8999-aaaaaaaaaaaa';
+
+      final Uint8List payload = Uint8List.fromList(<int>[
+        ...List<int>.generate(2048, (int i) => i % 227),
+        ...'推送界面.bin'.codeUnits,
+      ]);
+      final File source = File('${root.path}${Platform.pathSeparator}推送界面.bin')
+        ..writeAsBytesSync(payload);
+
+      final NodeSession node = session();
+      await tester.runAsync(() => node.start());
+      final NearSendNode app = node.node!;
+
+      // The other device pairs with **this** device and pushes to it. Nothing of ours has to be
+      // connected for that to happen, which is the point of this path: a client that paired with this
+      // node can put a file on it whether or not this end ever paired back.
+      final NearSendNode peerNode = (await tester.runAsync(() async {
+        final NearSendNode opened = await NearSendNode.open(
+          directory: '${root.path}${Platform.pathSeparator}pusher',
+          candidateAddresses: const <String>['127.0.0.1'],
+        );
+        await opened.start();
+        return opened;
+      }))!;
+      final TransferClient peerToApp = (await tester.runAsync(() async {
+        final TransferClient client = TransferClient(
+          pin: app.pin,
+          host: '127.0.0.1',
+          port: app.server.boundPort,
+        );
+        await client.pairFrom(app.payload!, clientLabel: 'pusher');
+        return client;
+      }))!;
+
+      final Directory saved = Directory(
+        '${root.path}${Platform.pathSeparator}pushed',
+      );
+
+      // The push starts and stops at this device's decision, so it runs while the interface is
+      // driven. Deliberately not wrapped in `runAsync`: that block may not be entered twice at once,
+      // and the interface needs it too.
+      final SendingFlow pusher = SendingFlow(
+        session: SendingSession(engine: peerNode.engine, wire: peerToApp),
+        selection: FileSelectionController(
+          gateway: null,
+          idFactory: () => fileId,
+        ),
+        now: () => 1000,
+        transferIdFactory: () => transferId,
+        // Nobody paired with the pushing node, so it proposes to this device rather than offering to
+        // a client of its own - which is exactly the single-paste arrangement.
+        ownSessionId: '99999999-9999-4999-8999-999999999999',
+        peerHasPaired: () => false,
+        authorizationPollInterval: const Duration(milliseconds: 50),
+        authorizationTimeout: const Duration(seconds: 20),
+      );
+      // Selection first, in a `runAsync` of its own: reading the file length is real I/O, and it has
+      // to be finished before the send starts.
+      await tester.runAsync(() => pusher.addPaths(<String>[source.path]));
+
+      int? acknowledged;
+      final Future<bool> pushed = pusher.send().then((bool ok) {
+        acknowledged = ok ? 1 : 0;
+        return ok;
+      });
+
+      await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
+      await tester.pump();
+      await tapText(tester, '接收文件');
+      await tester.pumpAndSettle();
+      // The receiving screen is reached after a verified connection, although the push itself does not
+      // need one: what is on offer comes from this device's own rows.
+      // A **fresh** session for this device's own connection: the token the pusher used is one-time
+      // and already spent, so reusing that payload would be refused - correctly.
+      final PairingPayload forOurselves = app.openPairingSession();
+      await tester.enterText(find.byType(TextField), forOurselves.encode());
+      await tester.pump();
+      await tapText(tester, '连接');
+      await settle(tester, () => visible(ConnectionPage.connectedNote));
+      await tapText(tester, ConnectionPage.continueLabelReceive);
+
+      await settle(
+        tester,
+        () =>
+            visible(ReceivePage.pushSectionHeading) &&
+            visible('1 个文件 · ${formatBytes(payload.length)}'),
+        attempts: 60,
+      );
+      expect(
+        find.text(ReceivePage.pushSectionHeading),
+        findsOneWidget,
+        reason:
+            'a push is learned from this device\'s own database, not from the peer: the client that '
+            'proposed it may never be asked anything',
+      );
+      expect(
+        find.text('1 个文件 · ${formatBytes(payload.length)}'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(find.byType(TextField), saved.path);
+      await tester.pump();
+      await tapText(tester, '接受这次发送');
+
+      await settle(
+        tester,
+        () => visible(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
+        attempts: 200,
+        realDelay: const Duration(milliseconds: 150),
+      );
+      expect(
+        find.text(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
+        findsOneWidget,
+      );
+      expect(
+        find.text(ReceivePage.spaceUnknownNote),
+        findsOneWidget,
+        reason:
+            'this build cannot measure a volume, so the screen has to say that no space pre-check was '
+            'done - reading as "checked and fine" would be a claim nobody made',
+      );
+      // The sender finishes on its own schedule; waited for rather than assumed, so a failure there
+      // is reported here instead of as a missing file below.
+      await settle(tester, () => acknowledged != null, attempts: 60);
+      expect(
+        acknowledged,
+        isNotNull,
+        reason: 'the pushing side has to learn that this device took the file',
+      );
+      await pushed;
+
+      final File written = saved
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((File f) => !f.path.endsWith('.nearsend-part'))
+          .single;
+      expect(
+        sha256.convert(written.readAsBytesSync()).toString(),
+        sha256.convert(payload).toString(),
+        reason:
+            'the pushed direction is the one that works with a single paste, and this is the '
+            'assertion that a file put on this device through it is the file that was sent',
+      );
+
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester, () => node.phase == NodePhase.stopped);
+      await tester.runAsync(() async {
+        peerToApp.close();
+        await peerNode.stop();
+        peerNode.close();
       });
     },
   );

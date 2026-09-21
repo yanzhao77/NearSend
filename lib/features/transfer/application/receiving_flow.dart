@@ -93,6 +93,9 @@ class ReceivingFlow extends ChangeNotifier {
   /// §6 lists offers to the session a transfer is bound to, so this is the receiving device's only
   /// way to learn that something is waiting - there is no push in the protocol.
   Future<List<OfferSummary>> refresh() async {
+    if (_disposed) {
+      return const <OfferSummary>[];
+    }
     try {
       _offers = await wire.offers();
       if (_phase == ReceivePhase.idle || _phase == ReceivePhase.offered) {
@@ -290,7 +293,22 @@ class ReceivingFlow extends ChangeNotifier {
     _notify();
   }
 
-  void _notify() => notifyListeners();
+  void _notify() {
+    // A screen's poll can outlive the flow it asks by a frame - the timer is cancelled when the page
+    // is disposed, which is not necessarily before the flow it was given. Notifying then would be a
+    // crash in debug and a silent no-op in release, so it is refused in both the same way.
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  bool _disposed = false;
 }
 
 /// Where a receiving flow is.

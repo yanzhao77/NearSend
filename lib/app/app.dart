@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/core/network/task_authorization_endpoint.dart';
+import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
 import 'package:nearsend/features/home/presentation/home_page.dart';
@@ -13,6 +16,7 @@ import 'package:nearsend/features/transfer/application/file_selection_controller
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
+import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
@@ -98,12 +102,39 @@ class _NearSendAppState extends State<NearSendApp> {
   /// The receiving flow for the same connection: what the peer is offering, and the answer to it.
   ReceivingFlow? _receiving;
 
+  /// What **this** device is being asked to accept, which needs no connection at all.
+  ///
+  /// A client that paired with this node proposes to it and pushes whether or not this device ever
+  /// paired back, so a screen for that cannot wait for a connection to exist. It needs the node and
+  /// nothing else.
+  ServerReceivingFlow? _incoming;
+
   @override
   void initState() {
     super.initState();
     // Not awaited: the first frame must not wait for a socket and a database, and the session
     // publishes its own phases for the screen to render in the meantime.
-    unawaited(widget.session?.start() ?? Future<void>.value());
+    unawaited(_openNode());
+  }
+
+  /// Starts the node and, once it is up, prepares to answer what is pushed to it.
+  Future<void> _openNode() async {
+    final NodeSession? session = widget.session;
+    if (session == null) {
+      return;
+    }
+    await session.start();
+    final NearSendNode? node = session.node;
+    if (node == null) {
+      return;
+    }
+    _incoming = ServerReceivingFlow(
+      engine: node.engine,
+      now: () => DateTime.now().millisecondsSinceEpoch,
+    );
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -118,6 +149,7 @@ class _NearSendAppState extends State<NearSendApp> {
     widget.peer?.dispose();
     _flow?.dispose();
     _receiving?.dispose();
+    _incoming?.dispose();
     super.dispose();
   }
 
@@ -171,8 +203,35 @@ class _NearSendAppState extends State<NearSendApp> {
   /// Null when the flow that screen would need has not been built, which is the same rule the
   /// connect button follows: a control that cannot act is not rendered.
   String? _continueTarget(bool receiving) => receiving
-      ? (_receiving == null ? null : NearSendApp.receiveRoute)
+      ? (_receiving == null && _incoming == null
+            ? null
+            : NearSendApp.receiveRoute)
       : (_flow == null ? null : NearSendApp.sendRoute);
+
+  /// The storage context a pushed transfer is accepted with.
+  ///
+  /// **The availability is unknown on purpose.** This build has no way to measure a volume - there
+  /// is no Dart API for free space and no platform channel for it yet - and §6 makes the acceptance
+  /// commit to a space estimate. Inventing a figure would be worse than admitting there is none, so
+  /// the estimate is recorded as unknown, the flow refuses only a *proven* shortfall, and the screen
+  /// says out loud that no pre-check was done. Adding the measurement is a platform task, and until
+  /// it exists this is the honest arrangement.
+  ReceiverStorageContext _storageContext(String saveLocation) {
+    const VolumeId appPrivate = VolumeId('app-private');
+    const VolumeId destination = VolumeId('save-location');
+    return ReceiverStorageContext(
+      stagingVolume: appPrivate,
+      exportVolume: destination,
+      databaseVolume: appPrivate,
+      // Not `const`: a map keyed by a type with value equality cannot be a constant map, and the
+      // distinction here is not worth a different identifier type.
+      availability: <VolumeId, VolumeAvailability>{
+        appPrivate: const VolumeAvailability.unknown(),
+        destination: const VolumeAvailability.unknown(),
+      },
+      saveLocationRef: saveLocation,
+    );
+  }
 
   /// The peer state, as the connection screen renders it.
   ///
@@ -253,25 +312,47 @@ class _NearSendAppState extends State<NearSendApp> {
         },
         NearSendApp.receiveRoute: (BuildContext context) {
           final ReceivingFlow? receiving = _receiving;
-          if (receiving == null) {
-            // Reachable only by a hand-typed route: a connection is what creates the flow, and a
-            // screen without one could only show an empty list forever.
-            return const Scaffold(body: Center(child: Text('还没有建立连接，无法接收。')));
+          final ServerReceivingFlow? incoming = _incoming;
+          if (receiving == null && incoming == null) {
+            // Reachable only by a hand-typed route before the node is up: there is nothing to ask
+            // and nothing to be pushed yet.
+            return const Scaffold(body: Center(child: Text('本机节点尚未就绪，无法接收。')));
           }
           return ListenableBuilder(
-            listenable: receiving,
+            listenable: Listenable.merge(<Listenable?>[receiving, incoming]),
             builder: (BuildContext context, Widget? _) => ReceivePage(
-              phase: receiving.phase,
-              offers: receiving.offers,
-              progress: receiving.progress,
-              fileName: receiving.currentFileName,
-              fileNumber: receiving.currentFileNumber,
-              fileCount: receiving.fileCount,
-              failureReason: receiving.failureReason,
-              savedPaths: receiving.savedPaths,
-              onRefresh: receiving.refresh,
-              onAccept: (offer, saveLocation) =>
-                  receiving.accept(offer, saveLocationRef: saveLocation),
+              phase: receiving?.phase ?? ReceivePhase.idle,
+              offers: receiving?.offers ?? const <OfferSummary>[],
+              progress: receiving?.progress,
+              fileName: receiving?.currentFileName,
+              fileNumber: receiving?.currentFileNumber ?? 0,
+              fileCount: receiving?.fileCount ?? 0,
+              failureReason: receiving?.failureReason,
+              savedPaths: receiving?.savedPaths ?? const <String>[],
+              // Both halves are asked, because §6 announces neither: a client's view of what the
+              // peer offers, and this device's own view of what is being pushed to it.
+              onRefresh: () async {
+                await receiving?.refresh();
+                await incoming?.refresh();
+              },
+              onAccept: (offer, saveLocation) async =>
+                  await receiving?.accept(
+                    offer,
+                    saveLocationRef: saveLocation,
+                  ) ??
+                  false,
+              pushOffers: incoming?.pending ?? const <ServerOffer>[],
+              pushPhase: incoming?.phase ?? ServerReceivePhase.waiting,
+              pushSpaceVerdict: incoming?.spaceVerdict,
+              pushFailureReason: incoming?.failureReason,
+              pushSavedPaths: incoming?.savedPaths ?? const <String>[],
+              onAcceptPush: incoming == null
+                  ? null
+                  : (offer, saveLocation) => incoming.accept(
+                      offer,
+                      context: _storageContext(saveLocation),
+                      targetRef: saveLocation,
+                    ),
             ),
           );
         },

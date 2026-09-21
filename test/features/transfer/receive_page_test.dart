@@ -3,7 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
+import 'package:nearsend/core/protocol/transfer_direction.dart';
+import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
+import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
@@ -30,6 +33,12 @@ void main() {
     List<String> savedPaths = const <String>[],
     Future<void> Function()? onRefresh,
     Future<bool> Function(OfferSummary, String)? onAccept,
+    List<ServerOffer> pushOffers = const <ServerOffer>[],
+    ServerReceivePhase pushPhase = ServerReceivePhase.waiting,
+    SpaceVerdict? pushSpaceVerdict,
+    String? pushFailureReason,
+    List<String> pushSavedPaths = const <String>[],
+    Future<bool> Function(ServerOffer, String)? onAcceptPush,
   }) => tester.pumpWidget(
     MaterialApp(
       theme: buildNearSendTheme(Brightness.light),
@@ -42,6 +51,12 @@ void main() {
         fileCount: 2,
         failureReason: failureReason,
         savedPaths: savedPaths,
+        pushOffers: pushOffers,
+        pushPhase: pushPhase,
+        pushSpaceVerdict: pushSpaceVerdict,
+        pushFailureReason: pushFailureReason,
+        pushSavedPaths: pushSavedPaths,
+        onAcceptPush: onAcceptPush,
         // Long enough that a test never trips it by accident; the polling behaviour has its own
         // case below.
         refreshInterval: const Duration(seconds: 30),
@@ -203,6 +218,87 @@ void main() {
           '"nothing offered" and "the connection failed" are different answers, and the first '
           'would leave the user waiting for something that cannot arrive',
     );
+    await unmount(tester);
+  });
+
+  testWidgets(
+    'a transfer being pushed to this device is shown and answerable',
+    (tester) async {
+      ServerOffer? answered;
+      String? location;
+      await pump(
+        tester,
+        phase: ReceivePhase.idle,
+        pushOffers: <ServerOffer>[
+          ServerOffer(
+            transferId: '55555555-6666-4777-8888-999999999999',
+            manifestDigest: 'abababababababababababababababababababababababababababababababab',
+            direction: TransferDirection.clientToServer,
+            fileCount: 3,
+            totalBytes: 4 * 1024 * 1024,
+          ),
+        ],
+        onAcceptPush: (ServerOffer o, String where) async {
+          answered = o;
+          location = where;
+          return true;
+        },
+      );
+
+      expect(find.text(ReceivePage.pushSectionHeading), findsOneWidget);
+      expect(
+        find.text('3 个文件 · 4.0 MiB'),
+        findsOneWidget,
+        reason:
+            'the offer is described from the sealed manifest, so the user is deciding about the '
+            'transfer they will actually receive',
+      );
+
+      // Without a location there is nothing to accept into.
+      expect(
+        find.widgetWithText(FilledButton, '接受这次发送'),
+        findsNothing,
+        reason:
+            '§6 keeps the acceptance and the save location together; offering the button before a '
+            'location exists would invite a decision that cannot be recorded',
+      );
+
+      await tester.enterText(find.byType(TextField), '/tmp/pushed');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '接受这次发送'));
+      await tester.pump();
+
+      expect(answered?.transferId, '55555555-6666-4777-8888-999999999999');
+      expect(location, '/tmp/pushed');
+      await unmount(tester);
+    },
+  );
+
+  testWidgets('an unmeasured volume is said out loud, not shown as a pass', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      phase: ReceivePhase.idle,
+      pushSpaceVerdict: SpaceVerdict.unknown,
+      onAcceptPush: (_, _) async => true,
+    );
+
+    expect(
+      find.text(ReceivePage.spaceUnknownNote),
+      findsOneWidget,
+      reason:
+          'this build cannot measure a volume, so the screen has to say that no pre-check was '
+          'done; silence would be read as "there is enough space"',
+    );
+
+    await pump(
+      tester,
+      phase: ReceivePhase.idle,
+      pushSpaceVerdict: SpaceVerdict.insufficient,
+      onAcceptPush: (_, _) async => true,
+    );
+    expect(find.text(ReceivePage.spaceInsufficientNote), findsOneWidget);
     await unmount(tester);
   });
 }

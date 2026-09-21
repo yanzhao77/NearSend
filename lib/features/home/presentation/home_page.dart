@@ -39,14 +39,15 @@ class HomePage extends StatelessWidget {
   /// only the pasted-into device can send (the other direction would need a server-side acceptance
   /// this build does not have yet). A note that said only 已接通 would be read as "随便哪一端都能发".
   static const String remainingWorkNote =
-      '两端需要互相粘贴对方的连接信息才能互传；续传、Windows 取件器与真机双向验证仍未完成。';
+      '发送与接收均已接通（两端都粘贴对方的连接信息更省事；只粘贴一侧也能传）；'
+      '续传、Windows 取件器与真机双向验证仍未完成。';
 
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
 
   static const String baselineNotice =
       '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试，“发送”与“接收”两条界面路径已接通，'
-      '两台设备互相粘贴连接信息后即可经真实 TLS 互传并各自校验落盘。尚未完成：断点续传、'
-      'Windows 取件器、以及只粘贴一侧时的推送受理（需本机作为服务端受理，未做）。';
+      '两台设备经真实 TLS 互传后各自校验并落盘。尚未完成：断点续传、Windows 取件器、'
+      '剩余空间的平台测量（因此暂不做空间预检并如实说明），以及真机双向验证。';
 
   @override
   Widget build(BuildContext context) {

@@ -130,6 +130,9 @@ class ServerReceivingFlow extends ChangeNotifier {
   /// §6's route for a client's view of offers is `GET /v1/offers`; this device is a server and its
   /// client may be asleep, so the question is asked of its own rows.
   Future<List<ServerOffer>> refresh() async {
+    if (_disposed) {
+      return const <ServerOffer>[];
+    }
     final List<ServerOffer> found = <ServerOffer>[];
     for (final String transferId in engine.transfers.taskIdsInState(
       TransferState.waitingAccept,
@@ -326,7 +329,21 @@ class ServerReceivingFlow extends ChangeNotifier {
     }
   }
 
-  void _notify() => notifyListeners();
+  void _notify() {
+    // A screen's poll can outlive the flow it asks by a frame; notifying then would be a crash in
+    // debug and a silent no-op in release, so it is refused in both the same way.
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  bool _disposed = false;
 }
 
 /// Where a server-side receive is.
