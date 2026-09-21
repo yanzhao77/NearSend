@@ -544,13 +544,38 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - **这不使整个目标进入 blocked**：仍有大量不依赖设备的工作（UI 其余页面、Android SAF 通道、
   文档与证据），按目标策略继续推进。**Windows → Android 真机验证仍待用户在场时执行。**
 
+#### `t11-01-08` … `t11-01-10`：接收确认、文件选择结果、SAF 通道与选择控制器
+
+- **`ReceiveConfirmationPage` + `SpaceEstimateSnapshot` 渲染**（`t11-01-08`）：§16.2 要求逐卷解释性明细
+  （「不能只返回布尔值」），§11 给 `SPACE_INSUFFICIENT` 的处方是清理空间/换位置，§16.1 禁止把未知读数
+  渲染成通过的检查。因此：**已知不足时拒绝接受**（不只禁用按钮）、**逐卷渲染规划器自己的理由文本**、
+  **未知必须明说并要求用户确认风险**（`unknown` 可确认而不是被拒绝——拒绝它会让读不出容量的卷表现得像满盘）。
+- **`FileSelectionPage` + `FileSelectionReport`**（`t11-01-09`）：规则放在报表对象而不是 `build` 里，
+  因此**对规则的断言比对渲染文本的断言更强也更稳**（这是上一屏学到的教训：按按钮文案断言曾四处脆弱失败）。
+  规则：§5.1 路径在本地就拒协议会拒的名字；重复 `fileId` 是问题而重复显示名只是提示；**列出全部问题而非第一个**。
+  **测试发现一处真实冗余**：路径副标题与标题相同时仍被渲染，扁平文件名出现两次——已改为仅在信息不同时显示。
+- **Android SAF 平台通道**（`t11-01-10`）：Kotlin `MainActivity` 提供
+  `pickFiles`/`probe`/`readChunk`/`beginWrite`/`writeChunk`/`endWrite`/`abortWrite`；Dart 侧为
+  接口 + `MethodChannel` 绑定 + 内存实现。**它必须不破坏的规则就是全部设计**：§2 规则 4 禁止整文件入内存，
+  而 SAF 显然捷径 `openInputStream().readBytes()` 正是如此，故每次读取是**一次带偏移的有界块读**、
+  流不跨传输持有、定位优先 `FileChannel.position` 而以 `InputStream.skip` 回退（**O(offset) 作为代价写明**）。
+  契约测试（脱离 Kotlin）：provider 不报大小 → **null 而非 0**；短读**保持短**而不补齐；权限失效**抛错**
+  而非返回空。**有意未做**：持久化 URI 权限（需设备验证，故权限丢失**响亮失败**、期望调用方进入 BLOCKED）。
+- **`FileSelectionController`**：连接平台层与 features。**provider 不报大小的情形下每个方便答案都是错的**——
+  不变成 0（§5.2 摘要），不拒绝整个选择，不读文件去查（§2 规则 4）；该文件**排除并说明原因**，真实大小由
+  planner 读取时确定。已选过的文档**跳过而非重复添加**（一条用户文件两条清单会让接收端写出两份）。
+- 台账另在 §5「平台目录边界」登记 `MainActivity.kt` 为**第二处有意的、产品必需的非标识类差异**。
+- 状态：代码已实现；widget/单元测试通过（本轮累计 +28，总数 1145）；**Kotlin 已编译进 debug APK**，
+  且 Android debug/release 在 CI 干净 runner 上构建通过。**SAF 通道从未在设备上运行过。**
+
 #### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
 
-- **Android SAF 平台通道**（生产文件选择与授权）。
-- **基础 UI 其余部分**：文件选择结果、接收确认、空间不足提示、校验中/保存成功/失败重试的
-  完整装配。（首页、连接页、传输详情页与进度模型已完成。）
+- **SAF 通道的设备验证**：代码与契约测试齐备，但**从未在真机上执行过**（安装被设备弹窗阻塞）。
+- **基础 UI 其余部分**：把选择结果接进「开始传输」的引擎编排（`prepareOutgoing` + `pagesFor` +
+  `sendFile`），以及传输各阶段的完整页面装配。已完成的页面：首页接线、连接页、传输详情页、
+  进度模型、接收确认+空间不足、文件选择结果、SAF 通道与选择控制器。
 - **真机双向端到端验证**：Android → Windows 真机通过；**Windows → Android 真机未完成**。
-- 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` 1116 项通过、
+- 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1145 项通过**、
   `check_links`/`check_secrets`/`check_ci_workflow` 通过、`git diff --check` 干净。
   **这些都只是本机自动化，不含真机结论。**
 
