@@ -58,6 +58,7 @@ class ControlRequest {
     required this.target,
     Map<String, String> headers = const <String, String>{},
     Uint8List? body,
+    this.peerAddress,
   }) : headers = _lowercaseHeaders(headers),
        body = body ?? emptyBody;
 
@@ -75,6 +76,15 @@ class ControlRequest {
   /// The framed body. For a control request this is at most 1 MiB (§4); for a chunk `PUT` it
   /// is one chunk, whose exact length §8 requires.
   final Uint8List body;
+
+  /// The transport address the request came from, when the transport knows it.
+  ///
+  /// §3 needs it: "每来源初始限制每分钟 5 次失败". It is **not** an identity and is never used
+  /// to authorise anything - an address is trivially spoofable on a LAN and changes on every
+  /// reconnect, which is exactly why §2 separates identity from address. Null means the
+  /// transport did not supply one, in which case a rate limiter can only apply its global
+  /// limit, and callers must not treat "no address" as "a source that has never failed".
+  final String? peerAddress;
 
   /// A header value, or null when absent. [name] is matched case-insensitively.
   String? header(String name) => headers[name.toLowerCase()];

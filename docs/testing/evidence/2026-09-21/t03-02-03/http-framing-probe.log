@@ -1,0 +1,125 @@
+probe server on 127.0.0.1:53712
+
+=== MapEntry(A: well-formed, single Content-Length: POST /a HTTP/1.1
+Host: probe
+Content-Length: 5
+
+hello).key ===
+client saw: HTTP/1.1 200 OK
+content-type: text/plain; charset=utf-8
+x-frame-options: SAMEORIGIN
+x-xss-protection: 1; mode=block
+transfer-encoding: chunked
+x-content-type-options: nosniff
+
+
+handler    : reached=true handled
+  content-length values  : [5] (request.contentLength=5)
+  transfer-encoding values: []
+  content-encoding values : []
+  body bytes read         : 5
+
+=== MapEntry(B: two Content-Length headers: POST /b HTTP/1.1
+Host: probe
+Content-Length: 5
+Content-Length: 6
+
+hello).key ===
+client saw: <no reply / connection closed>
+handler    : NEVER REACHED (the engine refused it)
+
+=== MapEntry(C: Transfer-Encoding: chunked: POST /c HTTP/1.1
+Host: probe
+Transfer-Encoding: chunked
+
+5
+hello
+0
+
+).key ===
+client saw: HTTP/1.1 200 OK
+content-type: text/plain; charset=utf-8
+x-frame-options: SAMEORIGIN
+x-xss-protection: 1; mode=block
+transfer-encoding: chunked
+x-content-type-options: nosniff
+
+
+handler    : reached=true handled
+  content-length values  : [] (request.contentLength=-1)
+  transfer-encoding values: [chunked]
+  content-encoding values : []
+  body bytes read         : 5
+
+=== MapEntry(D: Content-Length AND Transfer-Encoding: POST /d HTTP/1.1
+Host: probe
+Content-Length: 5
+Transfer-Encoding: chunked
+
+5
+hello
+0
+
+).key ===
+client saw: HTTP/1.1 200 OK
+content-type: text/plain; charset=utf-8
+x-frame-options: SAMEORIGIN
+x-xss-protection: 1; mode=block
+transfer-encoding: chunked
+x-content-type-options: nosniff
+
+
+handler    : reached=true handled
+  content-length values  : [] (request.contentLength=-1)
+  transfer-encoding values: [chunked]
+  content-encoding values : []
+  body bytes read         : 5
+
+=== MapEntry(E: Content-Encoding: gzip: POST /e HTTP/1.1
+Host: probe
+Content-Encoding: gzip
+Content-Length: 5
+
+hello).key ===
+client saw: HTTP/1.1 200 OK
+content-type: text/plain; charset=utf-8
+x-frame-options: SAMEORIGIN
+x-xss-protection: 1; mode=block
+transfer-encoding: chunked
+x-content-type-options: nosniff
+
+
+handler    : reached=true handled
+  content-length values  : [5] (request.contentLength=5)
+  transfer-encoding values: []
+  content-encoding values : [gzip]
+  body bytes read         : 5
+
+=== MapEntry(F: Content-Length with leading zeros: POST /f HTTP/1.1
+Host: probe
+Content-Length: 005
+
+hello).key ===
+client saw: HTTP/1.1 200 OK
+content-type: text/plain; charset=utf-8
+x-frame-options: SAMEORIGIN
+x-xss-protection: 1; mode=block
+transfer-encoding: chunked
+x-content-type-options: nosniff
+
+
+handler    : reached=true handled
+  content-length values  : [5] (request.contentLength=5)
+  transfer-encoding values: []
+  content-encoding values : []
+  body bytes read         : 5
+
+=== MapEntry(G: two spellings of the same header: POST /g HTTP/1.1
+Host: probe
+Content-Length: 5
+content-length: 6
+
+hello).key ===
+client saw: <no reply / connection closed>
+handler    : NEVER REACHED (the engine refused it)
+

@@ -148,18 +148,19 @@ class PairingAttempt {
       '${rejection == null ? '' : ', ${rejection!.name}'})';
 }
 
-/// Generates the 32 random bytes a pairing token is made of.
+/// Generates [count] random bytes from the platform CSPRNG.
 ///
-/// `Random.secure()` is the platform CSPRNG; §3's "限流不替代随机熵" is the reason this is
-/// the only sanctioned source, and the reason the entropy is not reduced because a rate
-/// limit also exists.
-List<int> generatePairingTokenBytes() {
+/// The single definition of "secure random bytes" in this project. `Random.secure()` is the
+/// only source the SDK contract calls cryptographically secure, and §3's "限流不替代随机熵"
+/// is the reason the entropy is never reduced because a rate limit also exists.
+List<int> generateSecureRandomBytes(int count) {
   final Random random = Random.secure();
-  return List<int>.generate(
-    ProtocolLimits.pairTokenBytes,
-    (_) => random.nextInt(256),
-  );
+  return List<int>.generate(count, (_) => random.nextInt(256));
 }
+
+/// Generates the 32 random bytes a pairing token is made of.
+List<int> generatePairingTokenBytes() =>
+    generateSecureRandomBytes(ProtocolLimits.pairTokenBytes);
 
 /// Issues and consumes one-time pairing tokens.
 class PairingTokenIssuer {

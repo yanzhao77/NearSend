@@ -1,0 +1,26 @@
+leaf DER bytes      : 413
+pin SHA-256(DER)    : 61f32d95798f2c3b63518e84771ec894f470d026d05713911d541e5e8da105ea
+PEM file SHA-256    : 5cdaf16fce542d256ca18c4e414090c251d6888b55a1d25449350b5f8a05a1a8
+
+server listening on 127.0.0.1:51094 (minimum TLS 1.3)
+
+[A] empty trust store + correct pin
+    result         : completed status=200 body=pong callbackCalls=1
+    verdict        : PASS (admitted by our own comparison, not by a trust store)
+
+[B] empty trust store + wrong pin
+    result         : refused HandshakeException callbackCalls=1
+    verdict        : PASS (refused, and the server saw no request)
+
+[C] CA-style trust + correct pin (the hazard)
+    result         : completed status=200 body=pong callbackCalls=0
+    verdict        : CONFIRMED: this shape compares NO pin
+
+server saw 2 HTTP request(s) in total
+dart.exe : Running build hooks...Running build hooks...
+At line:6 char:1
++ & $dart run tooling/spikes/tls_engine/main.dart $dir 2>&1 | Tee-Objec ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Running build h... build hooks...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
