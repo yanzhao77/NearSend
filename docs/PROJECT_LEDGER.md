@@ -607,12 +607,28 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | **把发送路径改到 `SourceBytes` 上** | 这是「**Android 能作为发送方**」的那一步：当前 `prepareOutgoing` 只接受本地路径，设备因此能收不能发 | `SourceFilePlan.file` → `.source`；`LocalSourceReader.plan`/`streamChunks` 改用 `readAt`；`OutgoingFileChoice.path` → `SourceBytes` + `sourceRef`；`TransferEngine.planFor` 需要 `SourceResolver`（默认 `FileSourceBytes`，Android 传入由 `AndroidFileGateway` 构造的 `SafSourceBytes`）；三处测试同步 |
 | **把选择结果接进引擎编排** | 让 UI 的「选择→提议→密封→恢复→发送」成为一条真实链路 | `FileSelectionReport` → `prepareOutgoing` → `pagesFor` → `TransferClient` 提议/密封 → `resume` → `sendFile` |
 | **传输各阶段的页面装配** | 阶段五要求准备/扫描/传输/校验/导出是可区分状态 | 把 `TransferProgress.phase` 接到真实引擎状态 |
-| **一条经节点、以 SAF 文档为来源的传输测试** | `t11-01-12`/`t11-01-13` 只验证到「默认解析器下全绿」，SAF 经节点的可用性尚无证据 | 在现成的真实 TLS 双向测试基础上，把发送方的来源换成 `SafSourceBytes`（由内存网关支撑），并给两个节点都传入 `sourceResolver`；该文件的两处用例共用同一段 `choices` 与 helper，改动需一次做完，**不要只改一半** |
+| ~~**一条经节点、以 SAF 文档为来源的传输测试**~~ | **已完成（`t11-01-14`）** | 见下方 `t11-01-14`，其中记录了它发现的真实缺陷 |
+
+#### `t11-01-14`：文档来源经真实 TLS 的双向传输（并修正它发现的缺陷）
+
+- 把 `test/core/transfer/http_transfer_test.dart` 的**两个方向**都改成从 `content://` 文档读取
+  （内存网关支撑，用 Android 节点会装的那个 `sourceResolver` 解析）。**这是「SAF 适配器能编译」
+  与「设备能发送」之间的差别**：字节从文档出发、经规划与 §8 块传输落到另一节点的磁盘上，
+  整文件摘要与磁盘字节都与文档内容比对。
+- **方法教训**：这是**整文件重写**而不是逐条替换。上一轮逐条改共用 helper 把文件改坏被迫回滚；
+  根因是两个用例**共用同一段 `choices` 与同一个 helper**，必须一次做完。
+- **测试发现的真实缺陷（已修）**：节点的出站块来源 `TaskFileChunkSource` 仍直接构造
+  `File(record.sourceRef)`，因此**服务器发送文档时每一次 `GET` 都答 `SOURCE_CHANGED`(422)**——
+  即使规划路径已经改到字节来源端口上，**只认路径的版本仍能从 chunk 端点到达**。
+  现已改为问**同一个 resolver**，端口由此成为读取字节的**唯一**途径。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1153 项通过**；
+  两个方向的文档来源传输在真实 TLS 上通过；CI 四作业全绿。
+  **仍未验证**：SAF 通道与这一切**从未在设备上运行过**。
 
 #### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
 
 - **SAF 通道的设备验证**：代码与契约测试齐备，但**从未在真机上执行过**（安装被设备弹窗阻塞）。
-- **SAF 经节点的验证**：见上表第三行；这是 `t11-01-12`/`t11-01-13` 之后仍缺的证据。
+- **SAF 经节点的验证**：**已于 `t11-01-14` 完成**（两个方向，真实 TLS，文档来源）。
 - **基础 UI 其余部分**：把选择结果接进「开始传输」的引擎编排（`prepareOutgoing` + `pagesFor` +
   `sendFile`），以及传输各阶段的完整页面装配。已完成的页面：首页接线、连接页、传输详情页、
   进度模型、接收确认+空间不足、文件选择结果、SAF 通道与选择控制器。
