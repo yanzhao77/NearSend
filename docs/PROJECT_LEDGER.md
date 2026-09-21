@@ -476,13 +476,35 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   4. §10 的逐文件链必须显式走：否则副本已落盘却在最后一步报
      `pending -> completed is not defined`——状态机正确地拒绝了跳过校验与导出的跳跃。
 
+#### `t11-01-05` 客户端编排与真实 TLS 双向验证
+
+- `TransferClient`：配对、`offers`、`decision`、`authorization` + receipt、`resume`、
+  清单读取（files 与 chunks 两种页）、chunk `PUT`/`GET`、`checkpoint`、`complete`。
+- `test/core/transfer/http_transfer_test.dart`：**两个节点 + 一条真实 pinned TLS 连接 +
+  两个方向各一个真实文件**（4 MiB + 尾块、含中文文件名）。断言的是**字节与行**：
+  接收端磁盘上的文件哈希等于发送端离开的文件、接收端自己的块行说文件完整；
+  并且 `server_to_client` 时上报的字节落在发送端**镜像**里，而发送端自己的已提交字节保持为 0
+  ——§9 的权威规则由此成为断言而不是注释。
+- 本轮由这次运行发现并修正的 4 个真实缺陷（单元测试都看不见）：
+  1. **`authorization/receipt` 在 `client_to_server` 下不可达**：§7 的凭证表要求
+     `server_to_client`，但 §3 两个方向都给客户端发恢复密钥，于是客户端发送方确认收到凭证时被 403。
+  2. **`nextIndex` 是响应字段而不是页字段**：§7 把它加在 §6 的页体上，而 `ManifestPage.parse`
+     正当地拒绝未定义键，客户端必须先读它、再用去掉它的副本解析页。
+  3. **没有自己分配世代的接收方提交不了**：§9 要求 client 接收者**先在本地持久化新 epoch**，
+     缺这一步时每次提交都presentation 0 并被判为过期；新增 `adoptLeaseEpoch`，**只许前进**。
+  4. 文件尾 checkpoint 去问 staging 要块数——client 接收方的清单是在另一端 seal 的，
+     staging 里什么都没有；块数应来自接收端自己的 `files` 行。同一处错误让完成路径从
+     `READY` 直接跳到 `VERIFYING`，被状态机正确拒绝（那会跳过记录「数据确实动过」的状态）。
+- 状态：**代码已实现；单元测试通过（1103 项）**。**这是一次真实的双向传输，但发生在同一台机器上
+  的两个节点之间**——台账把它与真机运行记为两个不同的结论。**真机仍未执行**。
+
 #### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
 
 - **Android SAF 平台通道**（生产文件选择与授权）与**基础 UI**：首页仍是禁用壳，
   进度/速度/剩余时间、接收确认、空间不足、暂停/继续/取消、校验中/保存成功/失败重试未接线。
-- **真机双向端到端验证**：字节已在单进程内两种角色间真实搬运并校验通过，
+- **真机双向端到端验证**：字节已在真实 TLS 上双向搬运并校验通过，
   但**还没有在两个真实设备之间传过**。
-- 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` 1101 项通过、
+- 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` 1103 项通过、
   `check_links`/`check_secrets`/`check_ci_workflow` 通过、`git diff --check` 干净。
   **这些都只是本机自动化，不含真机结论。**
 
