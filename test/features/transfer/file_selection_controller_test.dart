@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
 import 'package:nearsend/features/transfer/presentation/file_selection_page.dart';
+import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
 /// The join between the SAF channel and the selection screen.
@@ -125,6 +126,59 @@ void main() {
       hasLength(2),
       reason:
           '§5 forbids a repeated fileId, and the manifest digest depends on it',
+    );
+  });
+
+  test(
+    'a selection becomes choices whose bytes come from the documents picked',
+    () {
+      // This is the join the screen was missing: the report knows names and sizes, and this turns
+      // them into something a sending transfer can be planned from. It is asserted here rather than
+      // only through the screen because the reference it depends on is invisible in the UI.
+      final FileSelectionController subject = controller(
+        ids: <String>['11111111-2222-4333-8444-555555555555'],
+      );
+      final FileSelectionReport report = subject.report(<PickedDocument>[
+        document('a.bin', 4096),
+      ]);
+
+      final List<OutgoingFileChoice> choices = subject.choicesFor(report);
+      expect(choices, hasLength(1));
+      expect(choices.single.fileId, report.files.single.fileId);
+      expect(choices.single.relativePath, 'a.bin');
+      expect(
+        choices.single.path,
+        isNull,
+        reason: 'the bytes come from a document, not a path',
+      );
+      expect(
+        choices.single.sourceRef,
+        'content://provider/a.bin',
+        reason: 'the recorded reference is what a restarted sender reads from',
+      );
+    },
+  );
+
+  test('a selection with no reference is refused rather than planned', () {
+    final FileSelectionController subject = controller();
+    const FileSelectionReport handBuilt = FileSelectionReport(
+      files: <SelectedFile>[
+        SelectedFile(
+          fileId: '00000000-0000-4000-8000-000000000009',
+          relativePath: 'no-ref.bin',
+          sizeBytes: 1,
+        ),
+      ],
+      problems: <String>[],
+      totalBytes: 1,
+    );
+
+    expect(
+      () => subject.choicesFor(handBuilt),
+      throwsA(isA<StateError>()),
+      reason:
+          'a choice built without a source would fail later inside planning with a message '
+          'about hashing, which says nothing about the real problem',
     );
   });
 }

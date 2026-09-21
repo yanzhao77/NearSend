@@ -17,6 +17,7 @@ class SelectedFile {
     required this.fileId,
     required this.relativePath,
     required this.sizeBytes,
+    this.sourceRef,
   });
 
   final String fileId;
@@ -25,6 +26,14 @@ class SelectedFile {
   final String relativePath;
 
   final int sizeBytes;
+
+  /// The opaque handle the bytes will be read from, when the platform gave one.
+  ///
+  /// A SAF document URI, kept so a selection can be turned into sending choices: without it the
+  /// report would know a file's name and size but not **where its bytes are**, so the screen whose
+  /// whole purpose is to precede a transfer could not start one. Never rendered - `AGENTS.md` §5
+  /// keeps a document id out of diagnostics.
+  final String? sourceRef;
 
   /// The name a person reads, which is the last path segment.
   String get displayName {

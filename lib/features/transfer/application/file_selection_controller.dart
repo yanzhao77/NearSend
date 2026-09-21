@@ -1,4 +1,6 @@
 import 'package:nearsend/core/security/pairing_service.dart';
+import 'package:nearsend/core/storage/source_bytes.dart';
+import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/presentation/file_selection_page.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
@@ -65,6 +67,9 @@ class FileSelectionController {
       files.add(
         SelectedFile(
           fileId: (idFactory ?? _defaultIdFactory)(),
+          // Kept so the selection can become sending choices: a report that knew only names and
+          // sizes could describe a transfer but not start one.
+          sourceRef: document.uri,
           // §5.1 wants NFC and a POSIX-relative path; a provider's display name is neither
           // guaranteed, so the report's own validation is what decides whether it is usable.
           relativePath: document.displayName,
@@ -91,4 +96,32 @@ class FileSelectionController {
   }
 
   static String _defaultIdFactory() => randomUuidV4();
+
+  /// Turns a selection into the choices a sending transfer is planned from.
+  ///
+  /// This is the join the screen was missing: [FileSelectionReport] knew each file's name and size
+  /// but not where its bytes were, so nothing could be proposed from it. The bytes come from the
+  /// gateway by the document URI the picker returned, which is why that reference had to be kept.
+  ///
+  /// Refuses rather than guessing when a file has no reference: a choice built without one would
+  /// fail later inside planning with a message about hashing, which says nothing about the real
+  /// problem.
+  List<OutgoingFileChoice> choicesFor(FileSelectionReport report) {
+    return <OutgoingFileChoice>[
+      for (final SelectedFile file in report.files)
+        OutgoingFileChoice(
+          fileId: file.fileId,
+          relativePath: file.relativePath,
+          source: SafSourceBytes(
+            gateway: gateway,
+            uri:
+                file.sourceRef ??
+                (throw StateError(
+                  '${file.displayName} has no source reference, so its bytes cannot be read',
+                )),
+            providerReportedSize: file.sizeBytes,
+          ),
+        ),
+    ];
+  }
 }
