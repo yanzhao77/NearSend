@@ -67,15 +67,24 @@ import 'package:nearsend/core/storage/task_source_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 
-/// Reads an outbound chunk from the file this node recorded as a task's source.
+/// Reads an outbound chunk from whatever this node recorded as a task's source.
 ///
-/// The port exists because a desktop path and a SAF URI are not the same thing; this
-/// implementation covers the path case, which is what a Windows sender and an app-private
-/// Android sender both have.
+/// The port exists because a desktop path and a SAF URI are not the same thing, so this class does
+/// not open a `File` of its own: it asks the node's [sourceResolver], the same one planning and
+/// resume use. It used to build `File(record.sourceRef)` directly, which meant a **server sending a
+/// document** failed with `SOURCE_CHANGED` - a real gap the document-backed transfer test found,
+/// because the path-only version was still reachable through the chunk endpoint even after
+/// planning had been moved onto the port.
 class TaskFileChunkSource implements OutgoingChunkSource {
-  TaskFileChunkSource(this.sources);
+  TaskFileChunkSource(this.sources, {this.resolve = _asPath});
 
   final TaskSourceRepository sources;
+
+  /// Turns a recorded reference into a byte source. Defaults to a path.
+  final SourceBytes Function(String sourceRef, int sizeBytes) resolve;
+
+  static SourceBytes _asPath(String sourceRef, int sizeBytes) =>
+      FileSourceBytes(File(sourceRef));
 
   @override
   Future<Uint8List> readChunk({
@@ -91,43 +100,39 @@ class TaskFileChunkSource implements OutgoingChunkSource {
         'no source is recorded for $fileId',
       );
     }
-    final File file = File(record.sourceRef);
-    if (!file.existsSync()) {
-      // §11 pairs SOURCE_CHANGED with "repair from the correct source"; a source that is gone is
-      // exactly that, and serving zeros instead would look like a successful transfer.
+
+    final SourceBytes source = resolve(record.sourceRef, record.sizeBytes);
+
+    // §11 pairs SOURCE_CHANGED with "repair from the correct source". A source that cannot be
+    // read, or whose length moved since the task was created, is exactly that - and serving
+    // zeros instead would look like a successful transfer.
+    final int currentLength;
+    try {
+      currentLength = await source.length();
+    } on Object {
       throw const ProtocolViolation(
         ProtocolErrorCode.sourceChanged,
         'the recorded source for this file is no longer readable',
       );
     }
-    if (await file.length() != record.sizeBytes) {
+    if (currentLength != record.sizeBytes) {
       throw const ProtocolViolation(
         ProtocolErrorCode.sourceChanged,
         'the source changed size since the task was created',
       );
     }
-    final RandomAccessFile handle = await file.open();
-    try {
-      await handle.setPosition(offsetBytes);
-      final Uint8List buffer = Uint8List(length);
-      int filled = 0;
-      while (filled < length) {
-        final int read = await handle.readInto(buffer, filled, length - filled);
-        if (read <= 0) {
-          break;
-        }
-        filled += read;
-      }
-      if (filled != length) {
-        throw const ProtocolViolation(
-          ProtocolErrorCode.sourceChanged,
-          'the source ended before the chunk did',
-        );
-      }
-      return buffer;
-    } finally {
-      await handle.close();
+
+    final Uint8List bytes = await source.readAt(
+      offset: offsetBytes,
+      length: length,
+    );
+    if (bytes.length != length) {
+      throw const ProtocolViolation(
+        ProtocolErrorCode.sourceChanged,
+        'the source ended before the chunk did',
+      );
     }
+    return bytes;
   }
 }
 
@@ -291,7 +296,12 @@ class NearSendNode {
       staging: staging,
       windows: windows,
       sink: sink,
-      source: TaskFileChunkSource(sources),
+      source: TaskFileChunkSource(
+        sources,
+        // The same resolver planning uses, so a node whose files are documents serves chunks from
+        // them too. Passing the path default here was the gap the document test found.
+        resolve: sourceResolver ?? TransferEngine.defaultSourceResolver,
+      ),
     );
 
     final TransferStagingEndpoint stagingEndpoint = TransferStagingEndpoint(
