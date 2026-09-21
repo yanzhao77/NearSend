@@ -282,12 +282,12 @@ abstract final class ControlAuthTable {
       credential: ControlCredential.session,
     ),
 
+    // No direction: §3 issues the client's recovery secret whichever way the data runs - for
+    // `server_to_client` the client is the receiver, and for `client_to_server` it is the sender
+    // that has to keep a recovery credential. Requiring `server_to_client` here made the receipt
+    // unreachable in the other direction, which the end-to-end test found as a 403.
     'authorizationReceipt': ControlAuthRequirement(
       credential: ControlCredential.transferTask,
-      direction: ControlDirectionRequirement(
-        required: TransferDirection.serverToClient,
-        why: '§7: the receipt confirms the client saved the credentials',
-      ),
     ),
 
     // "resume 使用 taskResumeSecret 专用请求体；初次 resume 无须旧会话令牌"

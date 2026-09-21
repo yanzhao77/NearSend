@@ -304,6 +304,38 @@ class ChunkRepository {
     });
   }
 
+  /// Adopts a generation the peer granted, for a receiver that did not allocate it.
+  ///
+  /// §9: "client 接收者：**先在本地持久化新 epoch**、复核断点，再提交 `receiverState`". The client is
+  /// the receiver but the *server* allocated the generation, so the client has to write it into
+  /// its own rows or every commit would present generation 0 and be refused as stale.
+  ///
+  /// Only ever forwards: refusing a regression here is what stops a replayed or stale grant from
+  /// walking a receiver back onto a generation that has been revoked.
+  int adoptLeaseEpoch(String taskId, {required int epoch, int? nowMillis}) {
+    return database.transaction(() {
+      final int current = leaseEpoch(taskId);
+      if (epoch < current) {
+        throw StorageException(
+          StorageFailureCode.staleLease,
+          'generation $epoch is behind the locally persisted generation $current for '
+          'task $taskId',
+        );
+      }
+      if (epoch > current) {
+        database.db.execute(
+          'UPDATE tasks SET lease_epoch = ?, updated_at = ? WHERE task_id = ?;',
+          <Object?>[
+            epoch,
+            nowMillis ?? DateTime.now().millisecondsSinceEpoch,
+            taskId,
+          ],
+        );
+      }
+      return epoch;
+    });
+  }
+
   /// The task's current write generation.
   int leaseEpoch(String taskId) {
     final ResultSet rows = database.db.select(
@@ -712,6 +744,26 @@ class ChunkRepository {
       );
     }
     return rows.first['task_id'] as String;
+  }
+
+  /// The declared chunk count of a registered file.
+  ///
+  /// Read from the receiver's own `files` row rather than from manifest staging: a client
+  /// receiver never stages the manifest itself - it was sealed on the other node - so asking
+  /// staging would find nothing. The row it registered from the peer's frozen manifest is the
+  /// authority for its own bookkeeping, which is also what §8 wants.
+  int chunkCountOf(String fileId) {
+    final ResultSet rows = database.db.select(
+      'SELECT chunk_count FROM files WHERE file_id = ?;',
+      <Object?>[fileId],
+    );
+    if (rows.isEmpty) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'file $fileId is not registered',
+      );
+    }
+    return rows.first['chunk_count'] as int;
   }
 
   /// Number of committed chunks for a file.

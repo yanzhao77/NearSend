@@ -495,21 +495,11 @@ class TransferEngine {
     leaseEpoch: leaseEpoch,
     sink: sink,
     window: windows.windowFor(transferId, fileId),
-    atBoundary: index == _chunkCountOf(transferId, fileId) - 1,
+    // §8 forces a checkpoint at a file end. The count comes from the receiver's own file row,
+    // because a client receiver never stages the manifest - it was sealed on the other node - and
+    // asking staging would find nothing.
+    atBoundary: index == tasks.chunkCountOf(fileId) - 1,
   );
-
-  int _chunkCountOf(String transferId, String fileId) {
-    final FrozenManifest frozen = staging.frozenManifest(transferId)!;
-    for (final ManifestFile file in frozen.files) {
-      if (file.fileId == fileId) {
-        return file.chunkCount;
-      }
-    }
-    throw StorageException(
-      StorageFailureCode.manifestMismatch,
-      '$fileId is not part of transfer $transferId',
-    );
-  }
 
   /// Verifies one file and, unless [targetRef] is null, exports it.
   ///

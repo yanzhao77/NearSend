@@ -724,9 +724,12 @@ class TransferLifecycleEndpoint {
   }
 
   void _advanceToCompleted(String transferId) {
-    // §10's chain is VERIFYING→EXPORTING→COMPLETED, and each step is asserted so an undefined
-    // edge is refused here rather than written.
+    // §10's chain is READY→TRANSFERRING→VERIFYING→EXPORTING→COMPLETED, and each step is asserted
+    // so an undefined edge is refused rather than written. The first version started at VERIFYING
+    // and failed with "ready -> verifying is not defined" - the state machine correctly refusing
+    // a jump over the state that records that data actually moved.
     for (final TransferState step in <TransferState>[
+      TransferState.transferring,
       TransferState.verifying,
       TransferState.exporting,
       TransferState.completed,
@@ -735,7 +738,7 @@ class TransferLifecycleEndpoint {
       if (from == TransferState.completed) {
         return;
       }
-      if (from == step) {
+      if (from == step || !TransferStateMachine.canTransition(from, step)) {
         continue;
       }
       transfers.transitionTask(taskId: transferId, to: step);
