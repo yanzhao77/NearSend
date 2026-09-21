@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- NearSend's entire purpose is a connection between two devices on the local network,
+         so this permission belongs in the *main* manifest and not only in the debug and
+         profile ones that `flutter create` generates. Without it here, a release build has
+         no network access at all and every transfer fails on a device - a failure that no
+         debug-mode test can see. It grants nothing beyond sockets: no internet service is
+         used, no account exists, and §1 forbids any dependency on one. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="NearSend"
         android:name="${applicationName}"

@@ -115,7 +115,17 @@ class HttpsControlClient {
   final int port;
 
   /// Called with the outcome of the certificate decision, for diagnostics and tests.
-  final void Function(PinnedConnectionOutcome outcome)? onCertificateSeen;
+  ///
+  /// The second argument is the fingerprint the *peer's certificate* produced on this
+  /// platform (`SHA-256` of its DER, computed by this device's TLS stack). It is not a secret
+  /// - it is the value the QR code publishes - and having it is what makes it possible to show
+  /// that two platforms agree about a certificate rather than merely that a connection
+  /// succeeded. A mismatch is therefore visible in a log without decoding anything.
+  final void Function(
+    PinnedConnectionOutcome outcome,
+    String presentedFingerprint,
+  )?
+  onCertificateSeen;
 
   late final SecurityContext _context;
   late final HttpClient _client;
@@ -135,11 +145,13 @@ class HttpsControlClient {
     _sawAnyCertificate = true;
     // §2: `SHA-256` over the leaf's complete DER. `X509Certificate.der` is that encoding; it
     // is not the PEM text and not the SPKI.
-    final bool matches = serverFingerprintOf(certificate.der) == pin;
+    final String presented = serverFingerprintOf(certificate.der);
+    final bool matches = presented == pin;
     onCertificateSeen?.call(
       matches
           ? PinnedConnectionOutcome.pinMatched
           : PinnedConnectionOutcome.pinMismatched,
+      presented,
     );
     // The trust store is empty, so this return value is the only thing that can admit the
     // connection. Returning false on a mismatch therefore closes it before any request.
