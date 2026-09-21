@@ -172,6 +172,10 @@ class HttpsControlServer {
           target: request.uri.toString(),
           headers: _headerMap(request.headers),
           body: body,
+          // §3's per-source failure limit needs the caller's address. It is read here because
+          // this is the only layer that has it; it travels on the request and is never used
+          // as an identity.
+          peerAddress: request.connectionInfo?.remoteAddress.address,
         ),
       );
     } on ProtocolViolation catch (violation) {
