@@ -70,7 +70,8 @@ void main() {
       expect(
         kDatabaseRuntimeIntegrated,
         isFalse,
-        reason: 'the schema exists, but the app startup path does not open it yet',
+        reason:
+            'the schema exists, but the app startup path does not open it yet',
       );
       expect(dbSchemaDisplay, startsWith('${StorageSchema.currentVersion}'));
       expect(dbSchemaDisplay, contains('存储层已实现'));
