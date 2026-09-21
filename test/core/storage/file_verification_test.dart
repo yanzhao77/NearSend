@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/protocol/chunk_manifest.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
@@ -37,7 +38,7 @@ void main() {
       taskId: taskId,
       role: 'receiver',
       direction: 'client_to_server',
-      state: 'ready',
+      state: TransferState.ready,
       protocolMajor: 1,
       protocolMinor: 0,
     );

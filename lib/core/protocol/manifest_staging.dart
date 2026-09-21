@@ -88,6 +88,18 @@ class ManifestStaging {
   /// Counted from the stored indices, so a page sent twice does not raise it.
   int get stagedFileCount => _files.length;
 
+  /// The number of retained manifest records (file entries plus chunk entries).
+  ///
+  /// Every field inside either record type is bounded by the protocol, so a process-wide
+  /// bound on this count is also a bound on staging heap growth. The registry owns the
+  /// process-wide policy; this object only reports its current contribution.
+  int get stagedEntryCount =>
+      _files.length +
+      _chunks.values.fold<int>(
+        0,
+        (int total, Map<int, ChunkRecord> records) => total + records.length,
+      );
+
   /// How many distinct chunk records have been stored for [fileId].
   int stagedChunkCount(String fileId) => _chunks[fileId]?.length ?? 0;
 

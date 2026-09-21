@@ -44,7 +44,7 @@ void main() {
       taskId: taskId,
       role: 'receiver',
       direction: 'client_to_server',
-      state: 'ready',
+      state: TransferState.ready,
       protocolMajor: 1,
       protocolMinor: 0,
     );

@@ -74,11 +74,9 @@ class TransferStagingEndpoint {
     required Map<String, Object?> body,
   }) {
     final ManifestPage page = ManifestPage.parse(body);
-    final ManifestStaging target = staging.stagingFor(transferId);
-
     // §6's re-send rule: both outcomes are a success, because the page is accounted for
     // either way and a client with a lost response cannot tell them apart.
-    target.addPage(page, nowMillis: now());
+    staging.addPage(transferId, page, nowMillis: now());
 
     return ControlResponse.json(status: 200, body: const StoredAck().toJson());
   }
@@ -90,8 +88,6 @@ class TransferStagingEndpoint {
     required ControlRequest request,
   }) {
     final TransferSealRequest sealRequest = TransferSealRequest.parse(body);
-    final ManifestStaging target = staging.stagingFor(transferId);
-
     final IdempotencyExecution execution = idempotency.executeAtomically(
       scope: RequestScope(
         transferId: transferId,
@@ -104,6 +100,7 @@ class TransferStagingEndpoint {
       // conclusion about the manifest rather than a write to a file.
       leaseEpoch: 0,
       effect: () {
+        final ManifestStaging target = staging.stagingFor(transferId);
         // §7: "摘要失败422". The digest in the body is the client's claim; the one the
         // transfer was created with is the authority. Checked here rather than before the
         // idempotency lookup so that §9's rules still see the request first: a retry that
@@ -133,6 +130,7 @@ class TransferStagingEndpoint {
     switch (execution.kind) {
       case IdempotencyExecutionKind.executed:
       case IdempotencyExecutionKind.replayed:
+        staging.release(transferId, StagingReleaseReason.sealed);
         return ControlResponse.json(status: 200, body: _sealedBody(execution));
 
       case IdempotencyExecutionKind.inFlight:

@@ -117,6 +117,7 @@ flowchart TD
 | 实体 | 关键字段 | 约束 |
 | --- | --- | --- |
 | tasks | task_id、角色、状态、协议版本、lease_epoch、checkpoint_seq、manifest_hash | 状态迁移、世代与 checkpoint 原子更新 |
+| manifest_staging / manifest_pages | task_id、页类型、start_index、规范化内容/摘要、first_content_at、sealed | 生产版本持久化；页幂等、seal 与任务状态原子提交；首版内存实现不得宣称重启恢复 |
 | peers | peer_id、身份指纹、授权状态 | 敏感凭证不明文写入 |
 | files | file_id、规范化路径、大小、块大小、file_hash、export_state | 清单冻结后不可静默修改 |
 | chunks | file_id、index、offset、length、hash、state | `(file_id,index)` 唯一；committed 为恢复权威 |
@@ -125,12 +126,17 @@ flowchart TD
 
 实际 SQL、索引、WAL 参数和迁移脚本由独立 schema 设计任务冻结。升级前对 SQLite 做一致性备份，不能只复制活跃 WAL 的主文件。
 
+协议状态与 SQLite 状态只经 `StorageStateCodec` 转换。协议层使用 `wireName`，存储层使用稳定的磁盘编码；
+业务代码只传状态枚举，不得手写任一数据库状态字符串。
+
 ## 9. 并发与资源模型
 
 - 文件读取、哈希、网络和落盘在后台 isolate/原生线程执行。
 - 使用固定数量的块窗口和有界队列；接收端磁盘速度通过背压限制发送端。
 - 默认逻辑块 4 MiB，属于协议版本参数；调整前必须重新生成向量和兼容说明。
 - 同一任务只允许一个 active receiver lease；同一文件块不可被两个 writer 并发提交。
+- manifest staging 的 30 分钟窗口只作用于未 seal 提议；seal 后按任务保留策略管理。内存演示 registry
+  默认限制 8 个并发任务和 262,144 条清单记录，并在 seal、取消、终态失败后释放；生产版本落 SQLite。
 - 暂停停止请求新块，允许已接收块走完校验和持久化；尽量保留连接，但不承诺平台后台无限存活。
 - 取消撤销任务授权并停止新写入，不删除已成功导出的文件。
 
