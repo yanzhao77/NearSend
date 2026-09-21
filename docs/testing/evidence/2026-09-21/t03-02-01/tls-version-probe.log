@@ -1,0 +1,38 @@
+﻿=== external verification of the TLS version floor ===
+server: dart:io HttpServer.bindSecure with minimumTlsProtocolVersion = tls1_3
+client: openssl s_client (a different implementation, so this is not circular)
+
+--- 1) openssl s_client -tls1_2 (must be REFUSED) ---
+openssl.exe : Connecting to 127.0.0.1
+At line:16 char:16
++ ... t12 = ('' | & $openssl s_client -connect 127.0.0.1:18443 -tls1_2 -bri ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Connecting to 127.0.0.1:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+100000000A000000:error:0A000126:SSL routines::unexpected eof while reading:ssl/record/rec_layer_s3.c:698:
+
+--- 2) openssl s_client -tls1_3 (must be ACCEPTED) ---
+openssl.exe : Connecting to 127.0.0.1
+At line:20 char:16
++ ... t13 = ('' | & $openssl s_client -connect 127.0.0.1:18443 -tls1_3 -bri ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Connecting to 127.0.0.1:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Can't use SSL_get_servername
+depth=0 CN=NearSend Spike
+verify error:num=18:self-signed certificate
+CONNECTION ESTABLISHED
+Protocol version: TLSv1.3
+Ciphersuite: TLS_CHACHA20_POLY1305_SHA256
+Peer certificate: CN=NearSend Spike
+Hash used: SHA256
+Signature type: ecdsa_secp256r1_sha256
+Verification error: self-signed certificate
+Peer Temp Key: X25519, 253 bits
+DONE
+
+--- 3) openssl s_client -tls1_3, protocol/cipher/verify lines ---
+Protocol: TLSv1.3
+Verify return code: 18 (self-signed certificate)
