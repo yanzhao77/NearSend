@@ -36,6 +36,7 @@ library;
 
 import 'package:nearsend/core/network/control_authorization.dart';
 import 'package:nearsend/core/network/control_message.dart';
+import 'package:nearsend/core/network/task_ownership.dart';
 import 'package:nearsend/core/protocol/api_routes.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/protocol_validation.dart';
@@ -57,6 +58,7 @@ class ControlPipeline {
   ControlPipeline({
     required this.authenticator,
     Map<String, ControlHandler> handlers = const <String, ControlHandler>{},
+    this.ownership = const NoTaskOwnership(),
     this.now = _systemNowMillis,
   }) : handlers = Map<String, ControlHandler>.unmodifiable(handlers) {
     ControlAuthTable.assertCoversEveryRoute();
@@ -64,6 +66,10 @@ class ControlPipeline {
 
   /// Resolves a bearer token to a grant. See [ControlAuthenticator].
   final ControlAuthenticator authenticator;
+
+  /// Which peer owns each transfer, so §7's session-scoped rows can be answered for a session
+  /// that is actually bound to the task. Defaults to owning nothing; see [TaskOwnership].
+  final TaskOwnership ownership;
 
   /// The use-case for each route name. A route that is not present answers `NOT_FOUND`.
   final Map<String, ControlHandler> handlers;
@@ -94,8 +100,8 @@ class ControlPipeline {
       return ControlResponse.violation(violation, requestId: requestId);
     }
 
-    final ControlAuthorization decision = ControlAuthorizer(authenticator)
-        .authorize(
+    final ControlAuthorization decision =
+        ControlAuthorizer(authenticator, ownership: ownership).authorize(
           request: request,
           route: matched.route,
           transferId: matched.transferId,

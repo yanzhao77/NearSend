@@ -61,6 +61,26 @@ abstract final class StorageSchema {
   /// The table holding what a receiver approved for one task (§6).
   static const String taskAuthorizationsTable = 'task_authorizations';
 
+  /// The table binding a task to the paired peer it belongs to.
+  ///
+  /// §7 mixes two credential scopes: some rows ask for a "会话身份" and others are "与已授权
+  /// 任务绑定". Without this binding a session identity cannot be told apart from one that
+  /// merely guessed a transfer id, so the authoriser answered every session on a
+  /// transfer-scoped route with `NOT_FOUND` - a capability gap the ledger registered. This
+  /// table is what closes it, and it closes it in the fail-closed direction: no row means no
+  /// session may reach the task.
+  static const String taskAssignmentsTable = 'task_assignments';
+
+  /// The table holding the **sender's mirror** of a client receiver's reported position.
+  ///
+  /// §9 names the authority explicitly: "服务端发送时响应明确标记 `authority:sender_mirror`，**不能据此
+  /// 覆盖客户端本地事实**". So this is a display mirror and nothing else - it is never read to
+  /// decide what to send, what to skip or whether a transfer is complete, because
+  /// `AGENTS.md` §2 rule 5 makes the receiver's committed rows the only evidence of progress.
+  /// Having it as its own table rather than columns on `tasks` is part of that: a reader
+  /// looking for progress finds `chunks`, and this table's name says whose numbers these are.
+  static const String taskReceiverMirrorTable = 'task_receiver_mirror';
+
   /// The column version 3 adds to `tasks`, holding the last committed checkpoint (§8).
   ///
   /// §8 commits "块标志和 checkpointSeq" in one transaction, and §9 has the receiver report
@@ -265,6 +285,22 @@ CREATE TABLE task_authorizations (
   space_estimate_json TEXT,
   decided_at         INTEGER NOT NULL,
   receipt_at         INTEGER
+);''',
+
+    taskAssignmentsTable: '''
+CREATE TABLE task_assignments (
+  transfer_id  TEXT    PRIMARY KEY REFERENCES tasks(task_id) ON DELETE CASCADE,
+  peer_id      TEXT    NOT NULL,
+  assigned_at  INTEGER NOT NULL
+);''',
+
+    taskReceiverMirrorTable: '''
+CREATE TABLE task_receiver_mirror (
+  transfer_id     TEXT    PRIMARY KEY REFERENCES tasks(task_id) ON DELETE CASCADE,
+  lease_epoch     INTEGER NOT NULL,
+  checkpoint_seq  INTEGER NOT NULL,
+  committed_bytes INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
 );''',
   };
 
