@@ -32,6 +32,10 @@ class NearSendApp extends StatelessWidget {
   static const String connectRoute = '/connect';
   static const String transferRoute = '/transfer';
 
+  /// The receive confirmation, which `docs/ui/UI_UX_SPEC.md` §5 keeps as its own step so the
+  /// space check cannot be skipped by accepting on the connection screen.
+  static const String receiveConfirmRoute = '/receive-confirm';
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
