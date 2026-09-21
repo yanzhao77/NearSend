@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/build_info/build_info.dart';
+import 'package:nearsend/core/storage/storage_schema.dart';
 
 /// Guards the single-source-of-truth rules documented in
 /// `lib/core/build_info/build_info.dart`.
@@ -64,15 +65,18 @@ void main() {
       expect(protocolStatusDisplay, contains('未冻结'));
     });
 
-    test('schema version is declared only; no database exists yet', () {
-      expect(kDbSchemaVersion, greaterThan(0));
+    test('schema display uses the storage schema authority', () {
+      expect(StorageSchema.currentVersion, 3);
       expect(
-        kDatabaseImplemented,
+        kDatabaseRuntimeIntegrated,
         isFalse,
         reason:
-            'T01-01 declares the version number only; T04-01 owns the schema',
+            'the schema exists, but the app startup path does not open it yet',
       );
-      expect(dbSchemaDisplay, contains('尚未创建'));
+      expect(dbSchemaDisplay, startsWith('${StorageSchema.currentVersion}'));
+      expect(dbSchemaDisplay, contains('存储层已实现'));
+      expect(dbSchemaDisplay, contains('应用尚未装配'));
+      expect(dbSchemaDisplay, isNot(contains('数据库尚未创建')));
     });
 
     test('the Git commit is never invented', () {
