@@ -188,7 +188,7 @@ class TransferCreationEndpoint {
         taskId: creation.transferId,
         role: 'receiver',
         direction: creation.direction.wireValue,
-        state: TransferState.staging.name,
+        state: TransferState.staging,
         protocolMajor: protocolMajor,
         protocolMinor: protocolMinor,
         manifestDigest: creation.manifestDigest,

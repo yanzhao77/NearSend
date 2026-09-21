@@ -5,13 +5,12 @@
 /// the next one. [ManifestStaging] already holds that accumulation; this is the part that
 /// finds the right one and decides whether it may still be used at all.
 ///
-/// ## Why this is process-local, and what that costs
+/// ## Why the first build is process-local, and what that costs
 ///
-/// Nothing here touches SQLite. That is a reading of §6 rather than an oversight: the protocol
-/// never says staging must survive a restart, and a restart costs the client a re-upload,
-/// which §6 makes safe - "重传相同页返回成功", and pages are stored by index so a duplicate
-/// cannot inflate the count. Persisting megabytes of manifest pages to save a re-upload would
-/// buy nothing the protocol requires.
+/// Nothing here touches SQLite yet. ADR-0004 requires production staging to be persisted;
+/// this registry is only the bounded first-demo implementation. A restart costs the client a
+/// re-upload, which §6 makes safe - "重传相同页返回成功" - but that does not make restart recovery
+/// an implemented feature.
 ///
 /// The cost is stated plainly: **a sealed manifest from before a restart is gone**, so the
 /// chunk endpoints will need the client to re-upload and re-seal. Persisting the frozen
@@ -28,19 +27,37 @@
 library;
 
 import 'package:nearsend/core/protocol/manifest_staging.dart';
+import 'package:nearsend/core/protocol/manifest_page.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 
 /// The staging state of the transfers this process is proposing.
+enum StagingReleaseReason { sealed, cancelled, failed }
+
 class ManifestStagingRegistry {
-  ManifestStagingRegistry({required this.transfers, int Function()? now})
-    : now = now ?? _systemNow;
+  ManifestStagingRegistry({
+    required this.transfers,
+    int Function()? now,
+    this.maxConcurrentTransfers = 8,
+    this.maxRetainedEntries = 262144,
+  }) : assert(maxConcurrentTransfers > 0),
+       assert(maxRetainedEntries > 0),
+       now = now ?? _systemNow;
 
   /// Reads the declaration a staging session must be built from.
   final TransferRepository transfers;
 
   /// Clock injection, so a test does not have to wait thirty minutes.
   final int Function() now;
+
+  /// Maximum number of manifests held by the demo process at once.
+  final int maxConcurrentTransfers;
+
+  /// Maximum retained file + chunk records across all process-local manifests.
+  ///
+  /// Record fields have protocol bounds, so this is the enforceable heap-growth budget;
+  /// production replaces it with SQLite-backed paging rather than raising it without limit.
+  final int maxRetainedEntries;
 
   static int _systemNow() => DateTime.now().millisecondsSinceEpoch;
 
@@ -53,6 +70,11 @@ class ManifestStagingRegistry {
   int get sealedTransferCount =>
       _staging.values.where((ManifestStaging s) => s.isSealed).length;
 
+  int get retainedEntryCount => _staging.values.fold<int>(
+    0,
+    (int total, ManifestStaging staging) => total + staging.stagedEntryCount,
+  );
+
   /// The staging for [transferId], created from the stored declaration on first use.
   ///
   /// Throws `NOT_FOUND` when no such transfer exists - §7 answers an unknown or unauthorised
@@ -64,6 +86,14 @@ class ManifestStagingRegistry {
     if (existing != null) {
       _assertStillUsable(transferId, existing);
       return existing;
+    }
+
+    _purgeExpired();
+    if (_staging.length >= maxConcurrentTransfers) {
+      throw const ProtocolViolation(
+        ProtocolErrorCode.resourceLimit,
+        'the process-local staging task limit has been reached',
+      );
     }
 
     final TransferDeclaration? declaration = transfers.readDeclaration(
@@ -95,11 +125,51 @@ class ManifestStagingRegistry {
     return created;
   }
 
+  /// Adds a page while enforcing the process-wide retained-record budget.
+  PageAcceptance addPage(
+    String transferId,
+    ManifestPage page, {
+    int? nowMillis,
+  }) {
+    final ManifestStaging target = stagingFor(transferId);
+    final PageAcceptance acceptance = target.addPage(
+      page,
+      nowMillis: nowMillis ?? now(),
+    );
+    if (retainedEntryCount > maxRetainedEntries) {
+      // This proposal failed its resource contract. Keeping its partial heap would allow a
+      // peer to pin the process at the limit; the client may start it again in smaller pages.
+      _staging.remove(transferId);
+      throw const ProtocolViolation(
+        ProtocolErrorCode.resourceLimit,
+        'the process-local manifest staging memory budget has been reached',
+      );
+    }
+    return acceptance;
+  }
+
   /// Forgets a transfer's staging, sealed or not.
   ///
   /// For a cancelled or completed transfer, and for tests. Not called by the expiry check,
   /// which forgets only the proposal it just refused.
   void discard(String transferId) => _staging.remove(transferId);
+
+  /// Releases process-local staging after a terminal lifecycle event.
+  ///
+  /// A retryable seal validation error is deliberately not terminal: its pages stay available
+  /// so the sender can supply what is missing. Sealed/cancelled/terminally failed tasks must
+  /// use this method so the registry cannot grow for the lifetime of the process.
+  void release(String transferId, StagingReleaseReason reason) {
+    _staging.remove(transferId);
+  }
+
+  void _purgeExpired() {
+    final int moment = now();
+    _staging.removeWhere(
+      (String transferId, ManifestStaging staging) =>
+          !staging.isSealed && staging.isExpired(nowMillis: moment),
+    );
+  }
 
   /// §6's window, applied where it can actually stop something.
   void _assertStillUsable(String transferId, ManifestStaging staging) {

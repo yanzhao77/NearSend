@@ -133,7 +133,7 @@ void main() {
     String id = transferId,
     String? manifestDigest,
     String direction = 'client_to_server',
-    String state = 'staging',
+    TransferState state = TransferState.staging,
   }) {
     tasks.registerTask(
       taskId: id,
@@ -656,7 +656,12 @@ void main() {
       expect(sealed.status, 200);
       expect(sealed.decodeJsonBody()['state'], 'WAITING_ACCEPT');
       expect(transfers.taskState(transferId), TransferState.waitingAccept);
-      expect(registry.sealedTransferCount, 1);
+      expect(
+        registry.stagedTransferCount,
+        0,
+        reason:
+            'seal persists the task transition and releases the process-local registry',
+      );
     });
   });
 }

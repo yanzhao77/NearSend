@@ -28,10 +28,12 @@ import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/chunk_manifest.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/protocol_validation.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/commit_window.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/storage_schema.dart';
+import 'package:nearsend/core/storage/storage_state_codec.dart';
 import 'package:nearsend/core/storage/write_fence.dart';
 
 /// Whether a chunk's bytes are durably committed.
@@ -212,7 +214,7 @@ class ChunkRepository {
     required String taskId,
     required String role,
     required String direction,
-    required String state,
+    required TransferState state,
     required int protocolMajor,
     required int protocolMinor,
     String? manifestDigest,
@@ -229,7 +231,7 @@ class ChunkRepository {
           taskId,
           role,
           direction,
-          state,
+          StorageStateCodec.encodeTransfer(state),
           protocolMajor,
           protocolMinor,
           manifestDigest,
@@ -273,7 +275,7 @@ class ChunkRepository {
           expectedCount,
           registration.fileSha256,
           registration.chunkManifestDigest,
-          'pending',
+          StorageStateCodec.encodeFile(FileState.pending),
           now,
         ],
       );

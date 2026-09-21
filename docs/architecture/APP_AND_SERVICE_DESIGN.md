@@ -122,6 +122,14 @@ Idle | Loading(progress?) | Data(value) | Empty | RecoverableError(action) | Fat
 6. 事务成功后向发送方确认。
 
 任一步失败均不得确认该块。批量 checkpoint 可优化，但崩溃后最多重传，不能漏传或假完成。
+断点恢复的裁决依据始终是接收端 SQLite 已持久化的 committed 块与 checkpoint；发送端进度记录只是镜像，
+不得覆盖接收端事实。
+
+### Manifest staging
+
+生产版本把分页清单、首次内容时间和 seal 结果写入 SQLite。首版演示可使用有界内存 registry，
+但只能声明“进程内演示可用”，不能声明服务端重启恢复。30 分钟超时只清理未 seal staging；
+seal 后不再过期。registry 在 seal、取消、终态失败后释放，并必须配置并发任务及内存/记录上限。
 
 ### 完成与导出
 

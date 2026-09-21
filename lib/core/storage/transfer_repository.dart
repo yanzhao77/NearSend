@@ -22,6 +22,7 @@ import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/storage_schema.dart';
+import 'package:nearsend/core/storage/storage_state_codec.dart';
 
 /// What a staging transfer was created with (§7's `POST /transfers`).
 ///
@@ -115,7 +116,10 @@ class TransferRepository {
         'task $taskId is not registered',
       );
     }
-    return _parseTransferState(rows.first['state'] as String, taskId);
+    return StorageStateCodec.decodeTransfer(
+      rows.first['state'] as String,
+      taskId: taskId,
+    );
   }
 
   /// What a transfer was created with, or null when no such task exists.
@@ -155,7 +159,7 @@ class TransferRepository {
       TransferStateMachine.assertTransition(from, to);
       database.db.execute(
         'UPDATE tasks SET state = ?, updated_at = ? WHERE task_id = ?;',
-        <Object?>[to.name, now(), taskId],
+        <Object?>[StorageStateCodec.encodeTransfer(to), now(), taskId],
       );
       return to;
     });
@@ -173,7 +177,10 @@ class TransferRepository {
         'file $fileId is not registered',
       );
     }
-    return _parseFileState(rows.first['export_state'] as String, fileId);
+    return StorageStateCodec.decodeFile(
+      rows.first['export_state'] as String,
+      fileId: fileId,
+    );
   }
 
   /// Moves a file to [to], refusing an undefined transition.
@@ -183,7 +190,7 @@ class TransferRepository {
       FileStateMachine.assertTransition(from, to);
       database.db.execute(
         'UPDATE files SET export_state = ? WHERE file_id = ?;',
-        <Object?>[to.name, fileId],
+        <Object?>[StorageStateCodec.encodeFile(to), fileId],
       );
       return to;
     });
@@ -284,7 +291,7 @@ class TransferRepository {
       FileStateMachine.assertTransition(from, FileState.completed);
       database.db.execute(
         'UPDATE files SET export_state = ? WHERE file_id = ?;',
-        <Object?>[FileState.completed.name, fileId],
+        <Object?>[StorageStateCodec.encodeFile(FileState.completed), fileId],
       );
 
       return ExportRecord(
@@ -393,27 +400,4 @@ class TransferRepository {
     }
   }
 
-  static TransferState _parseTransferState(String value, String taskId) {
-    for (final TransferState state in TransferState.values) {
-      if (state.name == value) {
-        return state;
-      }
-    }
-    throw StorageException(
-      StorageFailureCode.commitFailed,
-      'task $taskId has unknown state "$value"',
-    );
-  }
-
-  static FileState _parseFileState(String value, String fileId) {
-    for (final FileState state in FileState.values) {
-      if (state.name == value) {
-        return state;
-      }
-    }
-    throw StorageException(
-      StorageFailureCode.commitFailed,
-      'file $fileId has unknown state "$value"',
-    );
-  }
 }
