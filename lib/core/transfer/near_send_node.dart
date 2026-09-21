@@ -58,6 +58,7 @@ import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/idempotency_repository.dart';
 import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
+import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/receiver_mirror_repository.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
@@ -215,6 +216,7 @@ class NearSendNode {
     required List<String> candidateAddresses,
     int port = 0,
     String commonName = 'NearSend',
+    SourceBytes Function(String sourceRef, int sizeBytes)? sourceResolver,
   }) async {
     final Directory root = Directory(directory);
     if (!root.existsSync()) {
@@ -278,6 +280,10 @@ class NearSendNode {
         transfers: transfers,
       ),
       windows: windows,
+      // Omitted on a platform whose files are paths, which is every platform but Android with a
+      // document provider: the engine's default treats a recorded reference as a path, and this
+      // is where Android supplies one that turns a document URI into a SAF source instead.
+      sourceResolver: sourceResolver ?? TransferEngine.defaultSourceResolver,
     );
 
     final ChunkTransferEndpoint chunkEndpoint = ChunkTransferEndpoint(
