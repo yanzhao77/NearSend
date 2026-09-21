@@ -196,6 +196,11 @@ class TransferProgress {
     if (remaining == null || rate == null || rate <= 0) {
       return null;
     }
+    if (remaining == 0) {
+      // Nothing left to estimate. Returning 0 would render as 「约 0 秒」, which reads like a
+      // transfer still running and about to finish rather than one that has finished.
+      return null;
+    }
     return (remaining / rate).ceil();
   }
 
@@ -210,6 +215,11 @@ class TransferProgress {
 
   /// A localised remaining time, or a phrase that says why there is none.
   String get remainingLabel {
+    if (totalBytes > 0 && remainingBytes == 0) {
+      // Said as a word rather than as a zero, because 「约 0 秒」 describes a transfer that is
+      // still going.
+      return '已完成';
+    }
     final int? seconds = estimatedSecondsRemaining;
     if (seconds == null) {
       if (bytesPerSecond == 0) {
