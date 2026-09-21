@@ -13,8 +13,9 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 /// * the empty-state sentence explaining that no internet is needed but a
 ///   local Wi-Fi link is.
 ///
-/// The primary actions are **disabled on purpose**. Transport, pairing and
-/// discovery are not implemented yet, and `docs/AGENT_TASK_PLAYBOOK.md` §9
+/// The primary actions are **disabled on purpose**. Protocol, pairing and
+/// storage cores exist, but no real transport flow is wired to this shell;
+/// `docs/AGENT_TASK_PLAYBOOK.md` §9
 /// forbids presenting a static shell as a finished capability.
 ///
 /// Two things UI_UX_SPEC §4 asks for are *not* shown because their real data
@@ -29,7 +30,7 @@ class HomePage extends StatelessWidget {
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
 
   static const String baselineNotice =
-      '当前为 T01-01 工程基线：发送、接收、配对、发现、存储与导出功能均未实现。';
+      '当前仍为工程壳：协议、配对和存储核心已有实现，但发送、接收、发现、恢复与导出业务链路尚未接入。';
 
   @override
   Widget build(BuildContext context) {

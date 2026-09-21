@@ -12,13 +12,16 @@
 /// * The protocol version is owned by `docs/protocol/v1.0-draft1.md` and is
 ///   **not frozen**. Version negotiation and the canonical model belong to
 ///   T02-02. Nothing here may be presented to the user as a frozen protocol.
-/// * [kDbSchemaVersion] is only a *declared* version number. The SQLite schema,
-///   migrations and migration tests are owned by T04-01. No database is created
-///   by this code, so [kDatabaseImplemented] is false and the UI must say so.
+/// * The SQLite schema version comes only from [StorageSchema.currentVersion].
+///   [kDatabaseRuntimeIntegrated] separately reports whether the application
+///   startup path opens that schema; implementation and runtime wiring are not
+///   the same claim.
 /// * The Git commit is injected at build time through `--dart-define`
 ///   (`tooling/scripts/build.ps1`). When it is absent the value must be
 ///   reported as unknown rather than invented.
 library;
+
+import 'package:nearsend/core/storage/storage_schema.dart';
 
 /// 产品显示名。
 const String kAppName = 'NearSend';
@@ -41,11 +44,10 @@ const String kProtocolDraftLabel = '1.0-draft1';
 /// 协议是否已冻结。在 T02-01/T02-02 通过独立实现与固定向量验证前必须为 false。
 const bool kProtocolFrozen = false;
 
-/// 已声明的数据库 schema 版本。真实 schema 由 T04-01 建立。
-const int kDbSchemaVersion = 1;
-
-/// 数据库是否已在本版本中实现。T01-01 只声明版本号，未创建任何数据库。
-const bool kDatabaseImplemented = false;
+/// 应用启动路径是否已装配并打开接收方数据库。
+///
+/// schema 与迁移代码已经实现；这个值只描述产品运行时装配状态。
+const bool kDatabaseRuntimeIntegrated = false;
 
 /// 构建期注入的完整 Git 提交 SHA；未注入时为空字符串。
 const String kGitSha = String.fromEnvironment('NS_GIT_SHA');
@@ -94,9 +96,9 @@ String get protocolStatusDisplay =>
     kProtocolFrozen ? '已冻结' : '$kProtocolDraftLabel（草案，未冻结）';
 
 /// 供 UI 展示的数据库 schema 描述。
-String get dbSchemaDisplay => kDatabaseImplemented
-    ? '$kDbSchemaVersion'
-    : '$kDbSchemaVersion（已声明，数据库尚未创建）';
+String get dbSchemaDisplay => kDatabaseRuntimeIntegrated
+    ? '${StorageSchema.currentVersion}'
+    : '${StorageSchema.currentVersion}（存储层已实现，应用尚未装配）';
 
 /// 供 UI 展示的构建渠道描述。
 String get buildChannelDisplay =>

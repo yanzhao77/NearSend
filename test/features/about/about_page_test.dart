@@ -6,7 +6,7 @@ import 'package:nearsend/features/about/presentation/about_page.dart';
 
 /// T01-01 acceptance: the application must display the version, Git commit,
 /// protocol version and database schema version — and must label the draft
-/// protocol and the declared-only schema honestly.
+/// protocol and the not-yet-integrated storage runtime honestly.
 void main() {
   Future<void> pumpAboutPage(WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: AboutPage()));
@@ -47,13 +47,15 @@ void main() {
   });
 
   testWidgets(
-    'shows the schema version and states that no database exists yet',
+    'shows the schema version and distinguishes implementation from integration',
     (tester) async {
       await pumpAboutPage(tester);
 
       expect(find.text('数据库 schema 版本'), findsOneWidget);
       expect(find.text(dbSchemaDisplay), findsOneWidget);
-      expect(find.textContaining('尚未创建'), findsWidgets);
+      expect(find.textContaining('存储层已实现'), findsWidgets);
+      expect(find.textContaining('应用尚未装配'), findsWidgets);
+      expect(find.textContaining('数据库尚未创建'), findsNothing);
     },
   );
 

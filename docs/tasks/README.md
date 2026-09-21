@@ -35,7 +35,7 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T01-02](T01-02.md) | CI 与检查 | 已完成 | `feat/t01-02-ci-checks` → [#6](https://github.com/yanzhao77/NearSend/pull/6)、[#7](https://github.com/yanzhao77/NearSend/pull/7) |
 | [T02-01](T02-01.md) | Dart canonical manifest | 已完成 | `feat/t02-01-canonical-manifest` → [#8](https://github.com/yanzhao77/NearSend/pull/8)、[#9](https://github.com/yanzhao77/NearSend/pull/9) |
 | [T02-02](T02-02.md) | 状态、错误码和版本协商 | 已完成 | `feat/t02-02-protocol-model` → [#10](https://github.com/yanzhao77/NearSend/pull/10)、[#11](https://github.com/yanzhao77/NearSend/pull/11) |
-| [T03-01](T03-01.md) | 同网二维码配对与信任 | 进行中（目标端网络绑定阻塞于 B02） | `feat/t03-01-pairing-trust` |
+| [T03-01](T03-01.md) | 同网二维码配对与信任 | 进行中（目标端网络绑定阻塞于 B02） | 12 批实现及合并记录：[PR #29–#51](https://github.com/yanzhao77/NearSend/pulls?q=is%3Apr+is%3Amerged+29..51)；最新 [#51](https://github.com/yanzhao77/NearSend/pull/51) |
 | [T04-01](T04-01.md) | SQLite schema、迁移框架与 chunk repository | 进行中 | `feat/t04-01-*` → [#13](https://github.com/yanzhao77/NearSend/pull/13)、[#15](https://github.com/yanzhao77/NearSend/pull/15)、[#17](https://github.com/yanzhao77/NearSend/pull/17)、[#19](https://github.com/yanzhao77/NearSend/pull/19) |
 | [T06-01](T06-01.md) | 空间计划、终检与导出 | 进行中 | `feat/t06-01-*` → [#21](https://github.com/yanzhao77/NearSend/pull/21)、[#23](https://github.com/yanzhao77/NearSend/pull/23)、[#25](https://github.com/yanzhao77/NearSend/pull/25)、[#27](https://github.com/yanzhao77/NearSend/pull/27) |
 

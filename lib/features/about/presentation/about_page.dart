@@ -8,8 +8,8 @@ import 'package:nearsend/core/build_info/build_info.dart';
 /// T01-01 requires the application to display the version, Git commit, protocol
 /// version and database schema version. This page is the single place where
 /// those values are surfaced, and it labels each one with its real status so
-/// that a draft protocol or a declared-only schema version can never be read as
-/// a finished capability.
+/// that a draft protocol or a storage layer not yet wired into the application
+/// can never be read as a finished end-to-end capability.
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
@@ -78,7 +78,7 @@ class AboutPage extends StatelessWidget {
                               const SizedBox(height: NearSendSpacing.xs),
                               Text(
                                 '• 协议版本为草案，尚未冻结；协议能力协商与状态模型由 T02-02 实现。\n'
-                                '• 数据库 schema 版本目前只有声明值，本版本未创建任何 SQLite 数据库；真实 schema、迁移与故障测试由 T04-01 实现。\n'
+                                '• 数据库 schema 与迁移代码已实现；当前版本尚未在应用启动路径装配并打开数据库。\n'
                                 '• Git 提交在构建时通过 --dart-define 注入；未注入时显示 unknown，不显示推测值。',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),

@@ -47,13 +47,14 @@ void main() {
     expect(find.text(HomePage.emptyStateExplanation), findsOneWidget);
   });
 
-  testWidgets('states plainly that transport features are not implemented', (
-    tester,
-  ) async {
-    await pumpHomePage(tester);
+  testWidgets(
+    'states plainly that the user-facing transfer flow is not integrated',
+    (tester) async {
+      await pumpHomePage(tester);
 
-    expect(find.text(HomePage.baselineNotice), findsOneWidget);
-  });
+      expect(find.text(HomePage.baselineNotice), findsOneWidget);
+    },
+  );
 
   testWidgets(
     'does not render a continue-task action while none is recoverable',
