@@ -29,6 +29,7 @@ library;
 import 'package:nearsend/core/protocol/manifest_staging.dart';
 import 'package:nearsend/core/protocol/manifest_page.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 
 /// The staging state of the transfers this process is proposing.
@@ -62,6 +63,7 @@ class ManifestStagingRegistry {
   static int _systemNow() => DateTime.now().millisecondsSinceEpoch;
 
   final Map<String, ManifestStaging> _staging = <String, ManifestStaging>{};
+  final Set<String> _expired = <String>{};
 
   /// Transfers with staging held in this process.
   int get stagedTransferCount => _staging.length;
@@ -89,10 +91,10 @@ class ManifestStagingRegistry {
     }
 
     _purgeExpired();
-    if (_staging.length >= maxConcurrentTransfers) {
+    if (_expired.contains(transferId)) {
       throw const ProtocolViolation(
-        ProtocolErrorCode.resourceLimit,
-        'the process-local staging task limit has been reached',
+        ProtocolErrorCode.taskExpired,
+        'the incomplete staging proposal has expired',
       );
     }
 
@@ -103,6 +105,18 @@ class ManifestStagingRegistry {
       throw const ProtocolViolation(
         ProtocolErrorCode.notFound,
         'no transfer with that id is registered',
+      );
+    }
+    if (transfers.taskState(transferId) != TransferState.staging) {
+      throw const ProtocolViolation(
+        ProtocolErrorCode.invalidState,
+        'manifest staging is only available while the task is in STAGING',
+      );
+    }
+    if (_staging.length >= maxConcurrentTransfers) {
+      throw const ProtocolViolation(
+        ProtocolErrorCode.resourceLimit,
+        'the process-local staging task limit has been reached',
       );
     }
     final String? digest = declaration.manifestDigest;
@@ -165,10 +179,14 @@ class ManifestStagingRegistry {
 
   void _purgeExpired() {
     final int moment = now();
-    _staging.removeWhere(
-      (String transferId, ManifestStaging staging) =>
-          !staging.isSealed && staging.isExpired(nowMillis: moment),
-    );
+    _staging.removeWhere((String transferId, ManifestStaging staging) {
+      final bool expired =
+          !staging.isSealed && staging.isExpired(nowMillis: moment);
+      if (expired) {
+        _expired.add(transferId);
+      }
+      return expired;
+    });
   }
 
   /// §6's window, applied where it can actually stop something.
@@ -180,6 +198,7 @@ class ManifestStagingRegistry {
     }
     if (staging.isExpired(nowMillis: now())) {
       _staging.remove(transferId);
+      _expired.add(transferId);
       throw const ProtocolViolation(
         ProtocolErrorCode.taskExpired,
         'nothing was received for this transfer within §6s thirty-minute window, so the '

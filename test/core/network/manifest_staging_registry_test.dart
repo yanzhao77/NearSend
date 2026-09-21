@@ -222,6 +222,17 @@ void main() {
         0,
         reason: 'the refused proposal was dropped rather than left to be refused again',
       );
+      expect(
+        () => registry.stagingFor(transferId),
+        throwsA(
+          isA<ProtocolViolation>().having(
+            (ProtocolViolation e) => e.code,
+            'code',
+            ProtocolErrorCode.taskExpired,
+          ),
+        ),
+        reason: 'an expired proposal must not reopen on the next request',
+      );
     });
 
     test('the window runs from the first content, not from the transfer', () {
