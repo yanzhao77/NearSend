@@ -659,8 +659,7 @@ void main() {
       expect(
         registry.stagedTransferCount,
         0,
-        reason:
-            'seal persists the task transition and releases the process-local registry',
+        reason: 'seal persists the task transition and releases the process-local registry',
       );
     });
   });

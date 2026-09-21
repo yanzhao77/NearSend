@@ -302,47 +302,53 @@ void main() {
       );
     });
 
-    test('expired incomplete staging is swept before the concurrency check', () {
-      register(transferId, manifestDigest: digest);
-      register(otherTransferId, manifestDigest: digest);
-      final ManifestStagingRegistry bounded = ManifestStagingRegistry(
-        transfers: transfers,
-        now: () => clock,
-        maxConcurrentTransfers: 1,
-      );
-      bounded.addPage(transferId, pageFor(transferId, digest));
+    test(
+      'expired incomplete staging is swept before the concurrency check',
+      () {
+        register(transferId, manifestDigest: digest);
+        register(otherTransferId, manifestDigest: digest);
+        final ManifestStagingRegistry bounded = ManifestStagingRegistry(
+          transfers: transfers,
+          now: () => clock,
+          maxConcurrentTransfers: 1,
+        );
+        bounded.addPage(transferId, pageFor(transferId, digest));
 
-      clock += ProtocolLimits.stagingTimeoutSeconds * 1000;
-      expect(bounded.stagingFor(otherTransferId), isA<ManifestStaging>());
-      expect(bounded.stagedTransferCount, 1);
-    });
+        clock += ProtocolLimits.stagingTimeoutSeconds * 1000;
+        expect(bounded.stagingFor(otherTransferId), isA<ManifestStaging>());
+        expect(bounded.stagedTransferCount, 1);
+      },
+    );
 
-    test('crossing the retained-record budget releases the failed proposal', () {
-      register(transferId, manifestDigest: digest);
-      final ManifestStagingRegistry bounded = ManifestStagingRegistry(
-        transfers: transfers,
-        now: () => clock,
-        maxRetainedEntries: 1,
-      );
-      bounded.addPage(transferId, pageFor(transferId, digest));
+    test(
+      'crossing the retained-record budget releases the failed proposal',
+      () {
+        register(transferId, manifestDigest: digest);
+        final ManifestStagingRegistry bounded = ManifestStagingRegistry(
+          transfers: transfers,
+          now: () => clock,
+          maxRetainedEntries: 1,
+        );
+        bounded.addPage(transferId, pageFor(transferId, digest));
 
-      final ManifestChunkPage chunks = ManifestPager.chunkPages(
-        manifestDigest: digest,
-        fileId: files.single.fileId,
-        chunks: chunksFor(files.single.sizeBytes),
-      ).single;
-      expect(
-        () => bounded.addPage(transferId, chunks),
-        throwsA(
-          isA<ProtocolViolation>().having(
-            (ProtocolViolation e) => e.code,
-            'code',
-            ProtocolErrorCode.resourceLimit,
+        final ManifestChunkPage chunks = ManifestPager.chunkPages(
+          manifestDigest: digest,
+          fileId: files.single.fileId,
+          chunks: chunksFor(files.single.sizeBytes),
+        ).single;
+        expect(
+          () => bounded.addPage(transferId, chunks),
+          throwsA(
+            isA<ProtocolViolation>().having(
+              (ProtocolViolation e) => e.code,
+              'code',
+              ProtocolErrorCode.resourceLimit,
+            ),
           ),
-        ),
-      );
-      expect(bounded.stagedTransferCount, 0);
-      expect(bounded.retainedEntryCount, 0);
-    });
+        );
+        expect(bounded.stagedTransferCount, 0);
+        expect(bounded.retainedEntryCount, 0);
+      },
+    );
   });
 }

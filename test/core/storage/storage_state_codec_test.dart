@@ -8,10 +8,7 @@ void main() {
   test('every transfer state round-trips through the one SQLite codec', () {
     for (final TransferState state in TransferState.values) {
       final String stored = StorageStateCodec.encodeTransfer(state);
-      expect(
-        StorageStateCodec.decodeTransfer(stored, taskId: 'task'),
-        state,
-      );
+      expect(StorageStateCodec.decodeTransfer(stored, taskId: 'task'), state);
     }
   });
 
