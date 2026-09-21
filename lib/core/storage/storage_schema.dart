@@ -29,7 +29,37 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 3;
+  static const int currentVersion = 5;
+
+  /// The table holding one staging proposal per transfer (§6, ADR-0004).
+  static const String manifestStagingTable = 'manifest_staging';
+
+  /// The table holding a staging proposal's file pages, keyed by manifest index.
+  static const String manifestFilesTable = 'manifest_files';
+
+  /// The table holding a staging proposal's chunk pages, keyed by file and chunk index.
+  static const String manifestChunksTable = 'manifest_chunks';
+
+  /// The column holding the frozen manifest once a proposal is sealed.
+  ///
+  /// The sealed manifest is what decision, chunk verification and resume read, and §6 says
+  /// the window stops applying once it exists. It is stored rather than re-derived so that a
+  /// restart can answer those three questions without rebuilding an accumulator, and so that
+  /// "the frozen manifest is gone after a restart" stops being true.
+  static const String sealedManifestColumn = 'sealed_manifest';
+
+  /// The column holding when a proposal first received content (§6's window start).
+  ///
+  /// §6 runs the thirty-minute window from the first content rather than from the offer, so
+  /// the moment has to survive a restart: a proposal that has been sitting for twenty-nine
+  /// minutes must not get a fresh thirty because the process restarted.
+  static const String firstContentAtColumn = 'first_content_at';
+
+  /// The table holding one task's issued credentials, by digest only.
+  static const String taskCredentialsTable = 'task_credentials';
+
+  /// The table holding what a receiver approved for one task (§6).
+  static const String taskAuthorizationsTable = 'task_authorizations';
 
   /// The column version 3 adds to `tasks`, holding the last committed checkpoint (§8).
   ///
@@ -142,6 +172,121 @@ CREATE TABLE exports (
 );''',
   };
 
+  /// Tables schema version 4 adds: the persisted manifest staging of ADR-0004.
+  ///
+  /// ADR-0004 requires production manifest staging to enter SQLite, and §6 requires a sealed
+  /// manifest to remain usable for decision, chunk verification and resume. Three tables
+  /// rather than one blob because the rows carry the two orderings §5 and §5.3 fix: a file's
+  /// index in the `files` array, and a chunk's index inside its file. Both are primary key
+  /// components, so "store by index" - the property that makes a re-sent page unable to
+  /// inflate a count - is a property of the schema rather than of a caller.
+  ///
+  /// `manifest_staging` deliberately has **no** column for the pages themselves and no byte
+  /// counter: what a proposal has received is the set of rows in the other two tables.
+  static const Map<String, String> version4Tables = <String, String>{
+    manifestStagingTable:
+        '''
+CREATE TABLE manifest_staging (
+  transfer_id       TEXT    PRIMARY KEY REFERENCES tasks(task_id) ON DELETE CASCADE,
+  manifest_digest   TEXT    NOT NULL,
+  protocol_major    INTEGER NOT NULL,
+  protocol_minor    INTEGER NOT NULL,
+  $firstContentAtColumn INTEGER,
+  sealed_at         INTEGER,
+  $sealedManifestColumn TEXT,
+  seal_result_json  TEXT,
+  released_at       INTEGER,
+  created_at        INTEGER NOT NULL
+);''',
+
+    manifestFilesTable: '''
+CREATE TABLE manifest_files (
+  transfer_id          TEXT    NOT NULL REFERENCES manifest_staging(transfer_id) ON DELETE CASCADE,
+  file_index           INTEGER NOT NULL,
+  file_id              TEXT    NOT NULL,
+  relative_path        TEXT    NOT NULL,
+  size_bytes           INTEGER NOT NULL,
+  chunk_size_bytes     INTEGER NOT NULL,
+  chunk_count          INTEGER NOT NULL,
+  file_sha256          TEXT    NOT NULL,
+  chunk_manifest_digest TEXT   NOT NULL,
+  PRIMARY KEY (transfer_id, file_index)
+);''',
+
+    manifestChunksTable: '''
+CREATE TABLE manifest_chunks (
+  transfer_id  TEXT    NOT NULL REFERENCES manifest_staging(transfer_id) ON DELETE CASCADE,
+  file_id      TEXT    NOT NULL,
+  chunk_index  INTEGER NOT NULL,
+  length_bytes INTEGER NOT NULL,
+  sha256       TEXT    NOT NULL,
+  PRIMARY KEY (transfer_id, file_id, chunk_index)
+);''',
+  };
+
+  /// Indexes schema version 4 adds.
+  static const Map<String, String> version4Indexes = <String, String>{
+    'manifest_files_by_file': 'CREATE INDEX manifest_files_file ON manifest_files (transfer_id, file_id);',
+    'manifest_staging_unsealed':
+        'CREATE INDEX manifest_staging_open ON manifest_staging (sealed_at, '
+        'first_content_at);',
+  };
+
+  /// Tables schema version 5 adds: the durable side of §3's task credentials.
+  ///
+  /// §2 and `AGENTS.md` §5 keep secrets in platform secure storage, so nothing here holds a
+  /// secret: `task_credentials` holds a SHA-256 **digest** of the resume and completion-query
+  /// secrets, which is enough to verify a presented secret and useless to an attacker who
+  /// reads the file. The task access token is a short-lived bearer, and the same reasoning
+  /// applies to it, so it is a digest too.
+  ///
+  /// `task_authorizations` holds what the receiver approved: the manifest digest it accepted,
+  /// the save location it chose and the space estimate it was shown. §6 requires those to be
+  /// persisted together with the approval, and "路径或身份变化需要重新确认" needs something to
+  /// compare a later request against.
+  static const Map<String, String> version5Tables = <String, String>{
+    taskCredentialsTable: '''
+CREATE TABLE task_credentials (
+  transfer_id        TEXT    NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
+  kind               TEXT    NOT NULL,
+  digest             TEXT    NOT NULL,
+  issued_at          INTEGER NOT NULL,
+  expires_at         INTEGER,
+  consumed_at        INTEGER,
+  PRIMARY KEY (transfer_id, kind)
+);''',
+
+    taskAuthorizationsTable: '''
+CREATE TABLE task_authorizations (
+  transfer_id        TEXT    PRIMARY KEY REFERENCES tasks(task_id) ON DELETE CASCADE,
+  manifest_digest    TEXT    NOT NULL,
+  decision           TEXT    NOT NULL CHECK (decision IN ('accepted', 'rejected')),
+  save_location_ref  TEXT,
+  space_estimate_json TEXT,
+  decided_at         INTEGER NOT NULL,
+  receipt_at         INTEGER
+);''',
+  };
+
+  /// The kinds of credential §3 and §7 define, as stored in [taskCredentialsTable].
+  ///
+  /// These are database values, not wire values: the wire never names them, and a single
+  /// definition here is what keeps a second spelling from appearing at a call site.
+  static const String credentialKindResume = 'resume_secret';
+
+  /// The restricted credential §7 gives for a completion query.
+  static const String credentialKindCompletionQuery = 'completion_query_secret';
+
+  /// The task access token issued by §7's resume.
+  static const String credentialKindTaskAccess = 'task_access_token';
+
+  /// Indexes schema version 5 adds.
+  static const Map<String, String> version5Indexes = <String, String>{
+    'task_credentials_kind':
+        'CREATE INDEX task_credentials_by_kind ON '
+        'task_credentials (kind, expires_at);',
+  };
+
   /// Indexes this schema version defines.
   static const Map<String, String> indexes = <String, String>{
     'chunks_missing':
@@ -193,6 +338,39 @@ CREATE TABLE exports (
     );
   }
 
+  /// Applies schema version 4 to [db]: persists manifest staging (ADR-0004).
+  ///
+  /// New tables only, so no existing row is rewritten. A transfer that was mid-proposal when
+  /// the upgrade happened simply has no staging row: the client re-uploads its pages, which
+  /// §6 makes safe ("重传相同页返回成功"), and this build must not claim to have recovered
+  /// staging it never stored.
+  static void applyVersion4(Database db) {
+    for (final String ddl in version4Tables.values) {
+      db.execute(ddl);
+    }
+    for (final String ddl in version4Indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
+  /// Applies schema version 5 to [db]: task credentials and authorisation records.
+  ///
+  /// New tables only, so no existing row is rewritten. A task created before this version has
+  /// no authorisation record, which is honest: nothing approved it under the new shape.
+  static void applyVersion5(Database db) {
+    for (final String ddl in version5Tables.values) {
+      db.execute(ddl);
+    }
+    for (final String ddl in version5Indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
   /// The names of every table in this schema version, including the metadata table.
-  static Set<String> get tableNames => <String>{metaTable, ...tables.keys};
+  static Set<String> get tableNames => <String>{
+    metaTable,
+    ...tables.keys,
+    ...version4Tables.keys,
+    ...version5Tables.keys,
+  };
 }

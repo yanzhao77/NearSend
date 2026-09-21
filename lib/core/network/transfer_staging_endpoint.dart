@@ -35,7 +35,6 @@ import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/api_routes.dart';
 import 'package:nearsend/core/protocol/idempotency.dart';
 import 'package:nearsend/core/protocol/manifest_page.dart';
-import 'package:nearsend/core/protocol/manifest_staging.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/transfer_seal_request.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
@@ -100,25 +99,30 @@ class TransferStagingEndpoint {
       // conclusion about the manifest rather than a write to a file.
       leaseEpoch: 0,
       effect: () {
-        final ManifestStaging target = staging.stagingFor(transferId);
         // §7: "摘要失败422". The digest in the body is the client's claim; the one the
         // transfer was created with is the authority. Checked here rather than before the
         // idempotency lookup so that §9's rules still see the request first: a retry that
         // reuses the request id with a different digest is a *conflict*, and a fresh request
         // whose digest disagrees with the declaration is a manifest mismatch. Checking it
         // earlier would report every id reuse as the second of those.
-        if (sealRequest.manifestDigest != target.manifestDigest) {
+        //
+        // The digest is read from the stored record rather than from a rebuilt manifest, so
+        // this does not cost a full materialisation of what may be a large proposal.
+        final String declared = staging.declaredDigest(transferId);
+        if (sealRequest.manifestDigest != declared) {
           throw const ProtocolViolation(
             ProtocolErrorCode.manifestMismatch,
             'the seal names a different manifest digest than the transfer declared',
           );
         }
 
-        // §6's order lives in `seal`: gaps, duplicate file ids, chunk records, and the total
-        // digest last. A failure here throws `MANIFEST_MISMATCH` and the transaction rolls
-        // back, so the task stays in `STAGING` and the client may add more pages and retry -
-        // §6: "不能进入 WAITING_ACCEPT".
-        target.seal();
+        // §6's order lives in the stored seal: gaps, duplicate file ids, chunk records, and
+        // the total digest last. A failure here throws `MANIFEST_MISMATCH` and the transaction
+        // rolls back, so the task stays in `STAGING` and the client may add more pages and
+        // retry - §6: "不能进入 WAITING_ACCEPT". The frozen manifest is written in **this**
+        // transaction, so the seal, the task's state change and §9's idempotency record commit
+        // together or not at all.
+        staging.seal(transferId);
         transfers.transitionTask(
           taskId: transferId,
           to: TransferState.waitingAccept,
@@ -130,6 +134,10 @@ class TransferStagingEndpoint {
     switch (execution.kind) {
       case IdempotencyExecutionKind.executed:
       case IdempotencyExecutionKind.replayed:
+        // The frozen manifest stays in SQLite; what is released is the proposal's claim on the
+        // process's open-proposal budget, which is ADR-0004's "seal 成功后释放内存 registry"
+        // under a storage-backed registry. The manifest itself must remain readable for
+        // decision, chunk verification and resume, so this deliberately does not discard it.
         staging.release(transferId, StagingReleaseReason.sealed);
         return ControlResponse.json(status: 200, body: _sealedBody(execution));
 

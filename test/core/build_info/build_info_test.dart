@@ -66,14 +66,15 @@ void main() {
     });
 
     test('schema display uses the storage schema authority', () {
-      expect(StorageSchema.currentVersion, 3);
+      // Pinned on purpose: bumping the schema has to be a deliberate act, and the display must
+      // never be a second definition of the number.
+      expect(StorageSchema.currentVersion, 5);
       expect(
-        kDatabaseRuntimeIntegrated,
-        isFalse,
+        dbSchemaDisplay,
+        startsWith('${StorageSchema.currentVersion}'),
         reason:
-            'the schema exists, but the app startup path does not open it yet',
+            'the display consumes StorageSchema rather than repeating a number',
       );
-      expect(dbSchemaDisplay, startsWith('${StorageSchema.currentVersion}'));
       expect(dbSchemaDisplay, contains('存储层已实现'));
       expect(dbSchemaDisplay, contains('应用尚未装配'));
       expect(dbSchemaDisplay, isNot(contains('数据库尚未创建')));

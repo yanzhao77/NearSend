@@ -402,6 +402,19 @@ void main() {
       return db;
     }
 
+    /// Builds a database at exactly version 3, by running the real version 3 step.
+    ///
+    /// This is the version that already exists in the field, so it is the one the staging
+    /// upgrade (version 4) and the credential upgrade (version 5) actually meet.
+    Database openVersionThree(String name) {
+      final Database db = openVersionTwo(name);
+      StorageSchema.applyVersion3(db);
+      db.execute(
+        'UPDATE ${StorageSchema.metaTable} SET version = 3 WHERE id = 1;',
+      );
+      return db;
+    }
+
     test('reaches the current version', () {
       final Database db = openVersionOne('v1.db');
       try {
@@ -603,6 +616,80 @@ void main() {
         );
       } finally {
         db.close();
+      }
+    });
+
+    test('a version 3 database gains the staging tables without losing rows', () {
+      // Version 4 is the upgrade a field database actually meets, so what matters is that it
+      // adds the manifest staging tables and rewrites nothing else.
+      final Database db = openVersionThree('v3-staging.db');
+      try {
+        db.execute(
+          "INSERT INTO tasks (task_id, role, direction, state, protocol_major, "
+          "protocol_minor, lease_epoch, manifest_digest, created_at, updated_at) "
+          "VALUES ('t1', 'receiver', 'client_to_server', 'staging', 1, 0, 0, 'aa', 1, 1);",
+        );
+
+        expect(StorageMigrator().storedVersion(db), 3);
+        StorageMigrator().migrate(db);
+        expect(
+          StorageMigrator().storedVersion(db),
+          StorageSchema.currentVersion,
+        );
+
+        expect(
+          db.select('SELECT task_id, state FROM tasks;').first['state'],
+          'staging',
+        );
+        for (final String table in <String>[
+          StorageSchema.manifestStagingTable,
+          StorageSchema.manifestFilesTable,
+          StorageSchema.manifestChunksTable,
+          StorageSchema.taskCredentialsTable,
+          StorageSchema.taskAuthorizationsTable,
+        ]) {
+          expect(
+            db.select('PRAGMA table_info($table);'),
+            isNotEmpty,
+            reason: '$table must exist after the upgrade',
+          );
+        }
+
+        // The staging row can be written against the upgraded schema, which is what
+        // "the upgrade produced a usable database" means rather than "the DDL ran".
+        db.execute(
+          "INSERT INTO ${StorageSchema.manifestStagingTable} (transfer_id, "
+          "manifest_digest, protocol_major, protocol_minor, created_at) "
+          "VALUES ('t1', 'aa', 1, 0, 5);",
+        );
+        expect(
+          db.select(
+            'SELECT transfer_id FROM ${StorageSchema.manifestStagingTable};',
+          ),
+          hasLength(1),
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    test('the new staging tables require a registered task', () {
+      // The foreign key is what stops a staging row from outliving the transfer it belongs
+      // to, and it is checked by the engine because `foreign_keys` is on for every connection.
+      final NearSendDatabase fresh = NearSendDatabase.open(
+        path: dbPath('staging-fk.db'),
+      );
+      try {
+        expect(
+          () => fresh.db.execute(
+            "INSERT INTO ${StorageSchema.manifestStagingTable} (transfer_id, "
+            "manifest_digest, protocol_major, protocol_minor, created_at) "
+            "VALUES ('absent', 'aa', 1, 0, 5);",
+          ),
+          throwsA(isA<SqliteException>()),
+        );
+      } finally {
+        fresh.close();
       }
     });
 
