@@ -4,6 +4,7 @@ import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/manifest.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
+import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/transfer_flow.dart';
@@ -96,8 +97,16 @@ class ServerReceivingFlow extends ChangeNotifier {
   final List<String> _savedPaths = <String>[];
   int _currentIndex = 0;
   int _fileCount = 0;
+  SpaceVerdict? _spaceVerdict;
 
   ServerReceivePhase get phase => _phase;
+
+  /// What the space plan said about the transfer being received, once one has been measured.
+  ///
+  /// Exposed rather than swallowed because two of its three answers are things a user must be told:
+  /// `unknown` means nobody measured the volumes, and a screen that showed it as a pass would be
+  /// claiming a check that never happened.
+  SpaceVerdict? get spaceVerdict => _spaceVerdict;
 
   /// What this device is being asked to accept, from its own database.
   List<ServerOffer> get pending => List<ServerOffer>.unmodifiable(_pending);
@@ -178,8 +187,32 @@ class ServerReceivingFlow extends ChangeNotifier {
     _notify();
 
     try {
+      // §6's space pre-check, run **before** the acceptance rather than after it: the engine's
+      // `acceptLocally` persists the decision and the estimate but does not refuse a shortfall, so a
+      // caller that skipped this would commit to a transfer that provably cannot fit. Only a
+      // *proven* shortfall stops it - an unmeasurable volume is reported as unknown and left to the
+      // user, because refusing on "we could not check" would refuse transfers that fit.
+      final SpacePlan plan = const SpacePlanner().plan(
+        files: <FileSpaceRequest>[
+          for (final ManifestFile file in _manifestOf(offer))
+            FileSpaceRequest(
+              fileId: file.fileId,
+              sizeBytes: file.sizeBytes,
+              stagingVolume: context.stagingVolume,
+              exportVolume: context.exportVolume,
+              stagingAlreadyAllocatedBytes: 0,
+            ),
+        ],
+        availability: context.availability,
+        volumeForDatabase: context.databaseVolume,
+      );
+      _spaceVerdict = plan.verdict;
+      if (plan.verdict == SpaceVerdict.insufficient) {
+        throw const ServerReceiveRefused('空间不足：已按暂存与导出的峰值计算，需要先清理或更换保存位置。');
+      }
+
       // §6: the acceptance is this device's, and it persists the digest, the location and the space
-      // estimate together. A shortfall is refused here by the engine rather than papered over.
+      // estimate together.
       engine.acceptLocally(transferId: offer.transferId, context: context);
       _phase = ServerReceivePhase.receiving;
       _notify();
@@ -244,6 +277,14 @@ class ServerReceivingFlow extends ChangeNotifier {
       return false;
     }
   }
+
+  /// The sealed manifest's files, which is what the space plan has to be built from.
+  ///
+  /// From the frozen manifest rather than from the declaration: §6 makes the manifest the authority
+  /// on sizes, and a plan built from anything else would be measuring a different transfer.
+  List<ManifestFile> _manifestOf(ServerOffer offer) =>
+      engine.staging.frozenManifest(offer.transferId)?.files ??
+      const <ManifestFile>[];
 
   /// Whether every chunk of every file of the transfer has been committed.
   ///

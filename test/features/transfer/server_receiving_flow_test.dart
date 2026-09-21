@@ -118,7 +118,9 @@ void main() {
 
   /// The guest's sending flow, in the arrangement the application uses when nobody paired with it:
   /// its own engine plans, and its client proposes to the host.
-  SendingFlow guestFlow() => SendingFlow(
+  SendingFlow guestFlow({
+    Duration authorizationTimeout = const Duration(seconds: 20),
+  }) => SendingFlow(
     session: SendingSession(engine: guest.engine, wire: guestToHost),
     selection: FileSelectionController(gateway: null, idFactory: () => fileId),
     now: () => 1000,
@@ -126,7 +128,7 @@ void main() {
     ownSessionId: '99999999-9999-4999-8999-999999999999',
     peerHasPaired: () => false,
     authorizationPollInterval: const Duration(milliseconds: 25),
-    authorizationTimeout: const Duration(seconds: 20),
+    authorizationTimeout: authorizationTimeout,
   );
 
   /// The free space the caller measured. Stated here rather than measured because this layer must
@@ -202,6 +204,65 @@ void main() {
           'this is the claim the pushing direction exists for: a client that pasted this device\'s '
           'connection information can put a file on it, byte for byte',
     );
+  });
+
+  test('a proven shortfall is refused before anything is accepted', () async {
+    // A short bound on the sender's wait, because the property here is about the *receiver's*
+    // refusal; how long a sender waits for an answer nobody will give has its own case.
+    final SendingFlow sending = guestFlow(
+      authorizationTimeout: const Duration(milliseconds: 600),
+    );
+    await sending.addPaths(<String>[sourceFile().path]);
+    final ServerReceivingFlow receiving = ServerReceivingFlow(
+      engine: host.engine,
+      now: () => 1000,
+      commitPollInterval: const Duration(milliseconds: 25),
+    );
+
+    final Future<bool> pushed = sending.send();
+    await waitForOffer(receiving);
+
+    // A volume that provably cannot hold the transfer. This is the one space answer that stops a
+    // receive: "we could not measure" is reported as unknown and left to the user, because refusing
+    // on an unmeasured volume would refuse transfers that fit.
+    final ReceiverStorageContext tooSmall = ReceiverStorageContext(
+      stagingVolume: const VolumeId('staging'),
+      exportVolume: const VolumeId('internal'),
+      databaseVolume: const VolumeId('internal'),
+      availability: <VolumeId, VolumeAvailability>{
+        const VolumeId('staging'): const VolumeAvailability.known(1024),
+        const VolumeId('internal'): const VolumeAvailability.known(1024),
+      },
+      saveLocationRef: saved.path,
+    );
+
+    expect(
+      await receiving.accept(
+        receiving.pending.single,
+        context: tooSmall,
+        targetRef: saved.path,
+      ),
+      isFalse,
+    );
+    expect(receiving.phase, ServerReceivePhase.failed);
+    expect(receiving.failureReason, contains('空间不足'));
+    expect(
+      host.authorizations.read(transferId)?.isAccepted,
+      isNot(true),
+      reason:
+          '§6 makes the acceptance commit to the space estimate, so a transfer that cannot fit must '
+          'not be accepted at all - accepted-then-failed is a different and worse outcome',
+    );
+    expect(
+      saved.existsSync(),
+      isFalse,
+      reason: 'and nothing may have been written where the user pointed it',
+    );
+
+    // The sender's wait ends by itself rather than hanging: nobody granted a write generation.
+    expect(await pushed, isFalse);
+    expect(sending.phase, SendPhase.failed);
+    expect(sending.failureReason, contains('超时'));
   });
 
   test('an offer stops being offered once it has been answered', () async {
