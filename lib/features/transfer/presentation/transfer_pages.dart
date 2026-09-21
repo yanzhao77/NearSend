@@ -85,6 +85,7 @@ class ConnectionPage extends StatefulWidget {
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
     this.onContinue,
+    this.continueLabel = continueLabelSend,
   });
 
   /// The payload this device publishes, or null when it has not opened a session.
@@ -112,6 +113,13 @@ class ConnectionPage extends StatefulWidget {
   /// rule the connect button follows.
   final VoidCallback? onContinue;
 
+  /// What the button after a verified connection says.
+  ///
+  /// It is the caller's, because the same connection leads to opposite actions: `docs/ui/UI_UX_SPEC.md`
+  /// §4 gives sending and receiving one first step and different wording, and a single label would be
+  /// wrong for one of them.
+  final String continueLabel;
+
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
   static const String startingNote = '正在启动本机节点，稍后这里会显示本机连接信息…';
@@ -124,7 +132,8 @@ class ConnectionPage extends StatefulWidget {
   static const String connectedNote = '已连接：对方证书指纹与连接信息一致。';
 
   /// The action that follows a verified connection.
-  static const String continueLabel = '选择文件';
+  static const String continueLabelSend = '选择文件';
+  static const String continueLabelReceive = '查看对方提供的文件';
 
   /// Shown under the published pin, because that pin is not stable across launches.
   ///
@@ -263,7 +272,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           FilledButton.icon(
                             onPressed: widget.onContinue,
                             icon: const Icon(Icons.arrow_forward),
-                            label: const Text(ConnectionPage.continueLabel),
+                            label: Text(widget.continueLabel),
                           ),
                         ],
                       ],

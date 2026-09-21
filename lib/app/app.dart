@@ -10,8 +10,10 @@ import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
 import 'package:nearsend/features/home/presentation/home_page.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
+import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
+import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 
@@ -69,6 +71,15 @@ class NearSendApp extends StatefulWidget {
   /// drives outlives a dialog and its figures have to survive a rebuild.
   static const String sendRoute = '/send';
 
+  /// Where an offer from the peer is answered. Its own route for the same reason, and because
+  /// receiving a file the user did not ask for must be a screen they chose to be on.
+  static const String receiveRoute = '/receive';
+
+  /// The argument `HomePage` passes to the connection screen, so that one screen can serve both
+  /// actions and still lead somewhere different afterwards.
+  static const String sendArgument = 'send';
+  static const String receiveArgument = 'receive';
+
   /// The receive confirmation, which `docs/ui/UI_UX_SPEC.md` §5 keeps as its own step so the
   /// space check cannot be skipped by accepting on the connection screen.
   static const String receiveConfirmRoute = '/receive-confirm';
@@ -83,6 +94,9 @@ class _NearSendAppState extends State<NearSendApp> {
   /// Created on a successful connection rather than at startup, because a flow with no peer would be
   /// a screen whose send button has nothing behind it - the state this whole task exists to remove.
   SendingFlow? _flow;
+
+  /// The receiving flow for the same connection: what the peer is offering, and the answer to it.
+  ReceivingFlow? _receiving;
 
   @override
   void initState() {
@@ -103,13 +117,16 @@ class _NearSendAppState extends State<NearSendApp> {
     }
     widget.peer?.dispose();
     _flow?.dispose();
+    _receiving?.dispose();
     super.dispose();
   }
 
-  /// Pairs with the device that published [payload], and prepares to send to it.
+  /// Pairs with the device that published [payload], and prepares for either direction.
   ///
-  /// The flow is only built once the peer proved its identity: a client for an unverified peer must
-  /// not exist, and `PeerSession` is what guarantees it does not.
+  /// Both flows are built once the peer proved its identity: a client for an unverified peer must
+  /// not exist, and `PeerSession` is what guarantees it does not. Which of them a screen uses is the
+  /// user's choice - the same connection serves sending and receiving, which is why they are made
+  /// together rather than on the way into a screen.
   Future<void> connect(PairingPayload payload) async {
     final PeerSession? peer = widget.peer;
     if (peer == null) {
@@ -129,10 +146,24 @@ class _NearSendAppState extends State<NearSendApp> {
       now: () => DateTime.now().millisecondsSinceEpoch,
       transferIdFactory: widget.transferIdFactory,
     );
+    _receiving?.dispose();
+    _receiving = ReceivingFlow(
+      engine: node.engine,
+      wire: peer.client!,
+      now: () => DateTime.now().millisecondsSinceEpoch,
+    );
     if (mounted) {
       setState(() {});
     }
   }
+
+  /// Where the connection screen leads once the peer has proved its identity.
+  ///
+  /// Null when the flow that screen would need has not been built, which is the same rule the
+  /// connect button follows: a control that cannot act is not rendered.
+  String? _continueTarget(bool receiving) => receiving
+      ? (_receiving == null ? null : NearSendApp.receiveRoute)
+      : (_flow == null ? null : NearSendApp.sendRoute);
 
   /// The peer state, as the connection screen renders it.
   ///
@@ -174,32 +205,67 @@ class _NearSendAppState extends State<NearSendApp> {
       routes: <String, WidgetBuilder>{
         NearSendApp.homeRoute: (_) => const HomePage(),
         NearSendApp.aboutRoute: (_) => const AboutPage(),
-        NearSendApp.connectRoute: (_) => ListenableBuilder(
-          // Both sessions: the published payload arrives asynchronously, and a connection attempt
-          // changes without any navigation happening.
-          listenable: Listenable.merge(<Listenable?>[
-            widget.session,
-            widget.peer,
-          ]),
-          builder: (BuildContext context, Widget? _) {
-            final NodeSession? session = widget.session;
-            return ConnectionPage(
-              payload: session?.payload,
-              starting: session?.phase == NodePhase.starting,
-              // Only a *failed* node has a reason to state. A node that is starting has none, and a
-              // build with no node at all has nothing to say beyond the empty-session note.
-              unavailableReason: session?.phase == NodePhase.failed
-                  ? session!.failureReason
-                  : null,
-              connection: attempt,
-              onConnect: widget.peer == null ? null : connect,
-              onContinue: _flow == null
-                  ? null
-                  : () =>
-                        Navigator.of(context).pushNamed(NearSendApp.sendRoute),
-            );
-          },
-        ),
+        NearSendApp.connectRoute: (BuildContext context) {
+          // Which action the user came here for, so one connection screen can lead to the send flow
+          // or the receive flow without duplicating itself.
+          final bool receiving =
+              ModalRoute.of(context)?.settings.arguments ==
+              NearSendApp.receiveArgument;
+          return ListenableBuilder(
+            // Both sessions: the published payload arrives asynchronously, and a connection attempt
+            // changes without any navigation happening.
+            listenable: Listenable.merge(<Listenable?>[
+              widget.session,
+              widget.peer,
+            ]),
+            builder: (BuildContext context, Widget? _) {
+              final NodeSession? session = widget.session;
+              return ConnectionPage(
+                payload: session?.payload,
+                starting: session?.phase == NodePhase.starting,
+                // Only a *failed* node has a reason to state. A node that is starting has none, and a
+                // build with no node at all has nothing to say beyond the empty-session note.
+                unavailableReason: session?.phase == NodePhase.failed
+                    ? session!.failureReason
+                    : null,
+                connection: attempt,
+                onConnect: widget.peer == null ? null : connect,
+                onContinue: _continueTarget(receiving) == null
+                    ? null
+                    : () =>
+                          Navigator.of(context)
+                              .pushNamed(_continueTarget(receiving)!),
+                continueLabel: receiving
+                    ? ConnectionPage.continueLabelReceive
+                    : ConnectionPage.continueLabelSend,
+              );
+            },
+          );
+        },
+        NearSendApp.receiveRoute: (BuildContext context) {
+          final ReceivingFlow? receiving = _receiving;
+          if (receiving == null) {
+            // Reachable only by a hand-typed route: a connection is what creates the flow, and a
+            // screen without one could only show an empty list forever.
+            return const Scaffold(body: Center(child: Text('还没有建立连接，无法接收。')));
+          }
+          return ListenableBuilder(
+            listenable: receiving,
+            builder: (BuildContext context, Widget? _) => ReceivePage(
+              phase: receiving.phase,
+              offers: receiving.offers,
+              progress: receiving.progress,
+              fileName: receiving.currentFileName,
+              fileNumber: receiving.currentFileNumber,
+              fileCount: receiving.fileCount,
+              failureReason: receiving.failureReason,
+              savedPaths: receiving.savedPaths,
+              onRefresh: receiving.refresh,
+              onAccept: (offer, saveLocation) =>
+                  receiving.accept(offer, saveLocationRef: saveLocation),
+            ),
+          );
+        },
         NearSendApp.sendRoute: (BuildContext context) {
           final SendingFlow? flow = _flow;
           if (flow == null) {

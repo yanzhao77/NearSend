@@ -9,13 +9,17 @@ import 'package:nearsend/app/app.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
+import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
+import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
+import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
+import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
 /// The application, assembled: a node with a lifetime, a connection screen showing it, and a send
@@ -244,7 +248,7 @@ void main() {
             'that payload',
       );
 
-      await tapText(tester, ConnectionPage.continueLabel);
+      await tapText(tester, ConnectionPage.continueLabelSend);
       await tester.pumpAndSettle();
       expect(find.text(SendPage.emptyNote), findsOneWidget);
 
@@ -336,6 +340,136 @@ void main() {
         reason:
             'a UI that can connect is not a UI that can send; this is the assertion that says the '
             'file itself made it across',
+      );
+
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester, () => node.phase == NodePhase.stopped);
+      await tester.runAsync(() async {
+        await peer.stop();
+        peer.close();
+      });
+    },
+  );
+
+  testWidgets(
+    'a file the peer offers is received and saved where the user said',
+    (tester) async {
+      const String transferId = '33333333-4444-4555-8666-777777777777';
+      const String fileId = '00000000-0000-4000-8000-000000000003';
+
+      final Uint8List payload = Uint8List.fromList(<int>[
+        ...List<int>.generate(3072, (int i) => i % 233),
+        ...'界面接收.bin'.codeUnits,
+      ]);
+
+      // The other device: a real node with a real file to offer, and the same single-chunk limit as
+      // the sending case above for the same reason.
+      final Directory peerRoot = Directory(
+        '${root.path}${Platform.pathSeparator}peer',
+      );
+      final File offered = File(
+        '${peerRoot.path}${Platform.pathSeparator}界面接收.bin',
+      );
+      final NearSendNode peer = (await tester.runAsync(() async {
+        await peerRoot.create(recursive: true);
+        offered.writeAsBytesSync(payload);
+        final NearSendNode opened = await NearSendNode.open(
+          directory: peerRoot.path,
+          candidateAddresses: const <String>['127.0.0.1'],
+        );
+        await opened.start();
+        return opened;
+      }))!;
+      final PairingPayload offer = peer.openPairingSession();
+      await tester.runAsync(
+        () => peer.engine.prepareOutgoing(
+          transferId: transferId,
+          direction: TransferDirection.serverToClient,
+          peerId: offer.sessionId,
+          choices: <OutgoingFileChoice>[
+            OutgoingFileChoice(
+              fileId: fileId,
+              relativePath: '界面接收.bin',
+              path: offered.path,
+            ),
+          ],
+        ),
+      );
+
+      final NodeSession node = session();
+      await tester.runAsync(() => node.start());
+      final Directory saveTo = Directory(
+        '${root.path}${Platform.pathSeparator}saved',
+      );
+
+      await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
+      await tester.pump();
+      await tapText(tester, '接收文件');
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), offer.encode());
+      await tester.pump();
+      await tapText(tester, '连接');
+      await settle(tester, () => visible(ConnectionPage.connectedNote));
+      expect(find.text(ConnectionPage.connectedNote), findsOneWidget);
+
+      await tapText(tester, ConnectionPage.continueLabelReceive);
+      // Asked on a timer, so the offer shows up without the user doing anything: a few cycle of the
+      // harness gives the poll its real round trip.
+      await settle(
+        tester,
+        () => visible('1 个文件 · ${formatBytes(payload.length)}'),
+        attempts: 60,
+      );
+      expect(
+        find.text('1 个文件 · ${formatBytes(payload.length)}'),
+        findsOneWidget,
+        reason:
+            '§6 has no push: the receiving device learns what is offered by asking, and the screen '
+            'has to show what came back rather than an empty list that looks like a fault',
+      );
+
+      await tester.enterText(find.byType(TextField), saveTo.path);
+      await tester.pump();
+      await tapText(tester, '接受并接收');
+
+      await settle(
+        tester,
+        () => visible(ReceivePage.phaseLabel(ReceivePhase.saved)),
+        attempts: 200,
+        realDelay: const Duration(milliseconds: 150),
+      );
+      expect(
+        find.text(ReceivePage.phaseLabel(ReceivePhase.saved)),
+        findsOneWidget,
+        reason:
+            'on this side the word is earned: the whole file was verified against the frozen '
+            'manifest and written where the user said',
+      );
+      expect(
+        find.textContaining('界面接收.bin'),
+        findsWidgets,
+        reason:
+            'the saved location names the file, which is how the user finds it',
+      );
+
+      final File written = saveTo
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((File f) => !f.path.endsWith('.nearsend-part'))
+          .single;
+      expect(
+        sha256.convert(written.readAsBytesSync()).toString(),
+        sha256.convert(payload).toString(),
+        reason:
+            'this is the claim the whole receiving path exists for: the file the peer offered is on '
+            'this device, byte for byte, at the location the user chose',
+      );
+      expect(
+        peer.transfers.taskState(transferId).wireName,
+        'COMPLETED',
+        reason:
+            'the sender is told the file was saved, which is all it can know',
       );
 
       await tester.pumpWidget(const SizedBox());

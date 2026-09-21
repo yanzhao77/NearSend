@@ -33,13 +33,14 @@ class HomePage extends StatelessWidget {
   /// Shown under each action. States the remaining gap rather than "not implemented", which is
   /// no longer true of the button itself.
   static const String remainingWorkNote =
-      '发送流程已接通（Android 用系统选择器，Windows 输入文件路径）；接收侧装配、续传与真机双向验证仍未完成。';
+      '发送与接收已在应用内接通（Android 用系统选择器，Windows 输入文件路径；接收需填写保存目录）；'
+      '续传、Windows 桌面布局与真机双向验证仍未完成。';
 
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
 
   static const String baselineNotice =
-      '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试，应用内也已接通「连接 → 选择 → 发送」；'
-      '接收侧装配、断点续传与真机双向验证尚未完成。';
+      '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试，应用内也已接通「连接 → 选择 → 发送」'
+      '与「连接 → 接受 → 保存」；断点续传、Windows 取件器与真机双向验证尚未完成。';
 
   @override
   Widget build(BuildContext context) {
