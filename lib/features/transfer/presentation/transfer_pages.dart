@@ -52,6 +52,16 @@ class ConnectionPage extends StatefulWidget {
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
 
+  /// Shown under the published pin, because that pin is not stable across launches.
+  ///
+  /// The node generates a fresh TLS identity every time it opens, so the fingerprint a peer
+  /// recorded last time will not match this time. That is a real limitation of the current build and
+  /// the screen has to say so: a person comparing fingerprints with the peer would otherwise see a
+  /// change and reasonably suspect the wrong thing. It disappears when identity persistence lands,
+  /// and it must disappear **then** rather than being left behind as a stale warning.
+  static const String ephemeralIdentityNote =
+      '本机身份在每次启动时重新生成，因此这个指纹下次启动会变；配对结果无法跨重启保留。';
+
   @override
   State<ConnectionPage> createState() => _ConnectionPageState();
 }
@@ -176,6 +186,25 @@ class _PublishedPayload extends StatelessWidget {
             Text(
               '请让对方核对上面的指纹后再连接。指纹不符时应重新配对，而不是继续。',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: NearSendSpacing.sm),
+            // Said because it is currently true and a user would otherwise be misled: the node
+            // mints a fresh TLS identity every time it opens, so this pin is not the same one the
+            // next launch will show. Without this line a person comparing fingerprints across two
+            // launches would conclude the peer changed identity, and a pairing they thought they
+            // had made would look like it had been tampered with.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(Icons.info_outline, color: palette.warning),
+                const SizedBox(width: NearSendSpacing.sm),
+                Expanded(
+                  child: Text(
+                    ConnectionPage.ephemeralIdentityNote,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

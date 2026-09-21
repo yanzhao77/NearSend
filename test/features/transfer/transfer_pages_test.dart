@@ -14,12 +14,6 @@ import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 /// cases below are about the second constraint as much as the first: what the screen shows when a
 /// figure is *not* known, and what it must never show.
 void main() {
-  // Declared once and reused, so a near-miss length cannot make the parser refuse for a reason
-  // unrelated to what the case is about.
-  const String fingerprint =
-      'abababababababababababababababababababababababababababababababab';
-  const String token = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-
   group('protocol state to phase', _phaseMappingTests);
 
   group('progress figures', () {
@@ -232,10 +226,10 @@ void main() {
     ) async {
       final PairingPayload payload = PairingPayload.parse(
         '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
-        '"serverFingerprint":"$fingerprint",'
+        '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
         '"sessionId":"11111111-2222-4333-8444-555555555555",'
         '"candidates":[{"host":"192.168.1.5","port":18443}],'
-        '"pairToken":"$token","expiresInSeconds":300}',
+        '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
       );
       await tester.pumpWidget(
         MaterialApp(
@@ -275,10 +269,10 @@ void main() {
       await tester.enterText(
         find.byType(TextField),
         '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
-        '"serverFingerprint":"$fingerprint",'
+        '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
         '"sessionId":"11111111-2222-4333-8444-555555555555",'
         '"candidates":[{"host":"10.0.0.9","port":18443}],'
-        '"pairToken":"$token","expiresInSeconds":300}',
+        '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
       );
       await tester.pump();
       expect(find.text('连接'), findsOneWidget);
@@ -360,6 +354,41 @@ void _phaseMappingTests() {
     expect(
       phaseForTransferState(TransferState.cancelled),
       TransferPhase.failed,
+    );
+  });
+
+  testWidgets('the published pin says it does not survive a restart', (
+    tester,
+  ) async {
+    // The node mints a fresh TLS identity on every open, so this fingerprint is not the one the
+    // next launch shows. Saying so is a T11-02 acceptance criterion, and it is here because
+    // without it a person comparing fingerprints with the peer would see a change between two
+    // launches and reasonably conclude the wrong thing about the other device.
+    final PairingPayload payload = PairingPayload.parse(
+      '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
+      '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
+      '"sessionId":"11111111-2222-4333-8444-555555555555",'
+      '"candidates":[{"host":"192.168.1.5","port":18443}],'
+      '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildNearSendTheme(Brightness.light),
+        home: ConnectionPage(payload: payload),
+      ),
+    );
+
+    expect(
+      find.text(ConnectionPage.ephemeralIdentityNote),
+      findsOneWidget,
+      reason:
+          'a pin that changes every launch must say so, or the screen is telling the user '
+          'something about their peer that is not true',
+    );
+    expect(
+      ConnectionPage.ephemeralIdentityNote,
+      contains('无法跨重启保留'),
+      reason: 'and it must say the consequence, not only the mechanism',
     );
   });
 }
