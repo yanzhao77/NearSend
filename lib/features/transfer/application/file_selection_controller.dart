@@ -103,25 +103,46 @@ class FileSelectionController {
   /// but not where its bytes were, so nothing could be proposed from it. The bytes come from the
   /// gateway by the document URI the picker returned, which is why that reference had to be kept.
   ///
+  /// **A reference is not always a document.** `AGENTS.md` §9 keeps SAF URIs behind the platform
+  /// adapter because they are not paths, and the converse matters just as much: on a platform whose
+  /// files *are* paths, wrapping one in a `SafSourceBytes` would send every read through a channel
+  /// that platform does not answer. So the scheme decides, in one place, and a path reference
+  /// becomes a `FileSourceBytes` - the same rule `NodeRuntime` applies to a recorded source.
+  ///
   /// Refuses rather than guessing when a file has no reference: a choice built without one would
   /// fail later inside planning with a message about hashing, which says nothing about the real
   /// problem.
   List<OutgoingFileChoice> choicesFor(FileSelectionReport report) {
     return <OutgoingFileChoice>[
       for (final SelectedFile file in report.files)
-        OutgoingFileChoice(
-          fileId: file.fileId,
-          relativePath: file.relativePath,
-          source: SafSourceBytes(
-            gateway: gateway,
-            uri:
-                file.sourceRef ??
-                (throw StateError(
-                  '${file.displayName} has no source reference, so its bytes cannot be read',
-                )),
-            providerReportedSize: file.sizeBytes,
-          ),
+        _choiceFor(
+          file,
+          file.sourceRef ??
+              (throw StateError(
+                '${file.displayName} has no source reference, so its bytes cannot be read',
+              )),
         ),
     ];
+  }
+
+  OutgoingFileChoice _choiceFor(SelectedFile file, String reference) {
+    if (reference.startsWith('content://')) {
+      return OutgoingFileChoice(
+        fileId: file.fileId,
+        relativePath: file.relativePath,
+        source: SafSourceBytes(
+          gateway: gateway,
+          uri: reference,
+          providerReportedSize: file.sizeBytes,
+        ),
+      );
+    }
+    return OutgoingFileChoice(
+      fileId: file.fileId,
+      relativePath: file.relativePath,
+      // Only the path: a choice takes exactly one of the two, and passing both would be refused at
+      // construction - the engine derives the file source from the path itself.
+      path: reference,
+    );
   }
 }
