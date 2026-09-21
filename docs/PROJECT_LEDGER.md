@@ -876,3 +876,31 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   没有编排与断言）；③ **Windows 没有取件器**，发送要手输路径、接收要手输保存目录；
   ④ **真机双向仍未验证**（Windows → Android 仍被设备安装弹窗阻塞），`applicationDirectory` 与
   SAF 通道仍未在设备上执行过；⑤ 身份持久化未做。
+
+#### 一个必须写清楚的结论：两个应用实例之间**还不能真正互传文件**（截至 `t11-01-24`）
+
+这一条单独列出，因为它最容易被上面两节的「已交付」读成「互传可用」。事实是：
+
+- 应用里的**发送**走 `client_to_server`：本机作为**客户端**向对方的服务端提议、上传清单并推送分块
+  （`SendingFlow` → `SendingSession.plan(direction: clientToServer)`）。
+- 应用里的**接收**只受理**发给本机客户端**的提供：`ReceivingFlow` 通过 `GET /v1/offers` 看对方
+  作为**服务端**向本机这个客户端提供了什么。
+- 两者**不在同一侧**：A 推送时，B 是**服务端**，而 B 的接收界面问的是「有没有人向我这个客户端提供」。
+  于是 **A→B 与 B→A 都走不通**。
+- 现有测试能各自通过，是因为**对端由测试驱动**：发送用例里由测试在服务端调用 `acceptLocally`，
+  接收用例里由测试在服务端调用 `prepareOutgoing(direction: serverToClient)`。这证明了两半各自正确，
+  **不证明**两个应用实例能互传。
+
+**闭合它需要补上两半中的任意一半**（下一轮该做的事，按代价从小到大）：
+
+1. **让发送端以服务端身份提供**（`server_to_client`）：本机节点已有 `payload.sessionId`，对端客户端
+   正是用这个会话与我配对，因此 `prepareOutgoing(direction: serverToClient, peerId: 本机 payload.sessionId)`
+   之后对端就能在 `offers()` 里看到它；已有端点足以服务清单与分块，对端的 `checkpoint`/`complete`
+   也会回到本机（`receiver_mirror` + `tasks` 行即发送侧可见的进度）。需要新增的是**一条「提供式发送」
+   流程与发送界面的对应状态**（等待对方拉取、对方已保存），而不是新协议。
+2. **让接收端以服务端身份受理**（`client_to_server`）：需要本机自己的待受理视图（`transfers` 表按
+   `WAITING_ACCEPT` 查询，当前**没有**这类读方法）、走既有的空间预检（`receive_confirmation_page.dart`
+   已存在）后调用 `acceptLocally`，并在块提交完成后由本机运行终检与导出（§10 把「服务端的终检是本地
+   工作」写在这里）。
+
+在补上其中一半之前，**不得**声称 Android↔Windows 互传可用。
