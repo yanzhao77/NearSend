@@ -379,7 +379,7 @@ String _sessionIdOf(NearSendNode node) => node.payload!.sessionId;
 
 /// Reads one chunk of a planned source with a single bounded buffer.
 Uint8List _readChunk(SourceFilePlan plan, int index) {
-  final RandomAccessFile handle = plan.file.openSync();
+  final RandomAccessFile handle = plan.file!.openSync();
   try {
     final ChunkRecord record = plan.chunks[index];
     handle.setPositionSync(index * ProtocolLimits.chunkSizeBytes);

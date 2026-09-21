@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/protocol/protocol_limits.dart';
+import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
@@ -182,5 +183,98 @@ void main() {
       isNot(contains('secret')),
       reason: 'AGENTS.md §5 keeps user file locations out of diagnostics, and a document id is one',
     );
+  });
+
+  test('a document and a file with the same bytes produce the same manifest digest', () async {
+    // This is the statement that makes Android a sender: the manifest, and therefore the digest
+    // the receiver verifies against, does not depend on whether the bytes came from a path or
+    // from a document provider.
+    final Uint8List body = Uint8List.fromList(
+      List<int>.generate(
+        ProtocolLimits.chunkSizeBytes + 17,
+        (int i) => i % 199,
+      ),
+    );
+    final File file = File('${root.path}${Platform.pathSeparator}same.bin')
+      ..writeAsBytesSync(body);
+    final InMemoryFileGateway gateway = InMemoryFileGateway(
+      documents: <String, Uint8List>{'content://provider/same': body},
+    );
+
+    const LocalSourceReader reader = LocalSourceReader();
+    final SourceFilePlan fromFile = await reader.plan(
+      source: FileSourceBytes(file),
+      relativePath: 'same.bin',
+      fileId: '00000000-0000-4000-8000-000000000001',
+    );
+    final SourceFilePlan fromDocument = await reader.plan(
+      source: SafSourceBytes(
+        gateway: gateway,
+        uri: 'content://provider/same',
+        providerReportedSize: body.length,
+      ),
+      relativePath: 'same.bin',
+      fileId: '00000000-0000-4000-8000-000000000001',
+    );
+
+    expect(
+      fromDocument.manifest.chunkManifestDigest,
+      fromFile.manifest.chunkManifestDigest,
+      reason: '§5.3 is over the bytes, not over where they were read from',
+    );
+    expect(fromDocument.manifest.fileSha256, fromFile.manifest.fileSha256);
+    expect(
+      fromDocument.manifest.sizeBytes,
+      ProtocolLimits.chunkSizeBytes + 17,
+      reason: 'the size came from the provider real length, not from a guess',
+    );
+    expect(
+      fromDocument.file,
+      isNull,
+      reason: 'a SAF source has no path, and pretending it has one is what §9 forbids',
+    );
+  });
+
+  test('a document is streamed one chunk at a time, in order', () async {
+    final Uint8List body = Uint8List.fromList(
+      List<int>.generate(ProtocolLimits.chunkSizeBytes + 3, (int i) => i % 89),
+    );
+    final InMemoryFileGateway gateway = InMemoryFileGateway(
+      documents: <String, Uint8List>{'content://provider/stream': body},
+    );
+    const LocalSourceReader reader = LocalSourceReader();
+    final SourceFilePlan plan = await reader.plan(
+      source: SafSourceBytes(
+        gateway: gateway,
+        uri: 'content://provider/stream',
+        providerReportedSize: body.length,
+      ),
+      relativePath: 'stream.bin',
+      fileId: '00000000-0000-4000-8000-000000000002',
+    );
+
+    final List<int> sent = <int>[];
+    final BytesBuilder reassembled = BytesBuilder(copy: false);
+    int maxChunkSeen = 0;
+    await reader.streamChunks(
+      plan: plan,
+      onChunk: (int index, Uint8List bytes) async {
+        sent.add(index);
+        maxChunkSeen = bytes.length > maxChunkSeen
+            ? bytes.length
+            : maxChunkSeen;
+        reassembled.add(bytes);
+      },
+    );
+
+    expect(sent, <int>[0, 1], reason: 'chunks go in index order');
+    expect(
+      maxChunkSeen,
+      ProtocolLimits.chunkSizeBytes,
+      reason:
+          'at most one protocol chunk is ever held, which is the bound rule 4 is about - a '
+          'whole-document read would have shown the full length here',
+    );
+    expect(reassembled.takeBytes(), body);
   });
 }

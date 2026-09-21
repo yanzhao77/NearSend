@@ -56,6 +56,7 @@ import 'package:nearsend/core/storage/export_service.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
+import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
@@ -64,12 +65,26 @@ import 'package:nearsend/core/storage/task_source_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 
 /// One file the user chose to send.
+///
+/// Exactly one of [path] and [source] identifies the bytes. A path covers a desktop file and an
+/// app-private one; a [source] covers a SAF document, which `AGENTS.md` §9 forbids treating as a
+/// path. Both end up as the same [SourceBytes] inside the engine, so nothing downstream has to
+/// branch on which platform the sender is.
 class OutgoingFileChoice {
-  const OutgoingFileChoice({
+  OutgoingFileChoice({
     required this.fileId,
     required this.relativePath,
-    required this.path,
-  });
+    this.path,
+    SourceBytes? source,
+  }) : source = source ?? FileSourceBytes(File(path ?? '')) {
+    if ((path == null) == (source == null)) {
+      // Refused at construction rather than discovered later: an unreadable source would
+      // otherwise surface as a hashing failure with nothing to say about why.
+      throw ArgumentError(
+        'exactly one of path or source must be given for $relativePath',
+      );
+    }
+  }
 
   /// The manifest identifier. Chosen by the sender and validated as a canonical UUID.
   final String fileId;
@@ -77,8 +92,17 @@ class OutgoingFileChoice {
   /// The name the manifest carries and the receiver records. §5.1's rules apply to it.
   final String relativePath;
 
-  /// The local path the bytes are read from. Never sent.
-  final String path;
+  /// The local path the bytes are read from, when the source is a file. Never sent.
+  final String? path;
+
+  /// Where the bytes come from, addressed by offset.
+  final SourceBytes source;
+
+  /// What to record as the source reference, so a restarted sender can read the bytes again.
+  ///
+  /// A path for a file and a document URI for SAF; both are opaque handles as far as the protocol
+  /// is concerned, and neither is ever put on the wire or into a diagnostic.
+  String get sourceRef => path ?? (source as SafSourceBytes).uri;
 
   @override
   String toString() => 'OutgoingFileChoice($relativePath -> $fileId)';
@@ -148,6 +172,7 @@ class TransferEngine {
     required this.verifier,
     required this.exporter,
     required this.windows,
+    this.sourceResolver = defaultSourceResolver,
     int Function()? now,
   }) : now = now ?? _systemNow;
 
@@ -165,6 +190,18 @@ class TransferEngine {
   final FileVerifier verifier;
   final ExportService exporter;
   final ChunkWindowRegistry windows;
+
+  /// Rebuilds a [SourceBytes] from a recorded reference and the size it had.
+  ///
+  /// Defaults to treating the reference as a path, which is what Windows and an app-private
+  /// Android directory both have. A platform whose files are documents passes its own, so the
+  /// engine never has to know which platform it is running on.
+  final SourceBytes Function(String sourceRef, int sizeBytes) sourceResolver;
+
+  /// The resolver a path-based platform uses.
+  static SourceBytes defaultSourceResolver(String sourceRef, int sizeBytes) =>
+      FileSourceBytes(File(sourceRef));
+
   final int Function() now;
 
   static int _systemNow() => DateTime.now().millisecondsSinceEpoch;
@@ -205,7 +242,7 @@ class TransferEngine {
       // every file has been read - and the task row is registered *with* that digest.
       plans.add(
         await _sourceReader.plan(
-          source: File(choice.path),
+          source: choice.source,
           relativePath: choice.relativePath,
           fileId: choice.fileId,
         ),
@@ -237,7 +274,7 @@ class TransferEngine {
       sources.record(
         transferId: transferId,
         fileId: plans[i].manifest.fileId,
-        sourceRef: choices[i].path,
+        sourceRef: choices[i].sourceRef,
         sizeBytes: plans[i].manifest.sizeBytes,
       );
     }
@@ -412,8 +449,13 @@ class TransferEngine {
         'declares ${file.chunkCount}',
       );
     }
+    // Rebuilt from the recorded reference, so a restarted sender can read the same bytes. Which
+    // kind of source it is comes from the reference itself rather than from a stored platform
+    // flag that could disagree with it, and [sourceResolver] lets a platform that has documents
+    // instead of paths answer for its own scheme.
     return SourceFilePlan(
-      file: File(record.sourceRef),
+      source: sourceResolver(record.sourceRef, record.sizeBytes),
+      file: record.sourceRef.contains('://') ? null : File(record.sourceRef),
       manifest: file,
       chunks: records,
     );

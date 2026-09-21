@@ -447,7 +447,7 @@ void main() {
 
 /// Reads one chunk of a planned source, with a single bounded buffer.
 Uint8List _readChunk(SourceFilePlan plan, int index) {
-  final RandomAccessFile handle = plan.file.openSync();
+  final RandomAccessFile handle = plan.file!.openSync();
   try {
     final record = plan.chunks[index];
     handle.setPositionSync(record.index * ProtocolLimits.chunkSizeBytes);

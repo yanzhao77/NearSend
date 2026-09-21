@@ -48,6 +48,7 @@ import 'package:nearsend/core/protocol/protocol_validation.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
 import 'package:nearsend/core/storage/export_service.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
+import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 
 /// Where the application keeps its own working copies.
@@ -201,14 +202,21 @@ class StagingChunkReader implements StagedChunkReader {
 /// A file the user chose to send, and the bytes it had when it was chosen.
 class SourceFilePlan {
   const SourceFilePlan({
-    required this.file,
+    required this.source,
     required this.manifest,
     required this.chunks,
+    this.file,
   });
 
-  /// The source the reader opens. A normal path for a desktop or app-private file; a SAF URI
-  /// is resolved by the platform implementation of [SourceFileProvider] before it gets here.
-  final File file;
+  /// Where the bytes come from, addressed by offset.
+  ///
+  /// A path and a SAF document are interchangeable here, which is what `AGENTS.md` §9 requires:
+  /// the sending path must not assume a `content://` URI is a file. [file] is kept only as a
+  /// convenience for callers that already know they have a real path.
+  final SourceBytes source;
+
+  /// The underlying file, when the source is one. Null for a SAF document.
+  final File? file;
 
   /// The manifest entry, whose digests were computed by streaming the source once.
   final ManifestFile manifest;
@@ -220,20 +228,23 @@ class SourceFilePlan {
   String toString() => 'SourceFilePlan(${manifest.relativePath})';
 }
 
-/// Reads a chosen source file in bounded pieces and describes it (§5.2, §5.3).
+/// Reads a chosen source in bounded pieces and describes it (§5.2, §5.3).
 ///
 /// The manifest has to be built **before** anything is sent, and §5.2 hashes the raw file
 /// bytes, so this is a full pass over the source. It is a streaming pass: the only thing that
 /// grows is the running SHA-256 state and one chunk at a time.
+///
+/// It reads through [SourceBytes] rather than a path, so a device can plan a document the user
+/// picked from a provider as readily as a desktop can plan a file.
 class LocalSourceReader {
   const LocalSourceReader();
 
-  /// Plans one source file.
+  /// Plans one source.
   ///
   /// [relativePath] is what the manifest will carry and what the receiver records; the bytes
-  /// are read from [source] regardless, so a display name never decides which file is opened.
+  /// are read from [source] regardless, so a display name never decides which bytes are hashed.
   Future<SourceFilePlan> plan({
-    required File source,
+    required SourceBytes source,
     required String relativePath,
     required String fileId,
   }) async {
@@ -243,57 +254,56 @@ class LocalSourceReader {
       ProtocolLimits.chunkSizeBytes,
     );
 
+    // One pass, one chunk in memory at a time, and one whole-file digest over the same bytes:
+    // computing them in two passes would read the source twice for no gain.
     final List<ChunkRecord> chunks = <ChunkRecord>[];
-    final RandomAccessFile handle = await source.open();
-    try {
-      // One pass, one chunk in memory at a time, and one whole-file digest over the same
-      // bytes: computing them in two passes would read the file twice for no gain.
-      final _StreamingFileDigest whole = _StreamingFileDigest();
-      for (int index = 0; index < chunkCount; index++) {
-        final int length = chunkLengthForIndex(
-          sizeBytes,
-          ProtocolLimits.chunkSizeBytes,
-          index,
-        );
-        final Uint8List bytes = await _readExactly(handle, length);
-        if (bytes.length != length) {
-          throw ProtocolViolation(
-            ProtocolErrorCode.sourceChanged,
-            'the source changed while it was being read: chunk $index has '
-            '${bytes.length} bytes but the file length requires $length',
-          );
-        }
-        whole.add(bytes);
-        chunks.add(
-          ChunkRecord(
-            index: index,
-            length: length,
-            sha256: sha256.convert(bytes).toString(),
-          ),
+    final _StreamingFileDigest whole = _StreamingFileDigest();
+    for (int index = 0; index < chunkCount; index++) {
+      final int length = chunkLengthForIndex(
+        sizeBytes,
+        ProtocolLimits.chunkSizeBytes,
+        index,
+      );
+      final Uint8List bytes = await source.readAt(
+        offset: index * ProtocolLimits.chunkSizeBytes,
+        length: length,
+      );
+      if (bytes.length != length) {
+        throw ProtocolViolation(
+          ProtocolErrorCode.sourceChanged,
+          'the source changed while it was being read: chunk $index has '
+          '${bytes.length} bytes but the file length requires $length',
         );
       }
+      whole.add(bytes);
+      chunks.add(
+        ChunkRecord(
+          index: index,
+          length: length,
+          sha256: sha256.convert(bytes).toString(),
+        ),
+      );
+    }
 
-      final String fileSha256 = whole.close();
-      return SourceFilePlan(
-        file: source,
-        manifest: ManifestFile(
-          fileId: fileId,
-          relativePath: relativePath,
+    final String fileSha256 = whole.close();
+    return SourceFilePlan(
+      source: source,
+      file: source is FileSourceBytes ? source.file : null,
+      manifest: ManifestFile(
+        fileId: fileId,
+        relativePath: relativePath,
+        sizeBytes: sizeBytes,
+        chunkSizeBytes: ProtocolLimits.chunkSizeBytes,
+        chunkCount: chunkCount,
+        fileSha256: fileSha256,
+        chunkManifestDigest: ChunkManifestCodec.digest(
+          chunks: chunks,
           sizeBytes: sizeBytes,
           chunkSizeBytes: ProtocolLimits.chunkSizeBytes,
-          chunkCount: chunkCount,
-          fileSha256: fileSha256,
-          chunkManifestDigest: ChunkManifestCodec.digest(
-            chunks: chunks,
-            sizeBytes: sizeBytes,
-            chunkSizeBytes: ProtocolLimits.chunkSizeBytes,
-          ),
         ),
-        chunks: List<ChunkRecord>.unmodifiable(chunks),
-      );
-    } finally {
-      await handle.close();
-    }
+      ),
+      chunks: List<ChunkRecord>.unmodifiable(chunks),
+    );
   }
 
   /// Streams one chunk of [plan] to [onChunk], in index order, with real backpressure.
@@ -306,56 +316,30 @@ class LocalSourceReader {
     required SourceFilePlan plan,
     required Future<void> Function(int index, Uint8List bytes) onChunk,
   }) async {
-    final RandomAccessFile handle = await plan.file.open();
-    try {
-      for (final ChunkRecord record in plan.chunks) {
-        final Uint8List bytes = await _readExactly(handle, record.length);
-        if (bytes.length != record.length) {
-          throw ProtocolViolation(
-            ProtocolErrorCode.sourceChanged,
-            'the source changed while it was being sent: chunk ${record.index} has '
-            '${bytes.length} bytes but the manifest requires ${record.length}',
-          );
-        }
-        // Re-checked against the manifest, not against the earlier pass: a source that changed
-        // between planning and sending must be refused rather than delivered under a digest
-        // that no longer describes it (§11's SOURCE_CHANGED).
-        if (sha256.convert(bytes).toString() != record.sha256) {
-          throw ProtocolViolation(
-            ProtocolErrorCode.sourceChanged,
-            'the source changed while it was being sent: chunk ${record.index} no longer '
-            'matches the digest the manifest declares',
-          );
-        }
-        await onChunk(record.index, bytes);
+    for (final ChunkRecord record in plan.chunks) {
+      final Uint8List bytes = await plan.source.readAt(
+        offset: record.index * ProtocolLimits.chunkSizeBytes,
+        length: record.length,
+      );
+      if (bytes.length != record.length) {
+        throw ProtocolViolation(
+          ProtocolErrorCode.sourceChanged,
+          'the source changed while it was being sent: chunk ${record.index} has '
+          '${bytes.length} bytes but the manifest requires ${record.length}',
+        );
       }
-    } finally {
-      await handle.close();
-    }
-  }
-
-  /// Reads exactly [length] bytes, or fewer at end of file.
-  ///
-  /// A single `read` may return less than asked for even mid-file, so this loops; treating a
-  /// short read as end-of-file would silently truncate a chunk.
-  static Future<Uint8List> _readExactly(
-    RandomAccessFile handle,
-    int length,
-  ) async {
-    if (length == 0) {
-      return Uint8List(0);
-    }
-    final BytesBuilder builder = BytesBuilder(copy: false);
-    int remaining = length;
-    while (remaining > 0) {
-      final Uint8List part = await handle.read(remaining);
-      if (part.isEmpty) {
-        break;
+      // Re-checked against the manifest, not against the earlier pass: a source that changed
+      // between planning and sending must be refused rather than delivered under a digest that
+      // no longer describes it (§11's SOURCE_CHANGED).
+      if (sha256.convert(bytes).toString() != record.sha256) {
+        throw ProtocolViolation(
+          ProtocolErrorCode.sourceChanged,
+          'the source changed while it was being sent: chunk ${record.index} no longer '
+          'matches the digest the manifest declares',
+        );
       }
-      builder.add(part);
-      remaining -= part.length;
+      await onChunk(record.index, bytes);
     }
-    return builder.takeBytes();
   }
 }
 
