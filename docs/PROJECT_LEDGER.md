@@ -568,6 +568,27 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 状态：代码已实现；widget/单元测试通过（本轮累计 +28，总数 1145）；**Kotlin 已编译进 debug APK**，
   且 Android debug/release 在 CI 干净 runner 上构建通过。**SAF 通道从未在设备上运行过。**
 
+#### `t11-01-11`：发送端字节来源端口（让 Android 能当发送方的缝）
+
+- `lib/core/storage/source_bytes.dart`：`SourceBytes`（`length()` + `readAt(offset,length)`），
+  `FileSourceBytes`（路径）与 `SafSourceBytes`（上一轮的通道）。
+- **为什么是偏移寻址而不是 Stream**：这正是协议要的形状——§5.2/§5.3 的摘要覆盖**已知偏移上的定长块**，
+  §8 恢复时会**重读特定一块**；并且它把内存边界显式化（`readAt` 返回不超过请求长度，调用方请求一个协议块）。
+  Stream 会把「在途多少」交给消费者决定，而那正是 `AGENTS.md` §2 规则 4 关注的属性。
+- 两种实现由**同一份共享契约**约束，包括实现者最容易做错的一条：**读越界返回更少字节而不是补齐缓冲区**
+  （§5.3 固定每块长度，补齐的块会以摘要不符失败且诊断里看不出原因）。
+- **不报大小的 provider 保持未知**：`length()` 抛错而不猜测（§5.2 把真实大小算进清单）；
+  诊断标签是字面量 `"file"`/`"saf"`，因此**路径或 document id 无法经由它进入诊断**（§5）。
+- 状态：代码已实现；单元测试通过（6 项）。**本批是加法式改动：引擎仍从 `File` 规划。**
+
+#### 明确登记的下一步（未完成，不得当作已完成）
+
+| 事项 | 为什么必需 | 具体改动点 |
+| --- | --- | --- |
+| **把发送路径改到 `SourceBytes` 上** | 这是「**Android 能作为发送方**」的那一步：当前 `prepareOutgoing` 只接受本地路径，设备因此能收不能发 | `SourceFilePlan.file` → `.source`；`LocalSourceReader.plan`/`streamChunks` 改用 `readAt`；`OutgoingFileChoice.path` → `SourceBytes` + `sourceRef`；`TransferEngine.planFor` 需要 `SourceResolver`（默认 `FileSourceBytes`，Android 传入由 `AndroidFileGateway` 构造的 `SafSourceBytes`）；三处测试同步 |
+| **把选择结果接进引擎编排** | 让 UI 的「选择→提议→密封→恢复→发送」成为一条真实链路 | `FileSelectionReport` → `prepareOutgoing` → `pagesFor` → `TransferClient` 提议/密封 → `resume` → `sendFile` |
+| **传输各阶段的页面装配** | 阶段五要求准备/扫描/传输/校验/导出是可区分状态 | 把 `TransferProgress.phase` 接到真实引擎状态 |
+
 #### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
 
 - **SAF 通道的设备验证**：代码与契约测试齐备，但**从未在真机上执行过**（安装被设备弹窗阻塞）。
