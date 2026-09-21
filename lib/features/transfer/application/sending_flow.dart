@@ -212,7 +212,11 @@ class SendingFlow extends ChangeNotifier {
             _notify();
           },
         );
-        _flow?.applyCompleted(atMillis: now());
+        // Deliberately **not** `applyCompleted`: every chunk acknowledged means the bytes reached
+        // the peer, not that the file was verified against the frozen manifest and saved. Marking
+        // the file complete here would put 已完成 on a sending screen, which is the one word this
+        // whole flow is arranged to avoid - the figure instead reads that the bytes of this file are
+        // all sent, and the phase stays 传输中 until the transfer moves to its own last state.
         _notify();
       }
 

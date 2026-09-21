@@ -26,9 +26,17 @@ import 'package:nearsend/platform/android_file_gateway.dart';
 /// §5.2's and §5.3's digests. So the honest sequence is: pick, report what is known, and let planning
 /// supply the rest - which is why this class stops where it does rather than guessing.
 class FileSelectionController {
-  FileSelectionController({required this.gateway, this.idFactory});
+  FileSelectionController({this.gateway, this.idFactory});
 
-  final AndroidFileGateway gateway;
+  /// The platform's document picker, when it has one.
+  ///
+  /// Null on a platform whose files are paths: there is no picker to call, and a screen must offer
+  /// the path it *does* have rather than a button that cannot work. [hasPicker] is what a screen
+  /// asks.
+  final AndroidFileGateway? gateway;
+
+  /// Whether [pick] can do anything on this platform.
+  bool get hasPicker => gateway != null;
 
   /// Supplies a canonical UUID per file. Injected so a test can state the identifiers rather than
   /// matching random ones, and because §4 makes identifier generation a protocol concern rather
@@ -39,8 +47,16 @@ class FileSelectionController {
   ///
   /// An empty selection produces the report's own "nothing chosen yet" problem rather than a
   /// failure: cancelling the picker is not an error.
+  ///
+  /// Refuses when this platform has no picker rather than returning an empty report: an empty report
+  /// would read as "the user chose nothing", which is a different thing from "this platform cannot
+  /// choose anything".
   Future<FileSelectionReport> pick() async {
-    final List<PickedDocument> documents = await gateway.pickFiles();
+    final AndroidFileGateway? platform = gateway;
+    if (platform == null) {
+      throw StateError('this platform has no document picker');
+    }
+    final List<PickedDocument> documents = await platform.pickFiles();
     return report(documents);
   }
 
@@ -127,11 +143,20 @@ class FileSelectionController {
 
   OutgoingFileChoice _choiceFor(SelectedFile file, String reference) {
     if (reference.startsWith('content://')) {
+      final AndroidFileGateway? platform = gateway;
+      if (platform == null) {
+        // A document reference can only have come from a platform that has documents, so reaching
+        // here means the selection and the platform disagree - better said than turned into a read
+        // that fails inside the channel.
+        throw StateError(
+          '${file.displayName} is a document, and this platform has no document gateway',
+        );
+      }
       return OutgoingFileChoice(
         fileId: file.fileId,
         relativePath: file.relativePath,
         source: SafSourceBytes(
-          gateway: gateway,
+          gateway: platform,
           uri: reference,
           providerReportedSize: file.sizeBytes,
         ),

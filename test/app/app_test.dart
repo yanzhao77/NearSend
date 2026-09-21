@@ -1,51 +1,91 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/app.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
+import 'package:nearsend/core/network/task_authorization_endpoint.dart';
+import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/transfer/near_send_node.dart';
+import 'package:nearsend/core/transfer/transfer_engine.dart';
+import 'package:nearsend/features/transfer/application/sending_flow.dart';
+import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
-/// The application, assembled: a node with a lifetime and a connection screen showing it.
+/// The application, assembled: a node with a lifetime, a connection screen showing it, and a send
+/// screen that ends with bytes on the other device.
 ///
-/// The gap this closes is not a screen - every screen existed and was tested - but a lifetime:
-/// nothing in `lib/app/` ever opened a node, so the connection screen showed a placeholder and the
-/// file selection screen had no session to send through. The cases below are about what a user can
-/// now see is **this device**, and about the states where it must not pretend.
+/// The gap this closes is not a screen - every screen existed and was tested - but a lifetime and
+/// the joins between them: nothing in `lib/app/` ever opened a node, and no screen drove the sending
+/// session. The last case below is the one that matters: a file chosen in the interface, sent over a
+/// real TLS connection to a real second node, and compared by SHA-256 against what the receiver
+/// wrote.
 void main() {
   late Directory root;
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('nearsend-app-');
+    // `TestWidgetsFlutterBinding` installs an `HttpOverrides` that answers every request with 400.
+    // That is right for a widget test and wrong for the last case here, which runs two real nodes
+    // over a real TLS connection: leaving it in place would make every connection fail with a
+    // status nothing in this project produces.
+    HttpOverrides.global = null;
   });
 
   tearDown(() {
     if (root.existsSync()) {
-      root.deleteSync(recursive: true);
+      // A failing case can leave a socket closing for a moment; the directory is scratch either way
+      // and a cleanup error here would mask the assertion that failed.
+      try {
+        root.deleteSync(recursive: true);
+      } on Object {
+        // ignored on purpose
+      }
     }
   });
 
-  NodeSession session() => NodeSession(
+  NodeSession session({AndroidFileGateway? gateway}) => NodeSession(
     resolveDirectory: () async => '${root.path}${Platform.pathSeparator}app',
     candidateAddresses: const <String>['127.0.0.1'],
+    gateway: gateway,
   );
 
-  /// Waits for [condition] while letting real work - a socket closing, a database handle being
-  /// released - actually run.
+  /// Waits for [condition] while letting real work - a socket accepting, a hash being computed, a
+  /// database handle being released - actually run.
   ///
-  /// A widget test runs its body in a zone where timers are virtual, so a node's real I/O cannot
-  /// finish inside it; `runAsync` is the one place real time passes, and a pump afterwards is what
-  /// lets the framework deliver the result to the code waiting on it.
-  Future<void> settle(WidgetTester tester, bool Function() condition) async {
-    for (int attempt = 0; attempt < 40 && !condition(); attempt++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump();
+  /// A widget test runs its body in a zone where timers are virtual, so real I/O cannot finish
+  /// inside it: `runAsync` is the one place real time passes, and the pump afterwards is what lets
+  /// the framework deliver the result to the code waiting on it and advance any virtual timer the
+  /// code set.
+  Future<void> settle(
+    WidgetTester tester,
+    bool Function() condition, {
+    int attempts = 40,
+    Duration realDelay = const Duration(milliseconds: 50),
+  }) async {
+    for (int attempt = 0; attempt < attempts && !condition(); attempt++) {
+      await tester.runAsync(() => Future<void>.delayed(realDelay));
+      await tester.pump(const Duration(milliseconds: 100));
     }
+  }
+
+  bool visible(String text) => find.text(text).evaluate().isNotEmpty;
+
+  /// Taps a control by its text, scrolling it into view first.
+  ///
+  /// These screens are lists and a test window is shorter than a phone, so a tap on a control below
+  /// the fold lands on nothing - a fact about the test rather than about the screen.
+  Future<void> tapText(WidgetTester tester, String text) async {
+    await tester.ensureVisible(find.text(text));
+    await tester.pump();
+    await tester.tap(find.text(text));
+    await tester.pump();
   }
 
   testWidgets('the connection screen shows the running node\'s own pin', (
@@ -133,4 +173,177 @@ void main() {
           'answers, and the first would send the user looking for a fault in the other device',
     );
   });
+
+  testWidgets(
+    'a file chosen in the interface arrives at the peer, byte for byte',
+    (tester) async {
+      const String transferId = '11111111-2222-4333-8444-555555555555';
+      const String uri = 'content://nearsend.test/e2e';
+
+      // One chunk, and that is a deliberate limit of this case rather than of the product: a
+      // widget test runs its body in a zone with virtual timers, and a multi-chunk body does not
+      // finish being written inside it (observed: a 4 MiB payload stays at zero bytes at the
+      // receiver however long the harness is pumped, while the same flow over the same two nodes
+      // completes outside that zone). The multi-chunk, multi-megabyte path is covered by
+      // `test/features/transfer/sending_flow_test.dart`, which runs the identical flow over real
+      // TLS without the widget binding. What this case adds is the **wiring**: routes, the pasted
+      // payload, the picker, the send action, and the figures on the screen.
+      final Uint8List payload = Uint8List.fromList(<int>[
+        ...List<int>.generate(4096, (int i) => i % 241),
+        ...'界面发送.bin'.codeUnits,
+      ]);
+      final InMemoryFileGateway documents =
+          InMemoryFileGateway(documents: <String, Uint8List>{uri: payload})
+            ..nextPick = <PickedDocument>[
+              PickedDocument(
+                uri: uri,
+                displayName: '界面发送.bin',
+                sizeBytes: payload.length,
+              ),
+            ];
+
+      // The other device: a real node, with a real listener and a real pin.
+      final NearSendNode peer = (await tester.runAsync(() async {
+        final NearSendNode opened = await NearSendNode.open(
+          directory: '${root.path}${Platform.pathSeparator}peer',
+          candidateAddresses: const <String>['127.0.0.1'],
+        );
+        await opened.start();
+        return opened;
+      }))!;
+      final Directory exports = Directory(
+        '${root.path}${Platform.pathSeparator}peer${Platform.pathSeparator}exports',
+      );
+      final PairingPayload offer = peer.openPairingSession();
+
+      final NodeSession node = session(gateway: documents);
+      await tester.runAsync(() => node.start());
+
+      await tester.pumpWidget(
+        NearSendApp(
+          session: node,
+          peer: PeerSession(),
+          transferIdFactory: () => transferId,
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('发送文件'));
+      await tester.pumpAndSettle();
+
+      // The connection information the other device publishes, pasted the way a user who cannot use
+      // a camera would paste it.
+      await tester.enterText(find.byType(TextField), offer.encode());
+      await tester.pump();
+      await tapText(tester, '连接');
+      await settle(tester, () => visible(ConnectionPage.connectedNote));
+      expect(
+        find.text(ConnectionPage.connectedNote),
+        findsOneWidget,
+        reason:
+            'the connection is only reported as established after the peer proved the identity in '
+            'that payload',
+      );
+
+      await tapText(tester, ConnectionPage.continueLabel);
+      await tester.pumpAndSettle();
+      expect(find.text(SendPage.emptyNote), findsOneWidget);
+
+      await tapText(tester, SendPage.pickHint);
+      await settle(tester, () => visible('界面发送.bin'));
+      expect(
+        find.text('界面发送.bin'),
+        findsOneWidget,
+        reason: 'the selection has to show the file the user picked, with the size the provider gave',
+      );
+
+      await tapText(tester, '发送');
+
+      // The receiver's decision, which is the receiver's to make - so it is made here, on the other
+      // node, after the offer arrives.
+      await settle(tester, () {
+        try {
+          return peer.transfers.taskState(transferId).wireName ==
+              'WAITING_ACCEPT';
+        } on Object {
+          return false;
+        }
+      }, attempts: 60);
+      peer.engine.acceptLocally(
+        transferId: transferId,
+        context: ReceiverStorageContext(
+          stagingVolume: const VolumeId('staging'),
+          exportVolume: const VolumeId('internal'),
+          databaseVolume: const VolumeId('internal'),
+          availability: <VolumeId, VolumeAvailability>{
+            const VolumeId('staging'): const VolumeAvailability.known(1 << 40),
+            const VolumeId('internal'): const VolumeAvailability.known(1 << 40),
+          },
+          saveLocationRef: exports.path,
+        ),
+      );
+
+      await settle(
+        tester,
+        () => visible(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+        attempts: 200,
+        realDelay: const Duration(milliseconds: 150),
+      );
+      expect(
+        find.text(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+        findsOneWidget,
+        reason:
+            'the screen may only report that the bytes arrived, and must not claim the transfer is '
+            'finished: verifying and saving happen on the other device',
+      );
+      expect(
+        find.text('已完成'),
+        findsNothing,
+        reason:
+            'nothing on this screen may say 已完成, including the remaining-time figure: that word '
+            'belongs to the side that verified and saved the file',
+      );
+
+      // The claim this whole case exists for: the bytes are on the receiver's disk, and they hash to
+      // what the sender read. The file's identifier comes from the receiver's own row, because the
+      // application generated it - the same random identifier a real run uses rather than one this
+      // test chose.
+      final String receivedFileId = peer.transfers.fileIds(transferId).single;
+      // Inside `runAsync`: verification and export are real disk work, and the test body's zone has
+      // virtual timers, so awaiting them directly would wait forever for a completion that cannot
+      // be delivered there.
+      final ReceivedFileOutcome outcome = (await tester.runAsync(
+        () => peer.engine.finishFile(
+          fileId: receivedFileId,
+          targetRef: exports.path,
+        ),
+      ))!;
+      expect(outcome.verification.wholeFileDigestMatches, isTrue);
+      final File written = exports
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((File f) => !f.path.endsWith('.nearsend-part'))
+          .single;
+      expect(
+        written.path,
+        endsWith('界面发送.bin'),
+        reason:
+            'the name the user chose is the name the receiver writes, which is what makes the '
+            'selections on the two screens describe the same file',
+      );
+      expect(
+        sha256.convert(written.readAsBytesSync()).toString(),
+        sha256.convert(payload).toString(),
+        reason:
+            'a UI that can connect is not a UI that can send; this is the assertion that says the '
+            'file itself made it across',
+      );
+
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester, () => node.phase == NodePhase.stopped);
+      await tester.runAsync(() async {
+        await peer.stop();
+        peer.close();
+      });
+    },
+  );
 }

@@ -200,11 +200,14 @@ void main() {
     expect(phases, contains(SendPhase.sending));
 
     // Progress is per acknowledged chunk, from the protocol's chunk length, and clamped to the
-    // file's frozen size - so the short last chunk cannot push it past the total.
+    // file's frozen size - so the short last chunk cannot push it past the total. The figure says
+    // the bytes of this file are all sent, and the phase stays 传输中: the sender has no basis for
+    // 已完成, because the peer has not verified or saved anything yet.
     final progress = subject.progress!;
     expect(progress.transferredBytes, payload.length);
     expect(progress.fraction, 1.0);
-    expect(progress.phase, TransferPhase.completed);
+    expect(progress.remainingLabel, '本文件已传完');
+    expect(progress.phase, isNot(TransferPhase.completed));
 
     final ReceivedFileOutcome outcome = await server.engine.finishFile(
       fileId: fileId,

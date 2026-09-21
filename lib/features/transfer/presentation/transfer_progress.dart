@@ -218,7 +218,12 @@ class TransferProgress {
     if (totalBytes > 0 && remainingBytes == 0) {
       // Said as a word rather than as a zero, because 「约 0 秒」 describes a transfer that is
       // still going.
-      return '已完成';
+      //
+      // And said differently depending on the phase, because this figure is about **bytes** while
+      // the phase is about the **transfer**. On a sender that has pushed every chunk but whose peer
+      // has verified and saved nothing yet, 「剩余时间 已完成」 would answer a question nobody asked
+      // and read as the whole thing being over - the false completion §7 rules out.
+      return phase == TransferPhase.completed ? '已完成' : '本文件已传完';
     }
     final int? seconds = estimatedSecondsRemaining;
     if (seconds == null) {

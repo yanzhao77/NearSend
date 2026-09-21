@@ -6,8 +6,13 @@ import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
 import 'package:nearsend/features/home/presentation/home_page.dart';
+import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
+import 'package:nearsend/features/transfer/application/sending_flow.dart';
+import 'package:nearsend/features/transfer/application/sending_session.dart';
+import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 
 /// NearSend application root.
@@ -35,7 +40,12 @@ import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 /// widget test that only wants the routes) renders the connection screen's own "nothing to publish
 /// yet" note instead of pretending to have connection information.
 class NearSendApp extends StatefulWidget {
-  const NearSendApp({super.key, this.session, this.peer});
+  const NearSendApp({
+    super.key,
+    this.session,
+    this.peer,
+    this.transferIdFactory,
+  });
 
   /// This device's node, when the application has one.
   final NodeSession? session;
@@ -43,10 +53,21 @@ class NearSendApp extends StatefulWidget {
   /// The connection to another device, when one is being made.
   final PeerSession? peer;
 
+  /// Supplies the identifier of a new transfer.
+  ///
+  /// Injected for the same reason the node's candidate addresses are: a test that has to accept a
+  /// transfer on the other side must be able to name it, and §4 makes identifier generation a
+  /// protocol concern rather than a platform one.
+  final String Function()? transferIdFactory;
+
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
   static const String connectRoute = '/connect';
   static const String transferRoute = '/transfer';
+
+  /// Where a chosen selection is sent from. Its own route rather than a dialog, because the flow it
+  /// drives outlives a dialog and its figures have to survive a rebuild.
+  static const String sendRoute = '/send';
 
   /// The receive confirmation, which `docs/ui/UI_UX_SPEC.md` §5 keeps as its own step so the
   /// space check cannot be skipped by accepting on the connection screen.
@@ -57,6 +78,12 @@ class NearSendApp extends StatefulWidget {
 }
 
 class _NearSendAppState extends State<NearSendApp> {
+  /// The sending flow, once there is a verified peer and a node to send from.
+  ///
+  /// Created on a successful connection rather than at startup, because a flow with no peer would be
+  /// a screen whose send button has nothing behind it - the state this whole task exists to remove.
+  SendingFlow? _flow;
+
   @override
   void initState() {
     super.initState();
@@ -75,11 +102,36 @@ class _NearSendAppState extends State<NearSendApp> {
       unawaited(session.stop().whenComplete(session.dispose));
     }
     widget.peer?.dispose();
+    _flow?.dispose();
     super.dispose();
   }
 
+  /// Pairs with the device that published [payload], and prepares to send to it.
+  ///
+  /// The flow is only built once the peer proved its identity: a client for an unverified peer must
+  /// not exist, and `PeerSession` is what guarantees it does not.
   Future<void> connect(PairingPayload payload) async {
-    await widget.peer?.connect(payload);
+    final PeerSession? peer = widget.peer;
+    if (peer == null) {
+      return;
+    }
+    final bool connected = await peer.connect(payload);
+    final NearSendNode? node = widget.session?.node;
+    if (!connected || node == null) {
+      return;
+    }
+    _flow?.dispose();
+    _flow = SendingFlow(
+      session: SendingSession(engine: node.engine, wire: peer.client!),
+      // The gateway is the platform's own, and null on a platform whose files are paths - which is
+      // what makes the send screen offer a path field there instead of a picker that cannot work.
+      selection: FileSelectionController(gateway: widget.session?.gateway),
+      now: () => DateTime.now().millisecondsSinceEpoch,
+      transferIdFactory: widget.transferIdFactory,
+    );
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   /// The peer state, as the connection screen renders it.
@@ -141,9 +193,44 @@ class _NearSendAppState extends State<NearSendApp> {
                   : null,
               connection: attempt,
               onConnect: widget.peer == null ? null : connect,
+              onContinue: _flow == null
+                  ? null
+                  : () =>
+                        Navigator.of(context).pushNamed(NearSendApp.sendRoute),
             );
           },
         ),
+        NearSendApp.sendRoute: (BuildContext context) {
+          final SendingFlow? flow = _flow;
+          if (flow == null) {
+            // Reachable only by a hand-typed route: the send action is what creates a flow, and a
+            // screen without one would have a send button with nothing behind it.
+            return const Scaffold(body: Center(child: Text('还没有建立连接，无法发送。')));
+          }
+          return ListenableBuilder(
+            listenable: flow,
+            builder: (BuildContext context, Widget? _) {
+              // A picker exists on a platform whose files are documents, and a path field exists on
+              // a platform whose files are paths. Both are the same selection underneath.
+              final bool hasPicker = flow.selection.hasPicker;
+              return SendPage(
+                report: flow.report,
+                phase: flow.phase,
+                progress: flow.progress,
+                fileName: flow.currentFileName,
+                fileNumber: flow.currentFileNumber,
+                fileCount: flow.fileCount,
+                failureReason: flow.failureReason,
+                onPick: hasPicker ? flow.pick : null,
+                onAddPath: hasPicker
+                    ? null
+                    : (String path) => flow.addPaths(<String>[path]),
+                onSend: flow.send,
+                onClear: flow.clear,
+              );
+            },
+          );
+        },
       },
     );
   }

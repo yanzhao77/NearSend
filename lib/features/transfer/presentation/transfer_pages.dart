@@ -84,6 +84,7 @@ class ConnectionPage extends StatefulWidget {
     this.starting = false,
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
+    this.onContinue,
   });
 
   /// The payload this device publishes, or null when it has not opened a session.
@@ -105,6 +106,12 @@ class ConnectionPage extends StatefulWidget {
   /// The state of the attempt to reach the other device.
   final ConnectionAttempt connection;
 
+  /// Called once the peer has proved its identity, to move on to what the connection is for.
+  ///
+  /// Null when this build has nowhere to go yet, in which case the button is not rendered - the same
+  /// rule the connect button follows.
+  final VoidCallback? onContinue;
+
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
   static const String startingNote = '正在启动本机节点，稍后这里会显示本机连接信息…';
@@ -115,6 +122,9 @@ class ConnectionPage extends StatefulWidget {
 
   /// Shown once the peer proved the identity the payload named (§2).
   static const String connectedNote = '已连接：对方证书指纹与连接信息一致。';
+
+  /// The action that follows a verified connection.
+  static const String continueLabel = '选择文件';
 
   /// Shown under the published pin, because that pin is not stable across launches.
   ///
@@ -241,9 +251,22 @@ class _ConnectionPageState extends State<ConnectionPage> {
                 if (attempt.isConnected)
                   Padding(
                     padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: _Notice(
-                      text: ConnectionPage.connectedNote,
-                      palette: palette,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _Notice(
+                          text: ConnectionPage.connectedNote,
+                          palette: palette,
+                        ),
+                        if (widget.onContinue != null) ...<Widget>[
+                          const SizedBox(height: NearSendSpacing.sm),
+                          FilledButton.icon(
+                            onPressed: widget.onContinue,
+                            icon: const Icon(Icons.arrow_forward),
+                            label: const Text(ConnectionPage.continueLabel),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 if (attempt.hasFailed)
