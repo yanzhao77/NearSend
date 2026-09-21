@@ -465,3 +465,15 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` 1095 项通过、
   `check_links`/`check_secrets`/`check_ci_workflow` 通过、`git diff --check` 干净。
   **这些都只是本机自动化，不含真机结论。**
+
+#### CI（PR [#58](https://github.com/yanzhao77/NearSend/pull/58)）
+
+- 首次运行 [35616866259](https://github.com/yanzhao77/NearSend/actions/runs/35616866259)：
+  仓库检查、Windows 构建、Android 构建三个作业**通过**，`格式/分析/测试` 作业**失败**。
+  失败原因**与本批代码无关**：`package:sqlite3` 的 native asset 构建在 Linux runner 上下载
+  `libsqlite3.x64.linux.so` 后，收到的摘要与包内期望值不一致（`bef140a1…` vs `4b986901…`），
+  于是 `Building native assets failed`。摘要取自该作业日志的
+  `Bad state: Hash of downloaded file` 一行。
+- **未改动任何代码**重跑同一作业后四个作业全部通过。
+  这与 T01-02 记录过的同类教训一致：**首次失败原样保留，不用重跑结果覆盖**；
+  重跑只用于区分「代码问题」与「环境／上游制品问题」，本次结论是后者。
