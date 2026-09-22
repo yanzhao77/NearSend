@@ -368,6 +368,8 @@ ThemeData buildNearSendTheme(Brightness brightness) {
       outlineVariant: borderColor,
     ),
     scaffoldBackgroundColor: colors.canvas,
+    visualDensity: VisualDensity.standard,
+    splashFactory: InkRipple.splashFactory,
     cardTheme: CardThemeData(
       color: colors.card,
       elevation: 0,
@@ -379,6 +381,8 @@ ThemeData buildNearSendTheme(Brightness brightness) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(NearSendSizing.buttonHeight),
+        padding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.lg),
+        textStyle: NearSendTypography.labelLarge.toTextStyle(colors.onPrimary),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NearSendRadii.button),
         ),
@@ -387,10 +391,96 @@ ThemeData buildNearSendTheme(Brightness brightness) {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(NearSendSizing.buttonHeight),
+        padding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.lg),
+        textStyle: NearSendTypography.labelLarge.toTextStyle(colors.textPrimary),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NearSendRadii.button),
         ),
       ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size.fromHeight(NearSendSizing.minTouchTarget),
+        padding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.md),
+        textStyle: NearSendTypography.labelLarge.toTextStyle(colors.primary),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(NearSendRadii.button),
+        ),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size.square(NearSendSizing.minTouchTarget),
+        foregroundColor: colors.textSecondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(NearSendRadii.button),
+        ),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: colors.subtle,
+      selectedColor: colors.primarySoft,
+      disabledColor: colors.subtle,
+      side: BorderSide(color: borderColor, width: NearSendSizing.borderWidth),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NearSendRadii.pill),
+      ),
+      labelStyle: NearSendTypography.labelSmall.toTextStyle(colors.textSecondary),
+      secondaryLabelStyle: NearSendTypography.labelSmall.toTextStyle(
+        colors.textSecondary,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.sm),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: colors.card,
+      surfaceTintColor: Colors.transparent,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NearSendRadii.card),
+        side: BorderSide(color: borderColor, width: NearSendSizing.borderWidth),
+      ),
+      titleTextStyle: NearSendTypography.titleMedium.toTextStyle(
+        colors.textPrimary,
+      ),
+      contentTextStyle: NearSendTypography.bodyMedium.toTextStyle(
+        colors.textSecondary,
+      ),
+    ),
+    materialBannerTheme: MaterialBannerThemeData(
+      backgroundColor: colors.subtle,
+      contentTextStyle: NearSendTypography.bodyMedium.toTextStyle(
+        colors.textPrimary,
+      ),
+      padding: const EdgeInsets.all(NearSendSpacing.md),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: colors.textPrimary,
+      contentTextStyle: NearSendTypography.bodyMedium.toTextStyle(
+        colors.card,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NearSendRadii.button),
+      ),
+      behavior: SnackBarBehavior.floating,
+    ),
+    dividerTheme: DividerThemeData(
+      color: borderColor,
+      thickness: NearSendSizing.borderWidth,
+      space: NearSendSpacing.md,
+    ),
+    listTileTheme: ListTileThemeData(
+      minVerticalPadding: NearSendSpacing.xs,
+      contentPadding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.md),
+      titleTextStyle: NearSendTypography.bodyMedium.toTextStyle(colors.textPrimary),
+      subtitleTextStyle: NearSendTypography.labelSmall.toTextStyle(
+        colors.textSecondary,
+      ),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: colors.primary,
+      linearTrackColor: colors.subtle,
+      circularTrackColor: colors.subtle,
+      linearMinHeight: 8,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -404,6 +494,21 @@ ThemeData buildNearSendTheme(Brightness brightness) {
           width: NearSendSizing.focusRingWidth,
         ),
       ),
+      errorBorder: inputBorder().copyWith(
+        borderSide: BorderSide(
+          color: colors.error,
+          width: NearSendSizing.borderWidth,
+        ),
+      ),
+      focusedErrorBorder: inputBorder().copyWith(
+        borderSide: BorderSide(
+          color: colors.error,
+          width: NearSendSizing.focusRingWidth,
+        ),
+      ),
+      labelStyle: NearSendTypography.bodyMedium.toTextStyle(colors.textSecondary),
+      hintStyle: NearSendTypography.bodyMedium.toTextStyle(colors.textMuted),
+      errorStyle: NearSendTypography.labelSmall.toTextStyle(colors.error),
     ),
     textTheme: TextTheme(
       displayLarge: NearSendTypography.displayLarge.toTextStyle(

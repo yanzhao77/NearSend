@@ -307,6 +307,32 @@ void main() {
       }
     });
 
+    test('secondary controls, dialogs and progress use semantic tokens', () {
+      for (final ThemeData theme in <ThemeData>[
+        buildNearSendTheme(Brightness.light),
+        buildNearSendTheme(Brightness.dark),
+      ]) {
+        final NearSendColors c = NearSendColors.of(theme.brightness);
+        expect(
+          theme.textButtonTheme.style?.minimumSize
+              ?.resolve(<WidgetState>{})
+              ?.height,
+          NearSendSizing.minTouchTarget,
+        );
+        expect(
+          theme.iconButtonTheme.style?.minimumSize
+              ?.resolve(<WidgetState>{})
+              ?.width,
+          NearSendSizing.minTouchTarget,
+        );
+        expect(theme.dialogTheme.backgroundColor, c.card);
+        expect(theme.progressIndicatorTheme.color, c.primary);
+        expect(theme.progressIndicatorTheme.linearTrackColor, c.subtle);
+        expect(theme.inputDecorationTheme.hintStyle?.color, c.textMuted);
+        expect(theme.dividerTheme.color, c.border);
+      }
+    });
+
     test('text theme is driven by the type tokens', () {
       final ThemeData theme = buildNearSendTheme(Brightness.light);
       const NearSendColors c = NearSendColors.light;
