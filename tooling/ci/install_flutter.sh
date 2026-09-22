@@ -28,27 +28,44 @@ case "$(uname -s)" in
     ARCHIVE_EXT="tar.xz"
     SHA256="2132e990f236f8d22e7c6314b29a191a95b10d7cbcfec9b4e2e303d996652cbb"
     ;;
+  Darwin*)
+    OS="macos"
+    ARCHIVE_EXT="zip"
+    case "$(uname -m)" in
+      arm64)
+        ARCHIVE="flutter_macos_arm64_${FLUTTER_VERSION}-stable.zip"
+        SHA256="d4dd908b5f8f65515831b6d68ae33307a813f2b68947dded7a1994ee5ea7cead"
+        ;;
+      x86_64)
+        ARCHIVE="flutter_macos_${FLUTTER_VERSION}-stable.zip"
+        SHA256="a7893bb0feecd8bd066f4f7e850356f896a6fc3b862e6c506d21c76691a66b72"
+        ;;
+      *)
+        echo "ERROR: unsupported macOS architecture '$(uname -m)'" >&2
+        exit 1
+        ;;
+    esac
+    ;;
   MINGW* | MSYS* | CYGWIN*)
     OS="windows"
     ARCHIVE_EXT="zip"
     SHA256="0ccd71931f49c2fbe394b1eeb6d79af3d624058a043ea0d03d34160581624fb8"
     ;;
   *)
-    echo "ERROR: unsupported platform '$(uname -s)'. macOS runs are not used because iOS" >&2
-    echo "builds require Apple hardware and are tracked as B06/T09 in the project ledger." >&2
+    echo "ERROR: unsupported platform '$(uname -s)'" >&2
     exit 1
     ;;
 esac
 
-ARCHIVE="flutter_${OS}_${FLUTTER_VERSION}-stable.${ARCHIVE_EXT}"
+if [ -z "${ARCHIVE:-}" ]; then
+  ARCHIVE="flutter_${OS}_${FLUTTER_VERSION}-stable.${ARCHIVE_EXT}"
+fi
 URL="${FLUTTER_BASE_URL}/stable/${OS}/${ARCHIVE}"
 
 WORK_DIR="${RUNNER_TEMP:-/tmp}"
 SDK_ROOT="${WORK_DIR}/flutter-sdk"
 FLUTTER_BIN="${SDK_ROOT}/flutter/bin/flutter"
 
-# Reuse an already-installed SDK for this exact version (the workflow restores it
-# from cache), so a repeat run does not re-download 1.8 GB.
 if [ -x "${FLUTTER_BIN}" ] && "${FLUTTER_BIN}" --version 2>/dev/null | grep -q "Flutter ${FLUTTER_VERSION} "; then
   echo "Reusing cached Flutter ${FLUTTER_VERSION} at ${SDK_ROOT}"
 else
@@ -59,11 +76,13 @@ else
   DOWNLOAD="${WORK_DIR}/${ARCHIVE}"
   curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "${DOWNLOAD}" "${URL}"
 
-  echo "${SHA256}  ${DOWNLOAD}" | sha256sum -c -
+  if command -v sha256sum >/dev/null 2>&1; then
+    echo "${SHA256}  ${DOWNLOAD}" | sha256sum -c -
+  else
+    echo "${SHA256}  ${DOWNLOAD}" | shasum -a 256 -c -
+  fi
 
   if [ "${ARCHIVE_EXT}" = "zip" ]; then
-    # `unzip` is present in Git for Windows; bsdtar is the fallback because it
-    # handles zip archives too.
     if command -v unzip >/dev/null 2>&1; then
       unzip -q "${DOWNLOAD}" -d "${SDK_ROOT}"
     else
@@ -81,8 +100,6 @@ if [ ! -x "${FLUTTER_BIN}" ]; then
   exit 1
 fi
 
-# Fail loudly if the installed SDK is not the pinned version: a silent drift here
-# would make every other guarantee in this workflow meaningless.
 REPORTED="$("${FLUTTER_BIN}" --version)"
 echo "${REPORTED}"
 if ! printf '%s' "${REPORTED}" | grep -q "Flutter ${FLUTTER_VERSION} "; then
