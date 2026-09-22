@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/app_settings_repository.dart';
@@ -370,6 +371,8 @@ class _NearSendAppState extends State<NearSendApp> {
                     continueLabel: receiving
                         ? ConnectionPage.continueLabelReceive
                         : ConnectionPage.continueLabelSend,
+                    localDeviceName: _settings.settings.deviceName,
+                    localPlatform: defaultTargetPlatform.name,
                   );
                 },
               );

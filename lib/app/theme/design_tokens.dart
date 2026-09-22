@@ -446,7 +446,7 @@ ThemeData buildNearSendTheme(Brightness brightness) {
         colors.textSecondary,
       ),
     ),
-    materialBannerTheme: MaterialBannerThemeData(
+    bannerTheme: MaterialBannerThemeData(
       backgroundColor: colors.subtle,
       contentTextStyle: NearSendTypography.bodyMedium.toTextStyle(
         colors.textPrimary,
