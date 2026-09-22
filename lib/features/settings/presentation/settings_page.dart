@@ -78,17 +78,21 @@ class _SettingsPageState extends State<SettingsPage> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('默认接收位置'),
                 subtitle: Text(settings.defaultReceiveLocation ?? '未设置'),
-                trailing: IconButton(
-                  onPressed: () async {
-                    final String? location = await widget.space.gateway
-                        .pickReceiveDirectory();
-                    if (location != null) {
-                      widget.controller.updateDefaultReceiveLocation(location);
-                    }
-                  },
-                  icon: const Icon(Icons.folder_open_outlined),
-                  tooltip: '选择目录',
-                ),
+                trailing: widget.space.gateway.supportsDirectorySelection
+                    ? IconButton(
+                        onPressed: () async {
+                          final String? location = await widget.space.gateway
+                              .pickReceiveDirectory();
+                          if (location != null) {
+                            widget.controller.updateDefaultReceiveLocation(
+                              location,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.folder_open_outlined),
+                        tooltip: '选择目录',
+                      )
+                    : null,
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

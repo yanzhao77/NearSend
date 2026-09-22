@@ -451,7 +451,9 @@ class _NearSendAppState extends State<NearSendApp> {
                   pushFailureReason: incoming?.failureReason,
                   pushSavedPaths: incoming?.savedPaths ?? const <String>[],
                   onCheckPushSpace: _measureIncomingSpace,
-                  onPickLocation: widget.storageGateway == null
+                  onPickLocation:
+                      widget.storageGateway == null ||
+                          !widget.storageGateway!.supportsDirectorySelection
                       ? null
                       : () async =>
                             widget.storageGateway!.pickReceiveDirectory(),

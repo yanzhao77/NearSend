@@ -53,7 +53,10 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
         builder: (BuildContext context, BoxConstraints constraints) {
           final bool desktop = _isDesktop(context);
           final bool compactDesktop = desktop && constraints.maxWidth < 900;
-          final Widget content = _content(context);
+          final Widget content = FocusTraversalGroup(
+            policy: ReadingOrderTraversalPolicy(),
+            child: _content(context),
+          );
           if (!desktop) {
             return Scaffold(
               body: content,

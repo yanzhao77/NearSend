@@ -50,8 +50,8 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T12-06](T12-06.md) | 发送流程页面 | 待验证 | `feat/ui-baseline` |
 | [T12-07](T12-07.md) | 接收流程与空间预检 | 待验证 | `feat/ui-baseline` |
 | [T12-08](T12-08.md) | 任务详情、传输详情与结果 | 待验证 | `feat/ui-baseline` |
-| [T12-09](T12-09.md) | Android、Windows、iOS 平台适配 | 就绪 | `feat/ui-baseline` |
-| [T12-10](T12-10.md) | UI 最终验收与证据 | 就绪 | `feat/ui-baseline` |
+| [T12-09](T12-09.md) | Android、Windows、iOS 平台适配 | 阻塞（Windows/iOS环境缺失） | `feat/ui-baseline` |
+| [T12-10](T12-10.md) | UI 最终验收与证据 | 待验证 | `feat/ui-baseline` |
 | T10 | 安装升级与发布 | 进行中（GitHub Actions 自动发版已完成；签名、升级和正式分发待完成） | [发布说明](../releases/GITHUB_ACTION_RELEASES.md) |
 
 各任务的完成依据见对应运行汇总：T01-01 [证据](../testing/evidence/2026-09-20/t01-01-01/summary.md)、
