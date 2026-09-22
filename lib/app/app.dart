@@ -10,6 +10,7 @@ import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
@@ -234,6 +235,20 @@ class _NearSendAppState extends State<NearSendApp> {
             : NearSendApp.receiveRoute)
       : (_flow == null ? null : NearSendApp.sendRoute);
 
+  String get _connectionLabel => switch (widget.session?.phase) {
+    NodePhase.ready => '本机已就绪',
+    NodePhase.starting => '正在启动',
+    NodePhase.failed => '节点不可用',
+    NodePhase.stopped || null => '未启动',
+  };
+
+  NsStatusTone get _connectionTone => switch (widget.session?.phase) {
+    NodePhase.ready => NsStatusTone.success,
+    NodePhase.starting => NsStatusTone.active,
+    NodePhase.failed => NsStatusTone.error,
+    NodePhase.stopped || null => NsStatusTone.warning,
+  };
+
   /// The storage context a pushed transfer is accepted with.
   ///
   /// **The availability is unknown on purpose.** This build has no way to measure a volume - there
@@ -306,10 +321,15 @@ class _NearSendAppState extends State<NearSendApp> {
           themeMode: themeMode,
           initialRoute: NearSendApp.homeRoute,
           routes: <String, WidgetBuilder>{
-            NearSendApp.homeRoute: (_) => NearSendAppShell(
+            NearSendApp.homeRoute: (BuildContext context) => NearSendAppShell(
               tasks: _tasks,
               space: _space,
               settings: _settings,
+              deviceName: _settings.settings.deviceName,
+              connectionLabel: _connectionLabel,
+              connectionTone: _connectionTone,
+              onContinueTask: () =>
+                  Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
             ),
             NearSendApp.aboutRoute: (_) => const AboutPage(),
             NearSendApp.tasksRoute: (_) => TaskOverviewPage(controller: _tasks),

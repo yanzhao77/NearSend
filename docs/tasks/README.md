@@ -44,8 +44,8 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T12-00](T12-00.md) | UI 平台能力 S0 与任务基线 | 已完成：探针记录；平台能力未全部验证 | `feat/ui-baseline` |
 | [T12-01](T12-01.md) | 主题与 Design Token | 就绪 | `feat/ui-baseline` |
 | [T12-02](T12-02.md) | 共享 UI 组件 | 就绪 | `feat/ui-baseline` |
-| [T12-03](T12-03.md) | 响应式应用壳与真实数据读模型 | 就绪 | `feat/ui-baseline` |
-| [T12-04](T12-04.md) | 首页与关于页 | 就绪 | `feat/ui-baseline` |
+| [T12-03](T12-03.md) | 响应式应用壳与真实数据读模型 | 待验证 | `feat/ui-baseline` |
+| [T12-04](T12-04.md) | 首页与关于页 | 待验证 | `feat/ui-baseline` |
 | [T12-05](T12-05.md) | 配对与连接页 | 就绪 | `feat/ui-baseline` |
 | [T12-06](T12-06.md) | 发送流程页面 | 就绪 | `feat/ui-baseline` |
 | [T12-07](T12-07.md) | 接收流程与空间预检 | 就绪 | `feat/ui-baseline` |

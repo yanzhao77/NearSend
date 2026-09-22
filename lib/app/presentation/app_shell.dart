@@ -7,6 +7,7 @@ import 'package:nearsend/features/home/presentation/home_page.dart';
 import 'package:nearsend/features/settings/presentation/settings_page.dart';
 import 'package:nearsend/features/space/presentation/space_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 
 /// Shared responsive application shell for phone and desktop layouts.
 class NearSendAppShell extends StatefulWidget {
@@ -15,11 +16,19 @@ class NearSendAppShell extends StatefulWidget {
     required this.tasks,
     required this.space,
     required this.settings,
+    this.deviceName = 'NearSend',
+    this.connectionLabel = '连接状态未知',
+    this.connectionTone = NsStatusTone.warning,
+    this.onContinueTask,
   });
 
   final TaskCatalogController tasks;
   final SpaceOverviewController space;
   final SettingsController settings;
+  final String deviceName;
+  final String connectionLabel;
+  final NsStatusTone connectionTone;
+  final VoidCallback? onContinueTask;
 
   @override
   State<NearSendAppShell> createState() => _NearSendAppShellState();
@@ -38,64 +47,67 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final bool desktop = _isDesktop(context);
-        final bool compactDesktop = desktop && constraints.maxWidth < 900;
-        final Widget content = _content(context);
-        if (!desktop) {
-          return Scaffold(
-            body: content,
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: _select,
-              destinations: <NavigationDestination>[
-                for (int index = 0; index < _labels.length; index++)
-                  NavigationDestination(
-                    icon: Icon(_icons[index]),
-                    label: _labels[index],
-                  ),
-              ],
-            ),
-          );
-        }
-
-        return Scaffold(
-          body: Row(
-            children: <Widget>[
-              NavigationRail(
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[widget.tasks, widget.settings]),
+      builder: (BuildContext context, Widget? child) => LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final bool desktop = _isDesktop(context);
+          final bool compactDesktop = desktop && constraints.maxWidth < 900;
+          final Widget content = _content(context);
+          if (!desktop) {
+            return Scaffold(
+              body: content,
+              bottomNavigationBar: NavigationBar(
                 selectedIndex: _selectedIndex,
                 onDestinationSelected: _select,
-                extended: !compactDesktop,
-                minExtendedWidth: 240,
-                minWidth: 72,
-                leading: Padding(
-                  padding: const EdgeInsets.only(top: 16, bottom: 24),
-                  child: compactDesktop
-                      ? const Tooltip(
-                          message: 'NearSend',
-                          child: Icon(Icons.compare_arrows),
-                        )
-                      : Text(
-                          'NearSend',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                ),
-                destinations: <NavigationRailDestination>[
+                destinations: <NavigationDestination>[
                   for (int index = 0; index < _labels.length; index++)
-                    NavigationRailDestination(
+                    NavigationDestination(
                       icon: Icon(_icons[index]),
-                      selectedIcon: Icon(_icons[index]),
-                      label: Text(_labels[index]),
+                      label: _labels[index],
                     ),
                 ],
               ),
-              const VerticalDivider(width: 1),
-              Expanded(child: content),
-            ],
-          ),
-        );
-      },
+            );
+          }
+
+          return Scaffold(
+            body: Row(
+              children: <Widget>[
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: _select,
+                  extended: !compactDesktop,
+                  minExtendedWidth: 240,
+                  minWidth: 72,
+                  leading: Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 24),
+                    child: compactDesktop
+                        ? const Tooltip(
+                            message: 'NearSend',
+                            child: Icon(Icons.compare_arrows),
+                          )
+                        : Text(
+                            'NearSend',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                  ),
+                  destinations: <NavigationRailDestination>[
+                    for (int index = 0; index < _labels.length; index++)
+                      NavigationRailDestination(
+                        icon: Icon(_icons[index]),
+                        selectedIcon: Icon(_icons[index]),
+                        label: Text(_labels[index]),
+                      ),
+                  ],
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: content),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -107,7 +119,16 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
   );
 
   Widget _page(BuildContext context) => switch (_selectedIndex) {
-    0 => const HomePage(),
+    0 => HomePage(
+      deviceName: widget.deviceName,
+      connectionLabel: widget.connectionLabel,
+      connectionTone: widget.connectionTone,
+      hasRecoverableTasks: widget.tasks.hasRecoverableTasks,
+      recoverableTaskCount: widget.tasks.tasks
+          .where((TaskOverview task) => task.isRecoverable)
+          .length,
+      onContinue: widget.onContinueTask,
+    ),
     1 => TaskOverviewPage(controller: widget.tasks),
     2 => SpaceOverviewPage(controller: widget.space),
     _ => SettingsPage(controller: widget.settings, space: widget.space),
