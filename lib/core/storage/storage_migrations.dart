@@ -63,6 +63,21 @@ abstract final class StorageMigrations {
           'tasks remembers the last committed checkpoint sequence (§8)',
       apply: StorageSchema.applyVersion3,
     ),
+    MigrationStep(
+      version: 4,
+      description: 'manifest staging is persisted: staging, file pages and chunk pages (ADR-0004)',
+      apply: StorageSchema.applyVersion4,
+    ),
+    MigrationStep(
+      version: 5,
+      description: 'task credentials by digest, and the receiver authorisation record (§3, §6)',
+      apply: StorageSchema.applyVersion5,
+    ),
+    MigrationStep(
+      version: 6,
+      description: 'a sending task remembers where it reads each file from (§7 chunk GET)',
+      apply: StorageSchema.applyVersion6,
+    ),
   ];
 
   /// The version a fresh database reaches by applying every step.

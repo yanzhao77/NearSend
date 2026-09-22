@@ -304,6 +304,38 @@ class ChunkRepository {
     });
   }
 
+  /// Adopts a generation the peer granted, for a receiver that did not allocate it.
+  ///
+  /// §9: "client 接收者：**先在本地持久化新 epoch**、复核断点，再提交 `receiverState`". The client is
+  /// the receiver but the *server* allocated the generation, so the client has to write it into
+  /// its own rows or every commit would present generation 0 and be refused as stale.
+  ///
+  /// Only ever forwards: refusing a regression here is what stops a replayed or stale grant from
+  /// walking a receiver back onto a generation that has been revoked.
+  int adoptLeaseEpoch(String taskId, {required int epoch, int? nowMillis}) {
+    return database.transaction(() {
+      final int current = leaseEpoch(taskId);
+      if (epoch < current) {
+        throw StorageException(
+          StorageFailureCode.staleLease,
+          'generation $epoch is behind the locally persisted generation $current for '
+          'task $taskId',
+        );
+      }
+      if (epoch > current) {
+        database.db.execute(
+          'UPDATE tasks SET lease_epoch = ?, updated_at = ? WHERE task_id = ?;',
+          <Object?>[
+            epoch,
+            nowMillis ?? DateTime.now().millisecondsSinceEpoch,
+            taskId,
+          ],
+        );
+      }
+      return epoch;
+    });
+  }
+
   /// The task's current write generation.
   int leaseEpoch(String taskId) {
     final ResultSet rows = database.db.select(
@@ -686,6 +718,54 @@ class ChunkRepository {
     return <int>[for (final Row row in rows) row['idx'] as int];
   }
 
+  /// Whether a file row exists, without throwing when it does not.
+  ///
+  /// Needed by a receiver that is registering a manifest it fetched from a peer: the same
+  /// transfer can be resumed, so a file may already be registered, and using [isFullyCommitted]
+  /// to find that out would throw instead of answering.
+  bool isFileRegistered(String fileId) {
+    final ResultSet rows = database.db.select(
+      'SELECT 1 FROM files WHERE file_id = ? LIMIT 1;',
+      <Object?>[fileId],
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// The task a file belongs to.
+  String taskIdOfFile(String fileId) {
+    final ResultSet rows = database.db.select(
+      'SELECT task_id FROM files WHERE file_id = ?;',
+      <Object?>[fileId],
+    );
+    if (rows.isEmpty) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'file $fileId is not registered',
+      );
+    }
+    return rows.first['task_id'] as String;
+  }
+
+  /// The declared chunk count of a registered file.
+  ///
+  /// Read from the receiver's own `files` row rather than from manifest staging: a client
+  /// receiver never stages the manifest itself - it was sealed on the other node - so asking
+  /// staging would find nothing. The row it registered from the peer's frozen manifest is the
+  /// authority for its own bookkeeping, which is also what §8 wants.
+  int chunkCountOf(String fileId) {
+    final ResultSet rows = database.db.select(
+      'SELECT chunk_count FROM files WHERE file_id = ?;',
+      <Object?>[fileId],
+    );
+    if (rows.isEmpty) {
+      throw StorageException(
+        StorageFailureCode.manifestMismatch,
+        'file $fileId is not registered',
+      );
+    }
+    return rows.first['chunk_count'] as int;
+  }
+
   /// Number of committed chunks for a file.
   int committedChunkCount(String fileId) {
     final ResultSet rows = database.db.select(
@@ -693,6 +773,22 @@ class ChunkRepository {
       <Object?>[fileId],
     );
     return rows.first['c'] as int;
+  }
+
+  /// Committed bytes across every file of a task.
+  ///
+  /// §9's status body carries `committedBytes`. Note what this is **not**: it is a display
+  /// figure derived from the committed rows, never a recovery input. `AGENTS.md` §2 rule 5
+  /// forbids deriving recovery from a byte counter, and the recovery query in this class is
+  /// [missingChunkIndices], which looks only at `state`.
+  int committedBytesForTask(String taskId) {
+    final ResultSet rows = database.db.select(
+      'SELECT COALESCE(SUM(c.length_bytes), 0) AS total FROM chunks AS c '
+      'JOIN files AS f ON f.file_id = c.file_id '
+      "WHERE f.task_id = ? AND c.state = 'committed';",
+      <Object?>[taskId],
+    );
+    return rows.first['total'] as int;
   }
 
   /// Whether every chunk of a file is committed.

@@ -35,6 +35,7 @@
 library;
 
 import 'package:nearsend/core/network/control_message.dart';
+import 'package:nearsend/core/network/task_ownership.dart';
 import 'package:nearsend/core/protocol/api_routes.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
@@ -281,12 +282,12 @@ abstract final class ControlAuthTable {
       credential: ControlCredential.session,
     ),
 
+    // No direction: §3 issues the client's recovery secret whichever way the data runs - for
+    // `server_to_client` the client is the receiver, and for `client_to_server` it is the sender
+    // that has to keep a recovery credential. Requiring `server_to_client` here made the receipt
+    // unreachable in the other direction, which the end-to-end test found as a 403.
     'authorizationReceipt': ControlAuthRequirement(
       credential: ControlCredential.transferTask,
-      direction: ControlDirectionRequirement(
-        required: TransferDirection.serverToClient,
-        why: '§7: the receipt confirms the client saved the credentials',
-      ),
     ),
 
     // "resume 使用 taskResumeSecret 专用请求体；初次 resume 无须旧会话令牌"
@@ -409,9 +410,17 @@ class ControlDenied extends ControlAuthorization {
 
 /// Decides §7's authorisation stage.
 class ControlAuthorizer {
-  const ControlAuthorizer(this.authenticator);
+  const ControlAuthorizer(
+    this.authenticator, {
+    this.ownership = const NoTaskOwnership(),
+  });
 
   final ControlAuthenticator authenticator;
+
+  /// Which peer owns each transfer, so a session identity can be scoped to the tasks it is
+  /// actually entitled to. The default owns nothing, which keeps the fail-closed behaviour
+  /// this class had before the mapping existed.
+  final TaskOwnership ownership;
 
   /// Applies §7's rules to [request] for a matched [route] and its path parameters.
   ControlAuthorization authorize({
@@ -479,20 +488,45 @@ class ControlAuthorizer {
         requirement.credential == ControlCredential.transferTask ||
         requirement.credential == ControlCredential.sessionOrTransferTask;
 
-    // A session identity is not transfer-scoped, so it is not compared with the path. A
-    // transfer-scoped route still needs one from a session that is authorised for it, which
-    // is the endpoint's question: the session grant only says "this peer is paired".
+    // A session identity is not transfer-scoped, so it is not compared with the path when the
+    // route only asks for a session. A transfer-scoped route does need one, and §7's
+    // "会话到任务的映射" is what decides it: without a binding, refusing stays the answer.
     if (grant is SessionGrant) {
-      if (requirement.credential == ControlCredential.transferTask) {
-        // A session may reach a transfer-scoped route only if the transfer belongs to it,
-        // which needs the task's owner. Until the session-to-transfer mapping is modelled,
-        // transfer-scoped routes would rather refuse a session than accept one for a
-        // transfer it may not own.
+      if (requirement.credential == ControlCredential.session) {
+        return ControlAuthorized(grant: grant);
+      }
+
+      final TaskOwner? owner = transferId == null
+          ? null
+          : ownership.ownerOf(transferId);
+      if (owner == null) {
+        // Deliberately the same answer as a transfer that does not exist: §7's "任务查询对
+        // 无权限资源统一 404" exists so the status cannot be used to enumerate transfer ids.
         return const ControlDenied(
           code: ProtocolErrorCode.notFound,
           why:
-              'a session identity cannot be authorised for a transfer-scoped route until '
-              'the session-to-transfer mapping exists',
+              'this session is not bound to the transfer named in the path, so it cannot '
+              'reach a transfer-scoped route for it',
+        );
+      }
+      if (owner.peerId != grant.peerId) {
+        return const ControlDenied(
+          code: ProtocolErrorCode.notFound,
+          why: 'the transfer belongs to a different paired peer',
+        );
+      }
+      final ControlDirectionRequirement? sessionDirection =
+          requirement.direction;
+      if (sessionDirection != null &&
+          owner.direction != sessionDirection.required) {
+        // A session now reaches routes that carry a direction requirement, so the direction
+        // check has to run for it too - otherwise the mapping would have opened a path around
+        // `AGENTS.md` §5's per-request direction verification.
+        return ControlDenied(
+          code: ProtocolErrorCode.directionForbidden,
+          why:
+              '${sessionDirection.why}; the task direction is '
+              '${owner.direction.wireValue}',
         );
       }
       return ControlAuthorized(grant: grant);

@@ -4,7 +4,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v3、终检与导出编排均已有实现和测试。当前只有 `POST /transfers`、`PUT /manifest`、`POST /seal` 3 个控制端点可用；真实 HTTP/TLS、Android 指定 Network、块传输、平台 FileSource/FileSink/ExportSink、UI 业务装配和端到端恢复尚未完成，因此还不能真实传输文件或声称支持跨重启续传。没有正式分发或发布版本；协议与关键平台选型尚未冻结。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。**但仍然没有真实文件字节在两个方向端到端传过**：本地文件端口、发送/接收编排、平台文件选择（Android SAF）与 UI 业务装配尚未完成，因此**还不能声称 NearSend 可以互发文件**。没有正式分发或发布版本；协议与关键平台选型尚未冻结。**
 
 ## 1. 状态口径
 
@@ -40,7 +40,7 @@
 | R01 | Flutter客户端与原生适配 | 部分完成：工程基线与核心层 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md) | 三端工程、Dart 协议/配对/存储/终检核心已有实现；首页仍是禁用壳，真实网络、平台文件端口、任务编排、恢复与 UI 业务链路未装配 |
 | R02 | 安装包、签名构建及发布CI | 待开始 | 无产物 | 当前只有发布策略，未发布任何版本 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | 四个作业在 GitHub Actions 真实通过；签名与发布作业仍属 T10 |
-| R04 | 接收方持久化层 | 部分完成：schema v3 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2、v2→v3、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权及 `SQLITE_FULL` 注入已测试；**manifest staging 尚未落 SQLite**，真实暂存损坏、OS `ENOSPC`、真机 `syncData` 和应用运行时装配未完成 |
+| R04 | 接收方持久化层 | 部分完成：schema v6 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2→v3→v4→v5→v6、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权、`SQLITE_FULL` 注入、**manifest staging 落 SQLite（v4）**、**任务凭证按摘要持久化与授权记录（v5）**、**发送端来源引用（v6）** 均已实现并测试；真实 OS `ENOSPC`、真机 `syncData` 与断电耐久性仍未验证 |
 
 历史实验环境见[environment.json](testing/evidence/2026-09-20/environment.json)。20GiB整文件哈希通过；峰值RSS为18,944KiB，1GiB为18,816KiB。该口径不包含系统页缓存，不代表真机吞吐量或完整应用内存。
 
@@ -64,6 +64,8 @@
 | 任务 | 当前状态 | 退出门槛 |
 | --- | --- | --- |
 | T00 文档与研发治理 | 已完成：设计 | 文档索引、流程、架构、端侧、UI、质量和 Agent 手册已提交；后续持续维护 |
+| T11-02 UI 装配 | **进行中**：第 1–2 项（节点生命周期、真实 pin 与候选地址上屏）及连接动作已交付（`t11-01-20`）；第 3–5 项（选择→会话→进度、接收侧装配）待做；第 6 项待真机 | 见 [T11-02](tasks/T11-02.md)：节点生命周期、身份说明、选择→会话、接收侧装配、真机第 6 项 |
+| T11-01 MVP 双向数据面 | **进行中**（`t11-01-01` 数据面）：详见下方 §6 交付记录 | 真机双向传完真实文件、UI 装配、SAF 端口 |
 | T01 工程/构建/配置 | 已完成 | 两端可安装/运行、版本可追踪（§6.1）；检查与双端构建已固化为 CI 门禁（§6.2） |
 | T02 协议/模型/向量 | 部分完成：模型已收敛，但**发现三处草案缺口** | 草案、Python 向量与 Dart 独立实现逐字节一致（T02-01）；错误码/状态机/协议协商/幂等已实现（T02-02）；**冻结被 §5 登记的三项草案缺口阻塞**，另需原生实现比对 |
 | T03 配对与单文件链路 | **部分完成**：配对载荷、信任上下文、令牌生命周期、`/v1/pair` 模型、`/v1` 线上契约层、§7 路由表、§6 清单分页/seal、§7 响应体、**§8 块头规则、批量 checkpoint 窗口（schema v3）与写入栅栏**、**§7 请求管线、鉴权决定与控制响应包**、**HTTPS 传输层（TLS 1.3 下限 + 严格帧定界）**、**4 个可用端点（`POST /pair`、`POST /transfers`、`PUT /manifest`、`POST /seal`）**已实现；**并且真实控制面已在真机与真实局域网上跑通**（`t03-02-05`）。**但尚未传输任何文件字节**——chunk 端点未实现；其余 15 个端点、指定网络绑定与 UI 未做 | 用户授权后端到端收发、鉴权负例通过 |
@@ -152,6 +154,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 批量提交的「验证」与「提交」被分成两次调用 | §8 写入顺序是「写入并验证长度/块摘要→受控待提交队列→`syncData`→事务提交」；原实现把验证与提交放在同一次调用里 | **收据带摘要（`t03-01-08`）**：窗口持有的是 `(index,length,sha256)` **收据**而非索引，批量提交在**事务内**把每张收据与冻结清单再比对一次，冲突则**整批失败**。若只记索引，批量提交就成了一条「把任何已登记块标成已提交而无需证据」的路径。**需人工复核**：这只在调用方真的把 sink 报告的摘要放进收据时才成立，属**代码审查**项，测试无法覆盖「调用方如实填报」 |
 | 既有任务在 v3 升级后的 `checkpoint_seq` | 协议 §8 只要求序号**不回退**；未说明升级前就存在的任务应从几开始 | **写 0（`t03-01-08`）**：既有任务在引入计数器之前**确实**没有取过 checkpoint，0 就是「尚未取过」而不是伪造序号；`NOT NULL DEFAULT 0` 让它是**值**而非缺失（测试断言写 `NULL` 被拒）。**需确认**：若协议要求既有任务继承某个非零序号，需改 |
 | 数据库 schema 展示必须只有一个版本权威 | T01-01 禁止 `kDbSchemaVersion` 与存储 schema 重复定义；应用装配状态与“schema 是否存在”是两件事 | **已修（2026-09-21 一致性修订）**：删除重复的 `kDbSchemaVersion` 与含义混乱的 `kDatabaseImplemented`；`dbSchemaDisplay` 直接消费 `StorageSchema.currentVersion`（当前 v3），另以 `kDatabaseRuntimeIntegrated` 明确表示应用运行时是否已装配数据库。关于页改为“存储层已实现，应用尚未装配”，不再声称 SQLite schema 尚未创建 |
+| 应用私有目录的取值方式 | 节点数据库与暂存必须落在应用自有、用户未选、其他应用读不到的位置；取值方式属依赖与平台决策，不得凭偏好定案（`AGENTS.md` §3、§5） | **本轮决策（`t11-01-20`）**：**不引入 `path_provider`**，改为 ① Android 经既有通道取 `filesDir`；② 桌面取 `%LOCALAPPDATA%`，**漫游目录只作后备**（把一台机器的传输状态带到另一台是错的）；③ 两者都取不到时**拒绝启动**并把原因上屏，**不回落**到共享或临时目录——静默回落等于在用户未同意的地方建数据库。取舍理由与代价：该依赖的贡献只有四行，代价是把它带进两条必须独立验证的构建路径，且插件通道在 `flutter test` 里同样不可用。**需人工复核**：① 是否同意该取舍（若日后同意引入依赖，`AppDirectories` 是唯一改动点）；② `%LOCALAPPDATA%\NearSend` 的命名与卸载清理策略属产品决定；③ **Android 分支从未在真机执行过**，与 SAF 通道同属「代码与契约测试齐备、设备未验证」 |
 | 「等待旧写入停止」是否允许在途写入提交 | 协议 §8：「恢复获得相同写入栅栏，先撤销旧会话，**等待旧写入停止**，再分配新 epoch，**校验已有数据**」。只说等待，未说在途写入的提交应成功还是失败 | **允许其完成并提交（`t03-01-09`）**：中止一个已在 `writeVerifyAndSync` 中途的写入只会留下半写的暂存文件而无任何好处，而 §8 紧接着的「**校验已有数据**」正是让「旧世代下提交的块可以保留」这件事安全的原因——这正是那一步存在的理由。栅栏保证写入**停止**，不保证它**被撤销**。集成测试固定了这一点：drain 期间旧写入完成且 `committed`。**需人工确认**：若协议要求「撤销后旧世代的提交一律失败」，则必须在 `commitPendingBatch` 里按世代拒绝，本层要改成中止而非放行 |
 | 恢复交接的超时语义 | §8 要求等待旧写入停止，**未给上界** | **超时抛错且不分配世代（`t03-01-09`）**：把超时读成「写入已停止」的调用方，会在一个旧写入仍在往文件里写的时候分配新世代——正是该要求要防的事。因此到期抛 `STALE_LEASE`、**不**调用 `revokeAndAdvanceLease`（集成测试断言 `leaseEpoch` 未变），且世代**保持被撤销**以便重试。**需确认**：若产品要求「超时后强制接管」，那是一次安全性权衡，必须显式决定 |
 | 「同一个文件」的判定边界 | §8：「**每文件**串行写入」 | **按 `fileId` 串行，仅限本进程（`t03-01-09`）**：本层保证同一 `fileId` 一次只有一个写入者，但**两个任务引用同一物理文件**（例如用户为两个任务选了同一个目标目录）时 `fileId` 不同而文件相同，本层**不仲裁**；跨进程（两个进程打开同一数据库）也无仲裁。缓解：幂等记录与 `lease_epoch` 仍各自生效。**需人工决定**是否需要平台级文件锁，以及「同一文件」在 SAF / 安全作用域资源上的等价物是什么 |
@@ -177,7 +180,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 摘要检查与 §9 幂等的先后 | §7 给 seal 配「摘要失败 422」；§9 要求「相同 ID 不同参数拒绝 `REQUEST_ID_CONFLICT`」；两者都适用于 seal | **摘要检查放在效果内部（`t03-01-12`）**，于是三种情形各得其所：新 `requestId` + 摘要与声明不符 → **422 `MANIFEST_MISMATCH`**；同 `requestId` + 摘要不同 → **409 `REQUEST_ID_CONFLICT`**；同 `requestId` + 摘要相同 → **200 重放**。第一版把检查放在 `executeAtomically` **之前**，于是「同 ID 换摘要」被答成 422，与 §9 冲突。**这个错误是写测试时自己发现的**（测试名与断言不一致）。**复核要点**：若将来有人为「更早失败」把它移出去，两个码的处方就又混了 |
 | 存储状态名与线上状态名不同 | 线上 `UPPER_SNAKE_CASE`，SQLite 使用稳定的 lower/camel-case 编码 | **已决策并实现（ADR-0004）**：新增唯一转换边界 `StorageStateCodec`；业务代码传 `TransferState`/`FileState`，禁止手写数据库状态字符串。codec 全枚举往返及误把线上名当数据库名均有测试 |
 | `ManifestStagingRegistry` 的内存边界与释放 | §5 允许单个传输 10,000 个文件；`AGENTS.md` §4 禁止无界缓冲；ADR-0004 要求 seal 后释放 registry | **有界并已接入 seal 释放**：进程内 registry 默认最多容纳 8 个并发任务、262,144 条 manifest 记录，超过上限返回 `RESOURCE_LIMIT` 并清理失败提议；seal 成功后通过统一生命周期入口释放 registry。**取消和终态失败端点尚未实现**，未来实现时必须调用同一 `release` 入口。当前仍是第一版演示用的进程内实现，**生产版 SQLite manifest staging、迁移和重启恢复测试尚未完成** |
-| 平台目录边界 | `android`/`windows`/`ios` 相对 `flutter create` 生成结果只允许标识类差异，不得混入业务逻辑 | T01-01 已按 SHA-256 逐文件审计通过，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)；后续每个平台任务需重复复核。**已登记一处有意的、产品必需的非标识类差异（`t03-02-05`）**：`android/app/src/main/AndroidManifest.xml` 增加了 `android.permission.INTERNET`。`flutter create` 只在 **debug** 与 **profile** 清单里放该权限，**主清单没有**，因此 release 构建完全无法联网——而联网正是本产品的全部意义，且任何 debug 模式的测试都看不见这个缺陷。它**不是业务逻辑进入平台目录**，而是产品必需的清单声明；下次平台目录审计必须把它作为**已接受差异**处理，而不是当作混入。该权限只授予 socket 能力：不使用任何互联网服务、不存在账号（协议 §1） |
+| 平台目录边界 | `android`/`windows`/`ios` 相对 `flutter create` 生成结果只允许标识类差异，不得混入业务逻辑 | T01-01 已按 SHA-256 逐文件审计通过，见 [平台目录审计](testing/evidence/2026-09-20/t01-01-01/platform-directory-audit.md)；后续每个平台任务需重复复核。**已登记一处有意的、产品必需的非标识类差异（`t03-02-05`）**：`android/app/src/main/AndroidManifest.xml` 增加了 `android.permission.INTERNET`。`flutter create` 只在 **debug** 与 **profile** 清单里放该权限，**主清单没有**，因此 release 构建完全无法联网——而联网正是本产品的全部意义，且任何 debug 模式的测试都看不见这个缺陷。它**不是业务逻辑进入平台目录**，而是产品必需的清单声明；下次平台目录审计必须把它作为**已接受差异**处理，而不是当作混入。该权限只授予 socket 能力：不使用任何互联网服务、不存在账号（协议 §1）。**已登记第二处有意的、产品必需的非标识类差异（`t11-01-08`）**：`android/app/src/main/kotlin/com/nearsend/app/MainActivity.kt` 由空的 `FlutterActivity` 子类扩展为 SAF 平台通道（`pickFiles`/`probe`/`readChunk`/`beginWrite`/`writeChunk`/`endWrite`/`abortWrite`）。`AGENTS.md` §9 要求 SAF URI 经平台存储适配层处理，因此这**正是**平台目录该承载的东西——系统 API 与资源生命周期适配，不含业务流程：通道不知道 chunk 是做什么用的、不碰数据库、不决定失败之后怎么办。下一次平台目录审计应把它作为**已接受差异**处理，而不是当作混入。**已登记第三处有意的、产品必需的非标识类差异（`t11-01-20`）**：同一条通道增加了 `applicationDirectory`，返回 `filesDir` 的绝对路径。它**不是** SAF 的一部分，而是「本应用自己的文件可以放在哪里」这个 Android 上 `dart:io` 答不出来的问题——节点的数据库与暂存必须放在应用私有目录，既不能放共享目录也不能放可被系统清理的缓存目录。它与前两处同属「系统 API 与资源生命周期适配」，不含业务流程（不创建目录、不知道目录里放什么）。下一次平台目录审计应把它作为**已接受差异**处理 |
 | 依赖锁定 | `pubspec.lock` 必须入库；新增依赖需按端侧设计 §12 记录用途、许可证、维护状态与安全影响 | T01-01 已修正 `*.lock` 误忽略并跟踪 `pubspec.lock`；T01-01 未引入任何第三方运行时依赖 |
 | 应用标识 | `applicationId` / bundle identifier 发布后不可更改 | 已在 [ADR-0001](decisions/ADR-0001-工程基线与标识.md) 冻结为 `com.nearsend.app`；变更必须在 T10 之前完成 |
 | CI 门禁范围 | 自动化门禁只覆盖静态检查、单元/组件测试与构建；**不得**把它当作真机、网络、耐久性或安全结论的替代 | T01-02 已建立并在真实运行中通过，见 [运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md)；平台能力结论仍必须由目标设备证据支持 |
@@ -393,8 +396,671 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 | 2026-09-21 | T03-02 **第二批 `t03-02-02` 完成 TLS 身份层**（Flutter 测试 1003→1012；身份编码 4 项 + 真实握手 5 项）。`lib/core/security/tls_identity.dart` 在 Dart 内生成 P-256 自签叶证书与 PKCS#8 密钥：**模块没有任何写文件的路径**，私钥只以字节返回由调用方交给平台安全存储（`AGENTS.md` §5）；pin 复用既有权威实现 `serverFingerprintOf`，不新增第二处指纹定义；序列号随机、SAN 按地址生成、有效期刻意写满 UTC 可表达跨度（2000→2049），因为离线设备时钟不可信，一年期证书会让时钟错乱的设备**连不上自己**，而这正是 §2「不因离线时钟错误改成接受任意证书」要避免的失败。**本批推翻了自己上一批的结论**：ADR-0005 初稿写「信任库只装 pin 证书 + 回调**恒返回 false**」，按此写的测试**以 `CERTIFICATE_VERIFY_FAILED: IP address mismatch` 失败**——**dart:io 即使证书已被信任库接受仍会校验 SAN/IP**，故回调恒 false 会让一个指纹完全正确的连接因「换网段」而被拒。实测给出四个方向的边界并全部写成测试：信任库命中且名字匹配 → 回调调用 **0** 次并放行；信任库装别的证书 → 拒绝且**服务端未收到任何请求**；信任库命中但名字不匹配 → 回调**被调用**并比对同一个 pin 后放行；指纹不同 → 拒绝。形态因此定为「信任库保证『不是 pin 就连不上』+ 回调把『名字』移出身份判定」，两者比对同一 pin，没有任何路径能放行指纹不同的证书。**独立验证**：`openssl` 3.5.7 解析该证书并算出 `SHA-256(DER)`，与 Dart 的 pin 逐字符一致（`MATCH: True`），公私钥一致性亦为真。新增依赖 `pointycastle` 4.0.0（ADR-0005 §2 记录许可证 MIT、维护状态与「纯 Dart 无常数时间保证、私钥在堆内存」的代价）。**残余**：握手全在 Windows 完成，**Android 侧 `X509Certificate.der` 是否给出同一摘要、回调调用时机是否一致仍无真机证据**；身份**尚未持久化**（当前每次调用都生成新身份，「同一安装一个身份」是下一步）；`pointycastle` 的 CVE 状态未检索；无 HTTP 服务器、无端点接线、无 UI、无真实传输 | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-02/summary.md)、[openssl 验证日志](testing/evidence/2026-09-21/t03-02-02/tls-identity-openssl-verify.log)、[ADR-0005](decisions/ADR-0005-TLS引擎与证书供给.md)、[实现](../lib/core/security/tls_identity.dart) |
 | 2026-09-21 | T03-02 **第三批 `t03-02-03` 完成 HTTPS 传输层，`POST /transfers` 首次真的过网**（Flutter 测试 1012→1020；传输 8 项，全部经真实 TLS）。新增 `https_control_server.dart`（TLS 终止 + §8 帧定界 + 接到既有 `ControlPipeline`，1.3 下限设在 **context** 上故不能协商的连接在握手阶段即被拒）与 `https_control_client.dart`（按 pin 连接、**不跟随重定向**、**关闭透明解压**）。**先测后写**：`tooling/spikes/http_framing/main.dart` 用裸 socket 测出 **dart:io 在处理器看到之前规范化掉了什么**——两个 `Content-Length`（含两种拼写）**由引擎直接拒绝，处理器从不运行**；`Transfer-Encoding: chunked` **被引擎接受并解帧**、头部仍可见；`Content-Length` 与 `Transfer-Encoding` **同时出现时引擎按 chunked 定界并移除 `Content-Length`**；`Content-Encoding: gzip` 头部可见且 body **未被解压**。第四行值得单独记住：**想靠"两个都看见"来拒绝"两者同时"的实现做不到**，它被拒是因为「拒绝任何 `Transfer-Encoding`」覆盖了它——规则成立，但**理由与 §8 字面写法不同**，已写进服务端注释以免后来者当成冗余检查。测试断言包括「正确 pin → 201 且**数据库里确有 1 行任务**」「错误 pin → `PAIR_REJECTED` 且**任务数为 0**（一个请求都没发出）」「无处理器路由 → 404 而非 500」「chunked / gzip → 400 且未创建任务」。**期间发现并修正一处真实缺陷**：`HttpsControlClient` 用 `add()` 写 body 却**未声明 `contentLength`**，`dart:io` 因而回落到 **chunked 编码**（§8 明令拒绝的帧形态），端点经网络调用返回 `400 INVALID_FIELD` 而同一端点在不经网络的单测里是绿的——**服务端的拒绝是对的，错的是客户端**；修法为显式声明长度（空 body 也声明）。这处缺陷同时是「帧定界规则真的起作用」的实证。**ADR-0005 再补一节 §1b**：二维码只带 `serverFingerprint` **不带证书**，故「信任库装 pin 证书」只适用于已持有证书的一方；配对客户端必须**保持信任库为空**并让回调承担比对（空信任库使回调必然对每个证书触发，正是该形态安全的原因）。**残余**：**其余 16 个端点未实现**、**未传输任何文件字节**（chunk 端点与背压未做）、**身份未持久化**故服务端每次启动都换 pin、未做二维码/空间预检/导出/UI、**未在真机运行**（全部握手在本机 loopback） | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-03/summary.md)、[帧定界实测日志](testing/evidence/2026-09-21/t03-02-03/http-framing-probe.log)、[服务端](../lib/core/network/https_control_server.dart)、[客户端](../lib/core/network/https_control_client.dart)、[传输测试](../test/core/network/https_control_transport_test.dart) |
 | 2026-09-21 | T03-02 **第四批 `t03-02-04` 完成 §3 配对端点与会话令牌**（Flutter 测试 1020→1035；配对服务 11 项 + 真实 TLS 闭环 4 项）。`lib/core/security/pairing_service.dart` 开启配对会话、处理 `POST /v1/pair`、签发会话访问令牌，并**同时实现 `ControlAuthenticator`**——签发方与校验方是同一个类**不是因为省事**：一个产出自己校验方不接受的令牌，会**在两侧的单测里都是绿的**，直到真机首次配对才失败，而那是由用户遇到的。测试因此**跟着凭证走**而不只是断言状态码（从响应体取出令牌再交给 `authenticate`）。**`ControlRequest` 新增 `peerAddress`**，因为 §3 要求「每来源每分钟 5 次失败、全局 30 次」而请求原本不携带对端地址；地址由传输层提供，并写明三条纪律：**不是身份、从不用于授权**（局域网上易伪造且每次重连都变，这正是 §2 把身份与地址分开的原因）、`null` 只允许全局限流、调用方**不得**把「无地址」当成「从未失败」；无地址者共用一个桶，方向是 fail-closed。**限流先于令牌检查**有专门用例：5 次失败后**持正确令牌也只得 `429`**（否则可用错误码探测令牌有效性）且 `Retry-After > 0`，另一来源不受影响。**重新签发的 QR 立即作废旧会话令牌**（否则旧二维码的截图仍是可用凭证）；**未知会话与错误令牌返回同一个 `PAIR_REJECTED`**（更细的答案会变成探测会话存在性的工具）。**真实 TLS 闭环**：配对 `200` → 用返回的令牌创建传输 `201` → **数据库里确有 1 行任务**，且**配对本身不创建任何东西**；另固定「无法证明 pin 的客户端根本到不了 `/v1/pair`」，此处断言的是 `liveSessionCount == 0` 而非"什么都没发生"——**配对令牌仍未消费、仍可能被持有二维码的人使用**，这是更准确的描述。顺带把「平台 CSPRNG 字节」收敛为一处定义（`generateSecureRandomBytes`，配对令牌与会话令牌共用）。**仍未解决**：§3 的 `capabilities:[...]` 词表规范从未枚举，故本服务端**宣告空能力集且不做协商**（`AGENTS.md` §3 禁止凭偏好定夺；缺口仍登记在 §5）。**残余**：**仍未在真机运行，Android 尚未参与——这是本任务最大的未知**；**仍未传输任何文件字节**；其余 15 个端点未实现；身份未持久化；未做二维码/空间预检/导出/UI | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-04/summary.md)、[配对服务](../lib/core/security/pairing_service.dart)、[单元测试](../test/core/security/pairing_service_test.dart)、[闭环测试](../test/core/network/pairing_over_transport_test.dart) |
+| 2026-09-21 | T11-01 **第一批 `t11-01-01` … `t11-01-03` 实现双向数据面**（schema v4→v6，`manifest_staging` 落 SQLite、decision/authorization/resume、`PUT`/`GET chunk` 与生命周期端点、本地文件层）。Flutter 测试 1035→1095。**期间发现并修正一个真实缺陷**：`dart:io` 没有不截断地打开已有文件写入的模式，按偏移写单一暂存文件会让第 2 块截断第 1 块（数据库说 committed、暂存文件是零），改为一块一 part 文件后 resume 才真的可用；导出组装改按数值索引排序，否则 `10.part` 会排在 `2.part` 前。**本批不标记任何任务为完成**：发送/接收编排、Android SAF 通道、UI 装配与真机双向端到端**均未完成**，因此不得声称 NearSend 可以互发文件 | [T11-01](tasks/T11-01.md)、本台账 §6.4、`lib/core/storage/manifest_staging_store.dart`、`lib/core/network/task_authorization_endpoint.dart`、`lib/core/network/chunk_transfer_endpoint.dart`、`lib/core/network/transfer_lifecycle_endpoint.dart`、`lib/core/storage/local_file_layer.dart` |
 | 2026-09-21 | T03-02 **第五批 `t03-02-05` 完成 Android 平台 spike：真机首次与真实服务端在真实局域网上完成控制面**（新增 `integration_test/`，2 项真机用例全部通过）。回答三个只有真机能回答的问题：**（1）Android 的 `SHA-256(X509Certificate.der)` 等于 Windows 生成证书时算出的 pin**——测试断言 Android 每一次呈现的指纹都等于二维码里的值；**这是最容易悄悄出错处**：两个平台若对 DER 理解不同，pin 会一边匹配一边永远不匹配，而**桌面上的全部测试仍然全绿**。**（2）`badCertificateCallback` 在 Android 上的调用时机与 Windows 一致**：正确 pin 的用例断言回调确实被调用过，错误 pin 的用例断言回调看到了真实证书且连接随后被我们自己的比较拒绝。**（3）应用真的能经 Wi-Fi 到达这台 Windows**：配对 `200`、用会话令牌创建传输 `201` 且 `state=STAGING`（这两个响应只可能来自真实端点的真实实现）。服务端使用**真实的** transport + `PairingService` + `TransferCreationEndpoint`，无桩；载荷由与扫码器同一个严格解析器解析。**期间发现并修正一处真实缺陷**：`flutter create` 只在 **debug/profile** 清单放入 `INTERNET` 权限，**主清单没有**，因此 **release 构建完全无法联网**——而联网正是这个产品的全部意义，且**任何 debug 模式的测试都看不见它**，会一直潜伏到第一次 release 安装；已将权限加入主清单并写明理由（这会让平台目录审计出现一处**有意的、产品必需的**非标识类差异，下次复跑应如此接受）。**环境前提是条件而非给定**：本轮开始时上一台真机掉线，接入的新设备 **Wi-Fi 处于关闭状态**、走蜂窝数据且把 `192.168.10.100` 的路由送去运营商网关，**首轮失败与服务端和代码无关**；启用 Wi-Fi 后自动连上同一 AP 并取得 `192.168.10.4/24`，印证了 B01/B02 的立场。**如实说明未取到的证据**：测试 isolate 的 `stdout` 不被 `flutter test` 转发、设备 logcat 被启动器的 `flutter` 标签刷满，故**两个指纹的字符串没有进日志**，本运行不声称有该证据；替代它的是断言本身（打印的值可以是错的，被校验过的不会）。**残余**：**仍未传输任何文件字节**（chunk 端点未实现）；其余 15 个端点未实现；**无 UI 与扫码**（载荷经命令行 base64 传入，因二维码的引号与花括号在「PowerShell → flutter test → ADB 启动」链路上会被 mangled，首次尝试即因此失败）；身份未持久化；未做空间预检/终检接入/导出/进度显示 | [T03-02](tasks/T03-02.md)、[运行汇总](testing/evidence/2026-09-21/t03-02-05/summary.md)、[真机运行日志](testing/evidence/2026-09-21/t03-02-05/android-lan-pairing.log)、[真机测试源码](../integration_test/android_lan_pairing_test.dart)、[局域网服务端探针](../tooling/spikes/lan_server/main.dart)、[主清单](../android/app/src/main/AndroidManifest.xml) |
 | 2026-09-21 | **T03-02 前五批（`t03-02-01` … `t03-02-05`）整体提交评审**：本分支把「Windows 侧真实 HTTPS 控制面 + Android 真机接入」作为一个可评审单元交付，32 个文件、+4145/−10。评审口径的三条边界写在这里，以免被后续引用时放大：**（1）这是控制面，不是文件传输——没有任何一个文件字节被传输过**；（2）真机证据覆盖「同 AP 真实局域网 + pin 比对 + 配对 + 创建任务」，**不覆盖**热点路径、指定 Network、多网络选择、UI 与扫码；（3）`t03-02-05` 的指纹一致性由**测试断言**证明，**不是**由日志中的指纹字符串证明。**同期修正证据文件编码**：`t03-02-01/02/03/05` 的四个 `.log` 由 PowerShell `Tee-Object` 写成了 **UTF-16LE（其中一个是带 BOM 的 UTF-8）**，被 git 判为二进制、无法 diff 与检索——本项目在 T01-01 已记录过一次同类编码缺陷（S0 探针在 `cp936` 下不可复现）。四个文件已转为 **UTF-8 无 BOM**，内容逐行保留（校验方式：转换后重新检索关键行，如三个 spike 判定、`Protocol version: TLSv1.3`、`All tests passed`、两处 `NEVER REACHED`）。**台账同步**：B01 由「探针未执行」改为**真实同 AP 控制面样本通过**并明确**不标记完成**；B02 记为 **DER pin/TLS 真机验证通过、指定 Network 仍未完成**；T03 保持**部分完成**并注明**尚未传输任何文件字节**；§5「平台目录边界」登记 `INTERNET` 权限为**有意的、产品必需的非标识类差异** | [T03-02](tasks/T03-02.md)、[ADR-0005](decisions/ADR-0005-TLS引擎与证书供给.md)、证据 `t03-02-01` … `t03-02-05`、[真机测试](../integration_test/android_lan_pairing_test.dart) |
 | 2026-09-21 | T03-02 前五批（`t03-02-01` … `t03-02-05`）经 **PR [#56](https://github.com/yanzhao77/NearSend/pull/56) 合并入 `master`**（合并提交 `253f2a597c02eda61d2930fef9f43e51a1238975`）。**CI 四个作业在首次运行即全部通过**（run [35609916726](https://github.com/yanzhao77/NearSend/actions/runs/35609916726)，head SHA `cbcd6ac`）：仓库检查 6s、格式/分析/测试 1m4s、Windows 构建 2m12s、**Android 构建 4m58s**。Android 作业值得单独记一笔——这是**本项目的 Android 构建第一次在干净 runner 上被验证**，同时确认了 `INTERNET` 权限的主清单改动不会破坏构建（此前该改动只有本机证据）。合并后本地 `master` 已快进至 `253f2a5`。**任务状态不变**：T03-02 仍「进行中」，因为**数据面一行未写、没有一个文件字节被传输过**；B01 仍不标记完成（热点路径从未跑过）；B02 的「指定 Network」仍未完成 | [PR #56](https://github.com/yanzhao77/NearSend/pull/56)、[合并提交 `253f2a5`](https://github.com/yanzhao77/NearSend/commit/253f2a597c02eda61d2930fef9f43e51a1238975)、[CI run 35609916726](https://github.com/yanzhao77/NearSend/actions/runs/35609916726)、[T03-02](tasks/T03-02.md) |
 
 每次改变状态同时更新证据链接、适用环境、阻塞和下一动作；真实失败不得覆盖为“待验证”。历史证据不覆盖，新增运行按日期/运行ID归档。Git提交及PR提供版本追踪，不在同一提交正文猜测尚未生成的SHA。只有目标端退出门槛通过才能将平台项目从“阻塞/部分完成”改为“已完成”。
+
+### 6.4 T11-01 MVP 双向数据面（本批交付）
+
+任务卡：[T11-01](tasks/T11-01.md)　分支：`feat/mvp-bidirectional-transfer`。
+
+本批把仓库从「控制面可用」推进到「数据面已实现」，但**没有**推进到「已经互发文件」。
+下面按「代码已实现／单元测试通过／集成测试通过／真机通过／实机通过／端到端通过」逐项区分。
+
+#### `t11-01-01` SQLite manifest staging（schema v4）
+
+- `manifest_staging`、`manifest_files`、`manifest_chunks` 三张表；页按索引主键存储，
+  因此「重传相同页不能虚增计数」是 schema 的性质而不是调用方的纪律。
+- seal 时把冻结清单以 JSON 写入 `sealed_manifest`，`decision`／块校验／`resume` 重启后可读；
+  seal 通过一次性把行物化进 `ManifestStaging` 复用既有 §6 校验顺序，**不长期持有内存清单**。
+- 过期提议写 `released_at` 而不是删除：删除会让下一次请求从任务行重建并重开一个 §6 说已撤销的提议。
+- 状态：代码已实现；单元测试通过（注册表 22 项，含真实 reopen 的「未 seal 续传」「已 seal 可读」
+  「窗口起点跨重启」三段）；真机未涉及（纯存储层）。
+
+#### `t11-01-02` decision / authorization / resume（schema v5）
+
+- `POST /decision`、`GET /authorization`、`POST /authorization/receipt`、`POST /resume` 接线；
+  空间预检（`507 SPACE_INSUFFICIENT`）、保存位置、空间估算随批准持久化；`leaseEpoch` 由首次
+  `resume` 分配；`checkpointSeq` 来自存储层。
+- **会话到任务的映射**（`task_assignments`）：补上台账 §5 登记的「能力缺口」。默认 ownership
+  什么都不拥有，因此失败关闭方向不变，既有授权测试原样通过；方向随 owner 一起返回，
+  所以「每个文件请求验证操作方向」这条也覆盖了 session 路径。
+- **凭证只存摘要**：`task_credentials` 只有 SHA-256，明文只存在于进程内有界 vault，收到 receipt 后丢弃。
+  重启发生在签发与 receipt 之间时**拒绝重发**而不是重新签发（重新签发会静默作废客户端已保存的那一份）。
+- 状态：代码已实现；单元测试通过（端点 27 项 + 授权 6 项，均断言数据库状态而非仅状态码）；
+  真机未验证。
+
+#### `t11-01-03` 数据面：`PUT`/`GET chunk` 与生命周期端点（schema v6）
+
+- `PUT`/`GET chunk`：§8 帧定界先于任何字节读取，长度、清单摘要、世代逐项校验；
+  写入顺序复用已在 T03-01 测试过的 `writeChunkWithFileLock`；答案区分 `verified_pending` 与
+  `committed`；`GET` 返回 `Content-Length` 与 `X-LFT-Chunk-SHA256`。
+- 生命周期：`offers`、manifest 读取（含 §7 的 `nextIndex`）、`status`（含 §9 的 `authority` 标记，
+  且 `missingChunkRanges` **按草案留白故意未建模**）、`checkpoint`（只写显示镜像）、
+  `pause`（先强制 checkpoint 再迁移状态）、`cancel`（同事务撤销凭证）、`complete`
+  （区分 §10 的两种角色）、`control` 与 receipt。
+- 本地文件层：**每个块一个 part 文件**的分块暂存、流式读取发送（规划与发送各一次单块内存）、
+  按数值索引组装导出。
+- 状态：代码已实现；单元测试通过（chunk 13 项，断言 SQLite 块状态、暂存文件内容、窗口计数）；
+  真机与实机端到端**未执行**。
+
+#### 期间发现并修正的真实缺陷
+
+- **`dart:io` 没有「不截断地打开已有文件写入」的模式**（`write`/`writeOnly`/`writeOnlyAppend`
+  要么截断要么强制写到末尾）。第一版按偏移写单一暂存文件，于是写第 2 块时截断了第 1 块：
+  **数据库说块已提交，暂存文件却是零**——正是 §8 与 `AGENTS.md` §2 规则 5 要防的状态。
+  改为一**块一文件**后，每个 part 只被一个写入者完整写一次，截断是正确的；且已正确的 part
+  在重启后不受影响，`resume` 因此真的可用。代价（目录项数量）写进了类注释。
+- **导出组装必须按数值索引排序**：字符串序下 `10.part` 排在 `2.part` 前面，会产出一个
+  「字节一个不少、位置全错」的文件——任何长度校验都发现不了。
+
+#### `t11-01-04` 发送/接收编排与节点装配
+
+- `TransferEngine`：把 §6–§10 的端点按协议要求的顺序用起来——规划来源、分页并 seal 清单、
+  停在 `WAITING_ACCEPT`、在接受时创建接收端权威块行、按 §8 写入顺序流式收块、
+  **只从接收端自己的行重新推导缺块**、走 §10 的逐文件状态链、只导出可导出回执。
+- `NearSendNode`：把数据库、仓储、配对、五个端点、链式认证器（先 §3 会话令牌再 §7 任务令牌）、
+  ownership 表与 TLS 服务器装配成一个可运行节点；创建处理器记录会话到任务的绑定，
+  这正是「客户端刚创建的 transfer 的 transfer-scoped 行能被授权」所依赖的东西。
+- 状态：**代码已实现；单元测试通过**（引擎 6 项，**真实文件、真实暂存目录、真实导出目录**：
+  两种角色的字节搬运、整文件 SHA-256、导出文件逐字节一致、错块拒绝、缺块只报缺的那一块）。
+  **未覆盖 HTTP/TLS 一跳**（该跳另有 `https_control_transport_test.dart` 与
+  `pairing_over_transport_test.dart`）；**真机未执行**。
+- 本批由测试发现并修正的真实缺陷：
+  1. `task_sources` 的外键先于任务行——记录来源时任务行还不存在，插入被回滚；这是外键在做它的事。
+  2. **接受时才创建接收端权威块行**：第一版只记了批准，于是每个块请求都找不到文件。
+  3. **导出端口把命名策略的输出当路径信任**：嵌套安全名直接失败，而更严重的一半是
+     **绝对路径或 `..` 段会写到用户所选目录之外**；现在端口自己复查形状、只允许目标目录内的普通名字、
+     并且只在目标目录之下创建目录。
+  4. §10 的逐文件链必须显式走：否则副本已落盘却在最后一步报
+     `pending -> completed is not defined`——状态机正确地拒绝了跳过校验与导出的跳跃。
+
+#### `t11-01-05` 客户端编排与真实 TLS 双向验证
+
+- `TransferClient`：配对、`offers`、`decision`、`authorization` + receipt、`resume`、
+  清单读取（files 与 chunks 两种页）、chunk `PUT`/`GET`、`checkpoint`、`complete`。
+- `test/core/transfer/http_transfer_test.dart`：**两个节点 + 一条真实 pinned TLS 连接 +
+  两个方向各一个真实文件**（4 MiB + 尾块、含中文文件名）。断言的是**字节与行**：
+  接收端磁盘上的文件哈希等于发送端离开的文件、接收端自己的块行说文件完整；
+  并且 `server_to_client` 时上报的字节落在发送端**镜像**里，而发送端自己的已提交字节保持为 0
+  ——§9 的权威规则由此成为断言而不是注释。
+- 本轮由这次运行发现并修正的 4 个真实缺陷（单元测试都看不见）：
+  1. **`authorization/receipt` 在 `client_to_server` 下不可达**：§7 的凭证表要求
+     `server_to_client`，但 §3 两个方向都给客户端发恢复密钥，于是客户端发送方确认收到凭证时被 403。
+  2. **`nextIndex` 是响应字段而不是页字段**：§7 把它加在 §6 的页体上，而 `ManifestPage.parse`
+     正当地拒绝未定义键，客户端必须先读它、再用去掉它的副本解析页。
+  3. **没有自己分配世代的接收方提交不了**：§9 要求 client 接收者**先在本地持久化新 epoch**，
+     缺这一步时每次提交都presentation 0 并被判为过期；新增 `adoptLeaseEpoch`，**只许前进**。
+  4. 文件尾 checkpoint 去问 staging 要块数——client 接收方的清单是在另一端 seal 的，
+     staging 里什么都没有；块数应来自接收端自己的 `files` 行。同一处错误让完成路径从
+     `READY` 直接跳到 `VERIFYING`，被状态机正确拒绝（那会跳过记录「数据确实动过」的状态）。
+- 状态：**代码已实现；单元测试通过（1103 项）**。**这是一次真实的双向传输，但发生在同一台机器上
+  的两个节点之间**——台账把它与真机运行记为两个不同的结论。**真机仍未执行**。
+
+#### `t11-01-06` 真机运行：Android → Windows 已通过，Windows → Android 未完成
+
+- `tooling/spikes/lan_server/main.dart` 重写为**完整节点夹具**：跑真实 `NearSendNode`（同一套端点、
+  存储与传输），自己按观察本机数据库的循环行动，因为设备测试无法读取 Windows 进程的输出；
+  它以一行 JSON 公布配对载荷、它准备的出站 transfer，以及送达内容的摘要。
+- `integration_test/android_bidirectional_transfer_test.dart`：真机同时作为发送方与接收方，
+  两端用同一个确定性公式生成内容，因此各自都能独立说出期望摘要。
+
+**真机结论（`22081283C` / Android 14，Windows `192.168.10.100`，同一 AP）：**
+
+| 方向 | 状态 | 证据 |
+| --- | --- | --- |
+| **Android → Windows** | ✅ **真机通过** | Windows 节点输出 `{"kind":"inbound-complete","verifiedBytes":4199304,"wholeFileDigestMatches":true,"savedPath":"…\\exports\\android-中方文件.bin","savedSha256":"d2a18353…","exportSaved":true}`——字节数与设备声明的清单一致、整文件摘要复算一致、**中文文件名经 §5.1 规则后保留**、导出已提交 |
+| **Windows → Android** | ❌ **未完成** | 首次尝试**败在测试的 30 秒预算上而不是传输上**（已改为每例 6 分钟）；此后每次尝试都在安装阶段被 `INSTALL_FAILED_USER_RESTRICTED` 拒绝 |
+
+**外部阻塞（如实记录，不标记为通过也不标记为失败）**：`INSTALL_FAILED_USER_RESTRICTED`
+是**设备自身的确认弹窗**，需要人工点击。本轮期间它**曾经成功过一次**（唤醒屏幕后 `adb install` 成功），
+说明它不是永久性配置问题，但**无法在无人值守时稳定通过**。这类阻塞按 `AGENTS.md` 属于
+「系统授权弹窗必须人工点击」，留待用户在场时执行。
+
+另一条应记住的运行事实：**设备熄屏/锁屏时 adb 会报同一个 user-restricted 失败**，而构建本身没有任何问题。
+
+#### `t11-01-07` 阶段五起步：首页接线、连接页与传输详情页
+
+- `TransferProgress`：规范要求「已传/总量、速度、剩余时间」，而 `AGENTS.md` §2 规则 5 禁止用
+  协议保留给接收端 committed 行的计数器推导任何东西。解法即该模型的全部要点：**已传字节只来自
+  committed**；速度与剩余时间是**观测差值的派生值、不落盘**；**未知即 null**（无总量→无比例 +
+  不确定进度条；只有一个采样→无速率）；窗口内无进展是 **0**（是答案，区别于「未知」）；
+  上报值超过清单总量时**钳制**而非画出 >100%。
+- `ConnectionPage`：显示真实配对载荷并要求**比对指纹**；粘贴的载荷走**扫码器同一个严格解析器**。
+  **不画二维码**——需要 QR 编码器，加依赖是需论证的决定，页面直说而不是留一个空框。
+- `TransferDetailPage`：状态词、进度条、三项数字、暂停/继续/取消/重试；不适用的控件**不渲染**
+  而不是禁用（禁用的暂停按钮是无意义的焦点停靠点）。
+- 首页两个按钮**已接真实路由**；按钮下方提示**保留**并改写为「连接与配对已接线；文件选择与传输编排
+  仍在接入中」——**能用的按钮不等于能用的流程**。
+- 状态：代码已实现；widget 测试通过（13 项，全部断言屏幕上真正显示什么：未知总量必须是不确定进度条、
+  已完成不得出现暂停、失败必须给出原因）。**仍未完成**：文件选择、接收确认、空间不足提示。
+
+#### 真机验证路径的阻塞（连续 13 次尝试，记录而不改写结论）
+
+- `INSTALL_FAILED_USER_RESTRICTED` 自 `t03-02-05` 之后**每一次尝试都出现**（至今 **13 次**，全部为同一失败码；
+  最后两次分别在 `t11-01-29` 与 `t11-01-30`，设备均已连接、屏幕均已用 `KEYCODE_WAKEUP` 点亮），
+  **设备自身的确认弹窗需要人工点击**；`adb_install_need_confirm=0`、`verifier_verify_adb_installs=0`、
+  `install_non_market_apps=1` 均无效，`pm install` 路径同样被拒，
+  而它**曾经成功过一次**（唤醒屏幕后安装成功），因此不是配置错误而是提示框。
+- **这不使整个目标进入 blocked**：仍有不依赖设备的工作（UI 装配、文档与证据），按目标策略继续推进。
+- **它确实使两项结论永久悬空，不得当作已验证**：
+  ① **Windows → Android 真机方向**；② **SAF 通道从未在设备上运行过**（其 Kotlin 已编译进
+  debug/release APK，Dart 契约有测试，但**没有一次真机执行**）。
+- **解锁只需一个人工动作**：在设备上允许「通过 USB 安装应用」，或在该设备的开发者选项中开启
+  「USB 安装」。之后执行下方两条命令即可完成 —— 命令与设备/节点参数已在本台账与
+  `integration_test/android_bidirectional_transfer_test.dart` 的文件头中写全，逐步流程另见
+  [本阶段证据汇总](testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md) 第 3 节。
+
+#### `t11-01-30`：目标轮次用尽时的收尾结论（最后一轮）
+
+- **做的事**：第 13 次安装尝试（连接在、屏幕亮，仍为同一失败码，原样记录）；把证据汇总与
+  台账口径对齐；确认最后一次代码提交的 CI 结果。
+- **完成度（不得含糊）**：阶段一、三、四、五已实现并有真实两节点 + 真实 TLS 的验证；
+  **阶段二的 `decision`/`authorization` 已完成，`resume`（断点续传）只有底层能力与测试、
+  应用层没有编排**；**真机端到端验证：0 次**。
+- **未完成项的准确性质**：`resume` 的**发送端**恢复除了编排之外还缺一块协议留白——
+  §9 的 `missingChunkRanges` 形状未定，本项目**有意未建模**（`t03-01-06` 记录过），因此发送端
+  无法知道对端缺哪些块；接收端恢复在 `ReceivingFlow.accept` 里已由「本机已提交行」驱动，
+  缺的是重新进入的入口与断言。这与真机阻塞是**两件不同的事**，不应混为一谈。
+- **因此目标不标记完成，也不标记 blocked**：仍有不依赖设备的工作可做（`resume` 编排、
+  剩余空间平台测量、Windows 取件器），而真机验证只差一个人工动作。
+
+#### `t11-01-31`：**安装阻塞解除，应用首次在真机上运行**（真机证据的开端）
+
+- **阻塞已解除**：在设备上开启「通过 USB 安装应用」后，`adb install -r app-debug.apk` 返回
+  **`Success`**（第 14 次尝试，前 13 次皆为 `INSTALL_FAILED_USER_RESTRICTED`）。应用随即用
+  `am start` 启动，进程存活（`ps -A` 可见 `com.nearsend.app`）。
+- **首次真机执行的对象**：`lib/app/` 的节点生命周期、`AppDirectories` 的 Android 分支
+  （channel 方法 `applicationDirectory`）、`package:sqlite3` 的原生库加载、以及 SQLite 的
+  WAL/耐久 PRAGMA。证据是**应用私有目录里的实际文件**（`adb shell run-as com.nearsend.app ls -l files`）：
+  `nearsend.db`、`nearsend.db-wal`、`nearsend.db-shm`、`staging-root/staging/`。
+  这四样一起出现只能由「目录取自 `filesDir` + sqlite3 在 Android 上加载成功 + WAL 被接受 +
+  暂存布局已创建」共同解释。**这是本项目第一次在 Android 上跑起来**，也把
+  `applicationDirectory` 从未在设备执行过的旧结论改掉了。
+- **一次需要记录下来的假警报**：第一次检查 `files/` 时里面只有 `profileInstalled`、没有数据库，
+  当时的推断是「设备上打不开 sqlite」。**该推断是错的**——装上去的 APK 构建于 01:10，而
+  `applicationDirectory` 是 05:00 的提交（`f1c6b36`）才加入的：陈旧 APK 里通道不存在，
+  于是启动路径在解析目录时失败。重新构建并安装当前代码后，数据库随即出现。
+  **教训**：设备证据必须标明所装 APK 对应的提交，否则会把陈旧构建的失败读成产品缺陷。
+- **仍未完成（本轮到此为止）**：真正的**数据面**真机验证（`integration_test/android_bidirectional_transfer_test.dart`
+  对 Windows 节点双向互传）**没有跑**。原因是 Windows 侧的 harness 当前**启动失败**：
+  台账里记录的 `dart run tooling/spikes/lan_server/main.dart` 在本环境编译不过——
+  该文件导入了 `package:flutter/*`，而 `dart run` 不带 Flutter 的 SDK 库
+  （报错为 `'Offset' isn't a type` 之类的 flutter 内部错误）。**这是调用方式的问题，不是协议问题**；
+  下一轮要么改用能解析 Flutter 的启动方式（`flutter run -d windows <file>` 或把 harness 改为不依赖
+  Flutter 的纯 Dart 入口），要么把它做成 `flutter test` 可驱动的进程，然后按
+  [证据汇总](testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md) 第 3 节补齐两端记录。
+
+#### `t11-01-08` … `t11-01-10`：接收确认、文件选择结果、SAF 通道与选择控制器
+
+- **`ReceiveConfirmationPage` + `SpaceEstimateSnapshot` 渲染**（`t11-01-08`）：§16.2 要求逐卷解释性明细
+  （「不能只返回布尔值」），§11 给 `SPACE_INSUFFICIENT` 的处方是清理空间/换位置，§16.1 禁止把未知读数
+  渲染成通过的检查。因此：**已知不足时拒绝接受**（不只禁用按钮）、**逐卷渲染规划器自己的理由文本**、
+  **未知必须明说并要求用户确认风险**（`unknown` 可确认而不是被拒绝——拒绝它会让读不出容量的卷表现得像满盘）。
+- **`FileSelectionPage` + `FileSelectionReport`**（`t11-01-09`）：规则放在报表对象而不是 `build` 里，
+  因此**对规则的断言比对渲染文本的断言更强也更稳**（这是上一屏学到的教训：按按钮文案断言曾四处脆弱失败）。
+  规则：§5.1 路径在本地就拒协议会拒的名字；重复 `fileId` 是问题而重复显示名只是提示；**列出全部问题而非第一个**。
+  **测试发现一处真实冗余**：路径副标题与标题相同时仍被渲染，扁平文件名出现两次——已改为仅在信息不同时显示。
+- **Android SAF 平台通道**（`t11-01-10`）：Kotlin `MainActivity` 提供
+  `pickFiles`/`probe`/`readChunk`/`beginWrite`/`writeChunk`/`endWrite`/`abortWrite`；Dart 侧为
+  接口 + `MethodChannel` 绑定 + 内存实现。**它必须不破坏的规则就是全部设计**：§2 规则 4 禁止整文件入内存，
+  而 SAF 显然捷径 `openInputStream().readBytes()` 正是如此，故每次读取是**一次带偏移的有界块读**、
+  流不跨传输持有、定位优先 `FileChannel.position` 而以 `InputStream.skip` 回退（**O(offset) 作为代价写明**）。
+  契约测试（脱离 Kotlin）：provider 不报大小 → **null 而非 0**；短读**保持短**而不补齐；权限失效**抛错**
+  而非返回空。**有意未做**：持久化 URI 权限（需设备验证，故权限丢失**响亮失败**、期望调用方进入 BLOCKED）。
+- **`FileSelectionController`**：连接平台层与 features。**provider 不报大小的情形下每个方便答案都是错的**——
+  不变成 0（§5.2 摘要），不拒绝整个选择，不读文件去查（§2 规则 4）；该文件**排除并说明原因**，真实大小由
+  planner 读取时确定。已选过的文档**跳过而非重复添加**（一条用户文件两条清单会让接收端写出两份）。
+- 台账另在 §5「平台目录边界」登记 `MainActivity.kt` 为**第二处有意的、产品必需的非标识类差异**。
+- 状态：代码已实现；widget/单元测试通过（本轮累计 +28，总数 1145）；**Kotlin 已编译进 debug APK**，
+  且 Android debug/release 在 CI 干净 runner 上构建通过。**SAF 通道从未在设备上运行过。**
+
+#### `t11-01-11`：发送端字节来源端口（让 Android 能当发送方的缝）
+
+- `lib/core/storage/source_bytes.dart`：`SourceBytes`（`length()` + `readAt(offset,length)`），
+  `FileSourceBytes`（路径）与 `SafSourceBytes`（上一轮的通道）。
+- **为什么是偏移寻址而不是 Stream**：这正是协议要的形状——§5.2/§5.3 的摘要覆盖**已知偏移上的定长块**，
+  §8 恢复时会**重读特定一块**；并且它把内存边界显式化（`readAt` 返回不超过请求长度，调用方请求一个协议块）。
+  Stream 会把「在途多少」交给消费者决定，而那正是 `AGENTS.md` §2 规则 4 关注的属性。
+- 两种实现由**同一份共享契约**约束，包括实现者最容易做错的一条：**读越界返回更少字节而不是补齐缓冲区**
+  （§5.3 固定每块长度，补齐的块会以摘要不符失败且诊断里看不出原因）。
+- **不报大小的 provider 保持未知**：`length()` 抛错而不猜测（§5.2 把真实大小算进清单）；
+  诊断标签是字面量 `"file"`/`"saf"`，因此**路径或 document id 无法经由它进入诊断**（§5）。
+- 状态：代码已实现；单元测试通过（6 项）。**本批是加法式改动：引擎仍从 `File` 规划。**
+
+#### `t11-01-12` / `t11-01-13`：发送路径改到 `SourceBytes`，节点可解析自己的文档来源
+
+- **`t11-01-12`（引擎接线）**：`LocalSourceReader` 改用 `readAt`、不再持有文件句柄，同一段规划代码
+  既哈希桌面文件也哈希 SAF 文档；`SourceFilePlan.file` 变为可空便利字段；`OutgoingFileChoice`
+  接受 `path` 与 `source` **二选一**并在**构造时**拒绝「都给／都不给」（否则不可读来源会以
+  「哈希失败」浮现且说不出原因）；`TransferEngine.sourceResolver` 让文件即文档的平台为**自己的
+  scheme** 作答，引擎无需知道自己在哪个平台上运行。
+- **最重要的测试**：**一份文档与一个持有相同字节的文件产生相同的块清单摘要与整文件摘要**。
+  这正是这个端口存在的理由——接收端据以校验的东西**不能取决于发送端从哪里读的字节**。
+  另一条用例流式发送文档并记录见过的最大块必须等于**一个协议块**（整文档读取会在这里显出完整长度），
+  因此内存上界是被**断言**而非被假设的。
+- **`t11-01-13`（节点接线）**：`NearSendNode.open` 新增 `sourceResolver` 并传给引擎，默认仍是路径解析器。
+  **没有这一步，前两轮的 SAF 支持从应用里根本够不到**：节点会用默认解析器把记录下来的 `content://`
+  引用当成路径去打开。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1153 项通过**（本机 TLS 双向传输测试
+  在新代码路径上仍然通过）；Android debug/release 在 CI 干净 runner 上构建通过。
+  **仍然未验证**：没有任何一条测试让 SAF 来源的传输**经过一个节点**；SAF 通道与这一切
+  **从未在设备上运行过**。
+
+#### 明确登记的下一步（未完成，不得当作已完成）
+
+| 事项 | 为什么必需 | 具体改动点 |
+| --- | --- | --- |
+| **把发送路径改到 `SourceBytes` 上** | **已完成（`t11-01-12`/`t11-01-13`）** | 见下方对应条目 |
+| ~~**把选择结果接进引擎编排**~~ | **已完成（`t11-01-16`/`t11-01-17`）** | 见下方两条；**仅剩 UI 把「发送」按钮接到 `SendingSession`** |
+| ~~**传输各阶段的页面装配**~~ | **已完成（`t11-01-15`）** | 见下方 `t11-01-15` |
+| ~~**一条经节点、以 SAF 文档为来源的传输测试**~~ | **已完成（`t11-01-14`）** | 见下方 `t11-01-14`，其中记录了它发现的真实缺陷 |
+
+#### `t11-01-15`：协议任务状态 → 屏幕阶段
+
+- 关闭了「`TransferProgress` 有 phase、引擎有 `TransferState`，两者之间没有任何连接」这个缺口——
+  在此之前界面只能显示调用方猜的东西。`phaseForTransferState` 是**穷尽 switch**，
+  因此协议新增状态会**编译失败**，而不是渲染成错误的词。
+- 三个有意为之的映射：
+  - **`staging` 与 `preparing` 都是「准备中」**：§10 分开它们是因为一个是发送端本地、另一个表示页正在到达，
+    但用户无论哪种都在等，**「是哪一侧在干活」不是可行动的信息**。
+  - **`ready` 是「传输中」**：§10 定义它是「已接受并授权；写入世代已存在」——**字节可以开始移动的第一刻，
+    也因此是进度条第一次有意义的时刻**；叫它「准备中」会掩盖传输已经开始。
+  - **`interrupted` 与 `blocked` 各有自己的词，不并入失败**：§10 给它们不同出口（恢复 / 用户操作），
+    §11 给 `BLOCKED` 的处方是「清理空间或更换位置后重试」。**把二者任一显示成失败，就是在协议说
+    「还没结束」时告诉用户已经结束。** 为此枚举新增这两项。
+- **部分完成 → 失败**而不是完成：这正是 `AGENTS.md` §2 规则 11 禁止的假完成。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1157 项通过**（新增 4 项）；CI 四作业全绿。
+
+#### `t11-01-14`：文档来源经真实 TLS 的双向传输（并修正它发现的缺陷）
+
+- 把 `test/core/transfer/http_transfer_test.dart` 的**两个方向**都改成从 `content://` 文档读取
+  （内存网关支撑，用 Android 节点会装的那个 `sourceResolver` 解析）。**这是「SAF 适配器能编译」
+  与「设备能发送」之间的差别**：字节从文档出发、经规划与 §8 块传输落到另一节点的磁盘上，
+  整文件摘要与磁盘字节都与文档内容比对。
+- **方法教训**：这是**整文件重写**而不是逐条替换。上一轮逐条改共用 helper 把文件改坏被迫回滚；
+  根因是两个用例**共用同一段 `choices` 与同一个 helper**，必须一次做完。
+- **测试发现的真实缺陷（已修）**：节点的出站块来源 `TaskFileChunkSource` 仍直接构造
+  `File(record.sourceRef)`，因此**服务器发送文档时每一次 `GET` 都答 `SOURCE_CHANGED`(422)**——
+  即使规划路径已经改到字节来源端口上，**只认路径的版本仍能从 chunk 端点到达**。
+  现已改为问**同一个 resolver**，端口由此成为读取字节的**唯一**途径。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1153 项通过**；
+  两个方向的文档来源传输在真实 TLS 上通过；CI 四作业全绿。
+  **仍未验证**：SAF 通道与这一切**从未在设备上运行过**。
+
+
+#### `t11-01-16` / `t11-01-17`：选择结果变成 choices，发送侧编排端到端
+
+- **`t11-01-16`**：修掉一个自己留下的洞——`FileSelectionReport` 知道每个文件的**名字和大小**，
+  却**不知道字节在哪里**（picker 的文档 URI 在进入报表时被丢掉）。**一个说不出字节在哪的报表可以描述
+  一次传输，却无法开始它**，而「传输前的那一屏」恰恰必须能开始。现由 `SelectedFile.sourceRef`
+  保留、控制器填入、`choicesFor` 构造 `OutgoingFileChoice`。缺引用时**拒绝而非猜测**：
+  缺来源的 choice 会在后面的规划里以「哈希失败」浮现，那说不出真正的问题。
+- **`t11-01-17`**：`SendingSession` 按 §6–§10 的顺序把每步串起来——**规划 → 提议并密封 →
+  打开写入世代 → 流式发送**。此前每一步都实现并测试过，**但没有任何东西按顺序调用它们**。
+  各步仍可单独调用，因为恢复中的传输**跳过提议**（清单已密封）只发缺的块。
+  **刻意不提供接受/决定/导出方法**：那些属于接收端、在设备上是用户动作，在这里提供会让调用方
+  以为传输已完成而对端并未同意。**进度按「对端已确认的块」计数**，不按接收端已提交的字节——
+  §9 让接收端的行成为进度的唯一权威，这一侧只持镜像。
+- 状态：代码已实现；`flutter analyze` 无问题；`flutter test` **1160 项通过**；
+  `sending_session_test.dart` 让整个会话对**真实服务器跑真实 TLS**，最后**把接收端磁盘上的文件与
+  发送端读的文档做哈希比对**。CI 四作业全绿。
+- **仍未完成**：**UI 的「发送」按钮尚未接到 `SendingSession`**；SAF 通道与 Windows→Android 方向
+  **从未在设备上运行过**。
+#### 仍未完成（因此本任务不得标记为已完成，也不得声称可以互发文件）
+
+- **SAF 通道的设备验证**：代码与契约测试齐备，但**从未在真机上执行过**（安装被设备弹窗阻塞）。
+  同一条通道在本轮新增的 `applicationDirectory`（应用私有目录）**同样从未在真机执行过**。
+- **SAF 经节点的验证**：**已于 `t11-01-14` 完成**（两个方向，真实 TLS，文档来源）。
+- **基础 UI 其余部分**：把选择结果接进「开始传输」的引擎编排（`prepareOutgoing` + `pagesFor` +
+  `sendFile`），以及传输各阶段的完整页面装配。**已接线**：首页、连接页（含节点生命周期、真实 pin
+  与候选地址、粘贴载荷后**真实配对**并显示对方证书指纹核对结果）、传输详情页、进度模型、
+  接收确认+空间不足、文件选择结果、SAF 通道与选择控制器。**仍未接线**：「发送」按钮到
+  `SendingSession`，以及接收侧的本地装配。**Android 与 Windows 都还没有从界面选文件的路径**
+  （桌面端没有取件器，SAF 通道只在 Android 且未在设备上跑过）。
+- **真机双向端到端验证**：Android → Windows 真机通过；**Windows → Android 真机未完成**。
+- 已完成验证的运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1145 项通过**、
+  `check_links`/`check_secrets`/`check_ci_workflow` 通过、`git diff --check` 干净。
+  **这些都只是本机自动化，不含真机结论。**
+
+#### CI（PR [#58](https://github.com/yanzhao77/NearSend/pull/58)）
+
+- 首次运行 [35616866259](https://github.com/yanzhao77/NearSend/actions/runs/35616866259)：
+  仓库检查、Windows 构建、Android 构建三个作业**通过**，`格式/分析/测试` 作业**失败**。
+  失败原因**与本批代码无关**：`package:sqlite3` 的 native asset 构建在 Linux runner 上下载
+  `libsqlite3.x64.linux.so` 后，收到的摘要与包内期望值不一致（`bef140a1…` vs `4b986901…`），
+  于是 `Building native assets failed`。摘要取自该作业日志的
+  `Bad state: Hash of downloaded file` 一行。
+- **未改动任何代码**重跑同一作业后四个作业全部通过。
+  这与 T01-02 记录过的同类教训一致：**首次失败原样保留，不用重跑结果覆盖**；
+  重跑只用于区分「代码问题」与「环境／上游制品问题」，本次结论是后者。
+
+#### CI 首轮失败的三次记录（全部来自上游，全部保留）
+
+本项目在本环境的 CI **首轮失败已出现三次，三次都不在代码**。这一条值得单独留下，因为「本地绿而 CI 红」
+最容易得出的错误结论是「大概是缓存问题」——而三次的根因都是可指名的：
+
+| 次 | 运行 | 作业 | 根因 | 结论 |
+| --- | --- | --- | --- | --- |
+| 1 | [35616866259](https://github.com/yanzhao77/NearSend/actions/runs/35616866259) | 格式/分析/测试 | `package:sqlite3` 下载的 `libsqlite3.x64.linux.so` 摘要与包内期望值不符（`bef140a1…` vs `4b986901…`） | 上游制品 |
+| 2 | [35617924311](https://github.com/yanzhao77/NearSend/actions/runs/35617924311) | Android 构建 | 同一类：`libsqlite3.x64.android.so` 摘要不符（期望 `949965f0…`） | 上游制品 |
+| 3 | [35643781001](https://github.com/yanzhao77/NearSend/actions/runs/35643781001) | Windows 构建 | 构建**成功**，失败在 `upload-artifact`：`Failed to FinalizeArtifact … (403) Forbidden`，且发生在**纯文档提交**上 | GitHub 基础设施 |
+
+三次的处置相同：**未改动任何代码重跑，四个作业全部通过**。台账保留每次的失败运行编号，
+以便日后核对时不必依赖叙述。
+
+#### `t11-01-18`：`NodeRuntime` —— 「打开节点」本身成为可测试的东西（提交 `073dbef`）
+
+- 此前**没有任何入口打开节点**：每个端点都有测试，却没有一个地方把数据库、身份、端点与
+  TLS 服务器装到一起并持有它。`NodeRuntime` 就是那一处：目录、端口、网关、候选地址，
+  `start` **幂等**（两个节点共用一个数据库就是一次安装有两个身份，第二个还会悄悄作废第一个
+  发布的载荷）、`stop` **先关监听再关数据库**（否则请求可能在被读的连接消失之后到达）、
+  `lanAddresses` 排除回环与 `169.254.`（后者意思是「没拿到 DHCP」，不是可用地址）。
+- **期间发现并修正一处真实缺陷**：`openPairingSession` 发布的是**端口 0**——`PairingService`
+  用「请求的端口」构造候选，而节点向系统要了一个空闲端口，于是连接页会显示一个**永远连不上**
+  的地址（这正是「测试全绿但设备上连不上」的形状）。现由 `repointCandidates(server.boundPort)`
+  在 socket 绑定之后重指，并由测试断言载荷里的端口等于 `boundPort`。
+- 测试 `test/app/node_runtime_test.dart`（6 例），含「重启后 pin 必然改变」这一**如实断言**：
+  身份尚未持久化，测试固定的是这个事实而不是假装没有。
+
+#### `t11-01-19`：`TransferFlow` —— 屏幕要显示的那些数字（提交 `473ee91`）
+
+- 进度**按对端已确认的块**推进，从不按写入 socket 的字节；块长取自**冻结清单**，因此短尾块
+  不会凭不存在的字节多报；失败**保留数字只改阶段**（§11 给若干失败配了「从当前进度继续」的
+  出路，清空数字恰好拿走用户要看的东西）；阶段词只来自 `phaseForTransferState`。
+- **期间发现并修正一处真实缺陷**：已完成的传输显示「约 0 秒」——余量为 0，而 0 除以速率仍是 0。
+  **没有剩余可估不等于估计为零**，现显示「已完成」。
+- 测试 `test/features/transfer/transfer_flow_test.dart`（7 例）；`flutter test` 1174 项通过。
+
+#### `t11-01-20`：应用生命周期、应用私有目录与真实配对（本轮）
+
+- **`AppDirectories`**：Android 走既有通道新增的 `applicationDirectory`（`filesDir`），桌面走
+  `%LOCALAPPDATA%`；取不到时**拒绝启动**而不回落。取舍与代价见 §5 新增行，平台目录边界的第三处
+  已接受差异见同节。测试 7 例（Android 分支用 mock channel，桌面分支注入环境变量）。
+- **`NodeSession`**：`starting`/`ready`/`failed` 三态，失败**给用户一句能行动的话**
+  （没有局域网地址 → 提示先连 Wi-Fi；私有目录不可得 → 说明原因；其余 → 通用句，不把异常文本
+  搬上屏）。`start` 幂等且**并发共享同一次尝试**；失败**可重试**（失败是状态不是判决，
+  这一点由「先失败后成功」的用例固定）；`stop` 会等待在途尝试；通知尊重 `dispose`。
+- **`PeerSession`**：按载荷里的候选顺序尝试，**指纹不符立即中止**，不试下一个候选（§2/§3：
+  不符是关于**身份**的陈述，不是关于那个地址的，换地址只是把同一个问题再问一遍）。
+  这条性质的证据不是「返回 false」，而是**对方的单次令牌事后仍然可用**——错误 pin **从未到达
+  服务端**，只有真实服务器能给出这个证明。测试 5 例，跑真实节点与真实 TLS。
+- **`NearSendApp`** 成为有状态根：启动并持有会话，移除时 `stop()` + `dispose()`；连接页按
+  「启动中／无法启动（含原因）／已就绪」显示**本机真实**信息，并把配对尝试的进行、成功、
+  失败（**含对方实际出示的指纹**）上屏；`onConnect` 为 null 时**不渲染**连接按钮并说明原因
+  （能点却没作用的控件正是本项目禁止的占位）。测试：连接页新增 5 例、应用新增 3 例，其中
+  一条断言「挂载前打开的节点在部件移除后被真正关闭」，用 `runAsync` + 轮询穿过 widget test
+  的虚拟时钟。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1198 项通过**
+  （1174 → 1198）、`check_links` 与 `check_secrets` 通过。
+- **仍未完成（因此 T11-02 不得标记完成）**：① 「发送」按钮仍未接 `SendingSession`
+  （选择→会话→进度）；② 接收侧仍未装配；③ **`applicationDirectory` 与 SAF 通道一样从未在
+  真机上执行过**，本轮 Android 分支只有通道契约测试；④ **Windows → Android 真机方向仍未完成**。
+
+#### `t11-01-21`：发送流程 —— 「选好的文件」到「对端磁盘上的字节」
+
+- **`SendingFlow`** 把选择、提议、**等待对方决定**与分块发送串成一条流程并对外只暴露状态：
+  `empty`/`ready`/`preparing`/`waitingForPeer`/`sending`/`awaitingVerification`/`failed`。
+- **本轮最重要的一步是「等待」**：§6 把接受权只给接收端，§7 让 `GET /authorization` 在收到
+  决定之前一律 `404`（**故意如此**，这样没人能在批准存在之前探知它）。所以发送端在密封提议后
+  **唯一正确的动作是问**，并且要有一个界限。`waitingForPeer` 就是这个等待，超时会给出成句的
+  原因。**跳过等待直接推字节就是把字节送进一次拒绝**，测试对这一点给出的是可核对的事实：
+  在对方接受之前，接收端**已提交字节数为 0**。
+- **终点刻意不是「完成」**：所有块被确认只说明**字节到达**；是否通过整文件校验、是否保存到
+  用户选的位置、是否耐久，都是接收端的工作与接收端的陈述。§7 一句话说明：**下载成功不代表
+  接收端持久化**。因此发送侧终态是 `awaitingVerification`，而「已完成」由做校验的那一侧显示。
+- **进度按文件计量**，块长取自协议常量并由该文件**冻结长度**夹取，所以短尾块不会把进度推过
+  总量；对多文件传输来说，逐文件也让「当前第几个文件」有意义。
+- **`FileSelectionController.choicesFor` 修掉一个真实缺陷**：它此前把**任何**来源引用都包成
+  `SafSourceBytes`。在文件就是路径的平台上（Windows），那会把每一次读取都送进一个该平台
+  并不存在的通道——而 `AGENTS.md` §9 只说了「SAF URI 不得当作路径」，反向同样成立。现按
+  scheme 分流：`content://` 走网关，其余走路径，并且**只传 `path`**（`OutgoingFileChoice`
+  要求二者恰好其一，同时给会被构造期拒绝）。`SendingFlow.addPaths` 因此让路径平台可用：
+  文件大小取自文件系统，读不到的文件**在选择处就给出原因**，而不是等到规划阶段报一个关于
+  哈希的错。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1202 项通过**
+  （1198 → 1202；`sending_flow_test` 4 例，其中两条是**真实 TLS + 真实两个节点**的端到端：
+  文档来源与路径来源各一条，最后都比对接收端磁盘上文件的 SHA-256）。
+- **仍未完成**：① 发送流程**还没有页面**驱动它（`t11-01-22`），因此「发送」按钮仍未接通；
+  ② 接收端的本地接受/装配仍未接入（当前只有测试与 spike 会调用 `acceptLocally`）；
+  ③ 桌面端**没有取件器**，路径平台目前靠 `addPaths` 的路径输入；
+  ④ 「恢复」仍未实现：`send` 只发起新传输，续传需要接收端已提交行与恢复密钥的单独通路。
+
+#### `t11-01-22`：发送页面 —— 「连接 → 选择 → 发送」在应用内接通
+
+- **`SendPage`** 是渲染器：它按 `SendPhase` 显示状态、按平台给**选择器或路径输入**、按对端已确认
+  的块显示数字。两个「不能用的控件」都**不渲染**并说明原因：没有取件器的平台不显示「选择文件」，
+  文件是文档的平台不显示路径输入（`AGENTS.md` §9）。两个最容易被误读成卡死的等待
+  （`preparing` 本地准备、`waitingForPeer` 等对方决定）各有自己的措辞。
+- **`NearSendApp` 现在持有发送流程**：配对成功（对方已证明身份）之后才创建
+  `SendingFlow`，因此在未验证的对端上不存在客户端；连接页在已连接时给出「选择文件」入口。
+- **期间修正一处真实缺陷（两处，同一类）**：① `SendingFlow` 在每个文件发完后调用
+  `applyCompleted`，于是**发送端屏幕上出现了「已完成」**——而对端还不曾校验或保存任何东西，
+  正是 §7「下载成功不代表接收端持久化」禁止的说法；现改为不标记完成，数字说「本文件已传完」。
+  ② `TransferProgress.remainingLabel` 只要「余量为 0」就返回「已完成」，现在只有**阶段本身**是
+  completed 时才这样说，否则说「本文件已传完」——**数字讲的是字节，阶段讲的是传输**，两者不该
+  互相代言。
+- **端到端（部件级）**：`test/app/app_test.dart` 新增一条用例，用**两个真实节点 + 真实 TLS +
+  内存网关**走完「粘贴对方连接信息 → 连接（pin 已核对）→ 选择文件 → 发送 → 对方接受 → 显示
+  「已送达，等待对方校验并保存」」，随后在接收端跑 `finishFile`，断言整文件摘要一致、落盘名字
+  就是用户选的名字、**磁盘上文件的 SHA-256 与发送端读到的字节相同**。这条用例同时断言屏幕上
+  **不出现「已完成」**。
+- **一处必须如实记下的测试环境限制**：这条部件级用例的载荷是**单块**（4 KiB）。同一个流程用
+  4 MiB 载荷在 `testWidgets` 的虚拟时钟区里**写不完**（接收端始终 0 字节，无论怎么泵），而在
+  `testWidgets` 之外（`sending_flow_test`，同样的两个真实节点与真实 TLS）**多块载荷照常完成**。
+  这是**观察到的现象**，根因未查明，因此不作解释性结论；多块、多兆字节的路径由
+  `sending_flow_test` 覆盖，本条用例补充的是**接线**。另：`TestWidgetsFlutterBinding` 会把所有
+  HTTP 请求变成 400，需要真连接的用例必须清掉 `HttpOverrides.global`，这一条已写在测试里。
+- **其余接线**：`FileSelectionController.gateway` 改为可空（没有取件器的平台不能构造一个假网关
+  再假装能选文件），`pick()` 无取件器时**抛错而不是返回空报表**（「用户没选」和「本平台选不了」
+  是两件事）。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1211 项通过**
+  （1202 → 1211）、`check_links` 与 `check_secrets` 通过。
+- **仍未完成（T11-02 因此仍不得标记完成）**：① **接收侧装配**：应用里没有任何路径调用
+  `acceptLocally`/`registerRemoteManifest`/`acceptChunk`，也就是说**Android/Windows 之间的
+  实际互传仍要由测试或 spike 驱动，产品自身还收不了文件**；② 「发送」在 Windows 上要用户
+  **手输路径**，没有取件器；③ 断点续传未接；④ 真机双向仍未验证（Windows → Android 仍被设备
+  安装弹窗阻塞），且 `applicationDirectory` 与 SAF 通道仍未在设备上执行过。
+
+#### `t11-01-23`：接收流程 —— 从「对方在提供什么」到「本机磁盘上的文件」
+
+- **`ReceivingFlow`** 是 `server_to_client` 方向的接收侧，把 `http_transfer_test` 里被证明过的
+  序列变成产品代码：**询问对方提供什么 → 决定（接受）→ 取得凭据 → 恢复（拿到写入世代）→
+  只按本机已提交行缺失的块拉取并逐块提交 → 整文件校验 → 导出到用户选定的位置 → 上报 checkpoint
+  与「已保存」**。
+- **顺序上两处容易写错、本轮真的写错了一次**：① `adoptLeaseEpoch` 必须发生在**任务行存在之后**
+  （`registerRemoteManifest`/`registerRemoteFile` 之后），否则本机在为一条还不存在的任务记录
+  写入世代——测试直接以 `NS-STORAGE-005 task … is not registered` 把它暴露出来；②
+  `finishFile` 之后才谈「保存」，且**只有在整文件摘要为 `true` 时**才接受结果：校验结果可以是
+  `null`（无法计算），把 `null` 当通过正是「未验证的字节被放到用户要的位置」的唯一路径，
+  故判据写作 `!= true`。
+- **权威归属**：拉取什么由**本机 `chunks` 表**决定（`missingChunks`），进度按**已提交的块**推进，
+  checkpoint 与本机已提交字节都从本机行读出后上报——§9 让接收端的行成为唯一权威，发送端只持镜像。
+  在**接收端**，`已完成` 是挣得的：文件确实通过了整文件校验并落盘，与发送端刻意不显示该词形成
+  对照（`t11-01-22`）。
+- 测试 `test/features/transfer/receiving_flow_test.dart`（2 例，**真实两个节点 + 真实 TLS**）：
+  一条断言「提供 → 接受 → 逐块提交（进度严格递增且与清单块数一致）→ 整文件 SHA-256 与发送端读到的
+  文件相同 → 发送端任务变为 COMPLETED」；另一条断言**没有人接受的提供不留下任何东西**
+  （无授权、无已提交字节、**连目标目录都不存在**——留下一个空目录就是一次没发生过的传输的痕迹）。
+- **未完成（必须说清楚，否则这一节会读起来像「接收已经能用」）**：**这条流程还没有界面**，
+  因此应用里仍然没有任何东西调用它；`client_to_server` 方向（本机作为**服务端**接收，需要
+  本机自己的「谁在向我提供」视图与 `acceptLocally`）未做；**部分接收后的中断续传没有测试覆盖**
+  （序列是幂等的，但断言尚未写出）；发送端**没有**查询对方完成状态的通路。
+- **CI（本批）**：`t11-01-18` … `t11-01-23` 六个提交推送后，
+  [run 35658888277](https://github.com/yanzhao77/NearSend/actions/runs/35658888277)（head `493eaee`）
+  **首轮四作业全部通过**。此前一批中另有一次 `cancelled`
+  （[35658533993](https://github.com/yanzhao77/NearSend/actions/runs/35658533993)）：同一分支连续推送时
+  `concurrency.cancel-in-progress` 取消了上一轮运行，属工作流设计行为，不是失败结论。
+
+#### `t11-01-24`：接收页面 —— 「连接 → 接受 → 保存」在应用内接通（`server_to_client`）
+
+- **`ReceivePage`** 是个渲染器，但有两处它必须自己做主：① 它**按定时器询问**对方提供了什么
+  （§6 没有推送，「等一个永远不会来的事件」与「坏掉」在屏幕上无法区分，所以它边问边说，
+  定时器在部件销毁时停掉，传输在途时不再问——那时候问的是另一个问题）；② **保存目录由用户填写**，
+  没填就**不接受**（§6 把决定与保存位置放在一起，未命名的位置就是用户没选过的位置）。
+  失败之后不再显示「对方还没有提供文件」——那会诱使用户继续等待一个这个屏幕已经不再询问的东西。
+- **`NearSendApp` 现在持有两个流程**（发送与接收），它们由**同一次已验证的连接**创建：一个连接
+  服务两个方向，因此一起建而不是进屏幕时才建。连接页的后续动作按用户从首页点的按钮分派
+  （首页本来就传了 `send`/`receive` 参数），按钮文案也随之不同（`选择文件` /
+  `查看对方提供的文件`）——`UI_UX_SPEC.md` §4 给了两者同一步骤、不同措辞。
+- **端到端（部件级）**：`test/app/app_test.dart` 新增用例，用**两个真实节点 + 真实 TLS** 走完
+  「接收文件 → 粘贴对方连接信息 → 连接 → 查看对方提供的文件 → 自动出现对方提供的 1 个文件 →
+  填写保存目录 → 接受并接收 → 已保存」，随后断言**磁盘上文件的 SHA-256 与对方提供的文件相同**、
+  保存位置就是用户填写的目录、**对方的任务变为 `COMPLETED`**（§10：发送端只能知道「对方说已保存」）。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1220 项通过**
+  （1213 → 1220）、`check_links` 与 `check_secrets` 通过。
+- **仍未完成（T11-02 因此仍不得标记完成）**：① **`client_to_server` 接收方向**：本机作为**服务端**
+  接收时，应用里没有「谁在向我提供」的视图，也没有调用 `acceptLocally` 的路径，因此「对方主动
+  发给我」这条路径只有测试与 spike 能走通；② **断点续传未接**（部分接收后的恢复只有底层能力，
+  没有编排与断言）；③ **Windows 没有取件器**，发送要手输路径、接收要手输保存目录；
+  ④ **真机双向仍未验证**（Windows → Android 仍被设备安装弹窗阻塞），`applicationDirectory` 与
+  SAF 通道仍未在设备上执行过；⑤ 身份持久化未做。
+
+#### `t11-01-26`：服务端受理 —— 客户端推送这一次真的落在对方磁盘上了
+
+- **缺口是什么**：`t11-01-25` 让「两端互相粘贴」可互传，但**只粘贴一侧**时，粘贴方只能走推送
+  （`client_to_server`），而推送需要**被粘贴的那台以服务端身份受理**——这条路径此前**没有任何流程**，
+  所以那个方向在两种配对方式下都走不通。
+- **`ServerReceivingFlow`**（新增）是这一侧的全部动作，也正好只有两件事可做：**决定**与**收尾**。
+  它不询问、也不拉取——客户端的提议已经在**本机自己的数据库**里，字节会自己到达，因此：
+  - `refresh()` 读自己 `tasks` 表里 `WAITING_ACCEPT` 的行（新增 `TransferRepository.taskIdsInState`，
+    这是本机唯一的「谁在向我提供」视图；§7 的 `GET /v1/offers` 是**客户端**的视角，不是服务端的）；
+  - `accept()` 把决定、目标位置与空间估算一起交给 `acceptLocally`（三者都由调用方给出——前两个是
+    用户的答案，第三个是本层**无法诚实测量**的平台事实，所以它不是这里的猜测）；
+  - 之后**只按本机已提交的块**判断「到齐了没有」（`missingChunkIndices` 为空），再逐文件
+    `finishFile`（整文件校验 + 导出，且**只有摘要为 `true`** 才接受结果），最后沿状态机把任务推进到
+    `completed`。
+- **一处与线上规则对齐的过滤**：`refresh()` 采用与 §7 `offers` **完全相同**的三个条件
+  （状态为待决定、**清单已密封**、密封摘要与声明一致）。测试先暴露了不一致的后果——客户端的提议行
+  在**清单还没密封时**就已存在，若照单列出，用户会「接受」一个摘要背后什么都没有的传输。
+- **测试**（`test/features/transfer/server_receiving_flow_test.dart`，2 例，**真实两节点 + 真实 TLS**）：
+  一条让**两端都是产品流程**——客机 `SendingFlow`（推送模式）提议并推送、主机 `ServerReceivingFlow`
+  受理并收尾，断言**磁盘文件 SHA-256 与客机读到的文件相同**、主机状态为已保存、客机终态是
+  「已送达，等待对方校验并保存」（它只知道字节到达）；另一条断言**已受理的传输不再出现在待受理列表**，
+  且再次询问不会把已完成的接收倒退成「正在决定」。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1226 项通过**（1224 → 1226）。
+- **仍未完成**：① **这条流程还没有界面**——`ReceivePage` 只显示客户端方向的提供，
+  「本机作为服务端被推送」的待受理列表与受理按钮尚未接线，因此真机上「粘贴方 → 被粘贴方」目前
+  仍只能由测试驱动；② 空间可用量没有平台测量通道，界面接线时必须先决定取值方式（不得猜）；
+  ③ 断点续传未接；④ Windows 无取件器；⑤ **真机双向仍未验证**（安装弹窗阻塞）。
+
+#### `t11-01-27`：服务端受理的空间预检（并修正一条我写错的注释）
+
+- **写错的注释**：`t11-01-26` 的注释写着「空间不足会由引擎在此拒绝」。读过实现后**并非如此**：
+  `TransferEngine.acceptLocally` 只把决定、目标位置与空间估算**一起持久化**，**不做**拒绝判断
+  （拒绝逻辑在 §7 `decision` 端点那一侧）。因此上一轮的流程会在**可证明装不下**的情况下照样受理——
+  这正是 §6 让「接受」同时提交空间估算所要避免的。注释已改正，并把预检**补进流程**。
+- **补上的预检**：`ServerReceivingFlow.accept` 在受理**之前**用 `SpacePlanner` 按密封清单的文件
+  大小计算分卷需求，**只有 `insufficient`（可证明不足）才拒绝**；`unknown`（无法测量）**不拒绝**，
+  而是作为 `spaceVerdict` 暴露给界面——因为「我们没能测量」若当成拒绝，会把本来装得下的传输也拒掉。
+  分卷标识与可用量由调用方给出：前两个是用户的答案，第三个是本层**无法诚实测量**的平台事实。
+- **新用例**：给定一个可证明装不下的卷，受理被拒绝、失败原因是「空间不足」、
+  **授权记录里没有留下已受理**（`accepted-then-failed` 是更糟的结果）、**目标目录不存在**，
+  且发送端的有界等待自行结束而不是挂住。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1227 项通过**（1226 → 1227）。
+- **仍未完成**：① **服务端受理仍没有界面**（`ReceivePage` 只显示客户端方向的提供；待受理列表与受理
+  按钮尚未接线），因此真机上「粘贴方 → 被粘贴方」目前仍只能由测试驱动；② **剩余空间没有平台测量
+  通道**（Android `StatFs` / Windows `GetDiskFreeSpaceEx`），在接线界面前必须决定取值方式——
+  当前流程对「未测量」是**不拒绝**并如实上报，界面必须照此措辞，不得显示成「检查通过」。
+
+#### `t11-01-28`：服务端受理的界面接线（推送方向也能由用户走完了）
+
+- **`ReceivePage` 现在有两半**：客户端方向的「对方提供了什么」（原有），以及**本机作为服务端**
+  的「对方正在发给你」（新增：待受理列表 + 「接受这次发送」）。两半共用同一个保存目录输入框，
+  且都遵守同一条规则——**没填目录就不给按**（§6 把接受与位置绑在一起）。
+- **两半都被轮询**：§6 不推送任何一侧，因此定时器同时问「对端提供了什么」与「本机被推了什么」，
+  任一侧在途时停止询问。这一条在 `t11-01-24` 只覆盖了前者。
+- **空间答案照实说**：本构建**没有**测量剩余空间的能力（Dart 无 API，也没有平台通道），所以
+  可用量按 `unknown` 提交、流程只拒绝**可证明不足**，而**界面明说「未能测量剩余空间，本次没有做
+  空间预检」**。把它显示成通过就是在声称一次没人做过的检查；这一处措辞与 `ServerReceivingFlow`
+  的 `spaceVerdict` 是配对的，并且有测试固定。
+- **修掉两处会被轮询放大成崩溃的东西**：`ReceivingFlow`/`ServerReceivingFlow` 现在**尊重 `dispose`**
+  （页面被移除后，仍在飞的一次轮询回调不会再往已销毁的通知器上发通知——debug 下会抛断言，
+  release 下会静默失败），`refresh()` 在销毁后是空操作。这是 app 级用例真实暴露出来的。
+- **经界面的端到端**（`test/app/app_test.dart` 新增一条，真实两个节点 + 真实 TLS）：**对端**以
+  `SendingFlow`（推送模式）向本机节点提议并推送 → 本机接收页出现「对方正在发给你 1 个文件」→
+  填写目录 → 「接受这次发送」→ 页面显示「已保存」并显示空间未测量说明 → 断言**磁盘文件 SHA-256
+  与对端读到的文件相同**、推送侧拿到了确认。**测试里遇到并记下两件事**：① 对端用的配对令牌是
+  一次性的，本机自己再连接必须**重新签发**会话（复用同一个载荷会被正确拒绝，这正是 §3 要求的）；
+  ② 推送侧不能用 `SendingSession.send`（它只问一次授权），要用 `SendingFlow`（它会等对方的决定）。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1230 项通过**（1227 → 1230）。
+- **仍未完成**：① 剩余空间的**平台测量通道**（Android `StatFs` / Windows `GetDiskFreeSpaceEx`）——
+  在它存在之前，界面只能如实说「未预检」；② 断点续传未接；③ Windows 无取件器（发路径、收目录手输）；
+  ④ **真机双向仍未验证**（安装弹窗阻塞），`applicationDirectory` 与 SAF 通道仍未在设备上执行过；
+  ⑤ 接收页目前仍要经过「连接」这一步才能进入，而**接收推送其实不需要连接**——这是可用性上的
+  一处多余步骤，已记录待改。
+
+#### 提供式互传的前提与边界（`t11-01-25`；服务端受理见其上一条 `t11-01-26`）
+
+这一节原本写着「还不能互传」。写这条记录的那一轮结束时的确如此，现在的准确说法是：
+
+- **两端互相粘贴了对方的连接信息时，两个方向都能互传**：此时双方各自都是对方的客户端，
+  发送端以**服务端身份提供**（`server_to_client`），接收端用 `GET /v1/offers` 看到它并接收。
+  发送端之所以能这样做，是因为 `PairingService.hasPairedClient(sessionId)` 能回答
+  「是否有人配对了本机发布的那次会话」——§6 只把提供列给被绑定的会话，未配对的对端**看不到**它，
+  所以这个判断决定了「提供」还是「推送」，而不是凭偏好。
+- **只粘贴了一侧时，只有「被粘贴的那台」能发送**：A 粘贴 B 的信息后，A 是 B 的客户端；
+  B 发送时有人配对过 B 的会话（就是 A），于是 B 走「提供」，A 作为客户端收下 ✓；
+  而 A 发送时没人配对过 A 的会话，A 只能走「推送」（`client_to_server`），
+  这需要 **B 以服务端身份受理** —— 本构建没有这条路径，因此 A→B 走不通。
+- 仍未被任何产品代码覆盖的：**服务端受理**（本机待受理视图 + 空间预检 + 终检导出编排）。
+  它同时也是「只粘贴一侧也能双向」所需要的最后一块。
+
+因此：**在真机上做双向验证时，两台设备都要粘贴对方的连接信息**；这一点已写进首页提示与
+`t11-01-25` 记录，不得含糊地说「任一端都能发」。
+
+#### `t11-01-25`：提供式发送 —— 两个应用实例之间真的搬动了一个文件
+
+- **`SendingFlow` 现在有两种模式**：`push`（本机是客户端：提议、上传清单、推送分块）与
+  `offer`（本机是服务端：本地暂存清单并把提供列给对端会话，由对端拉取）。
+  选择依据是**运行期**询问 `peerHasPaired()`——用回调而不是构造期取值，因为对端可能在本屏存在
+  之后才完成配对，构造期的答案恰好在最关键的时刻是过期的。
+- **起点与终点都诚实**：`offer` 模式的进度只能来自 §9 的镜像（`receiver_mirror`），
+  因为这一侧不接触字节；终态是 `savedByPeer`（**「对方已保存」**），依据是对端通过 §10 的
+  `complete(saved)` 明确说过。这也是发送侧唯一一个**挣得的**完成态——推送路径的终态仍是
+  「已送达，等待对方校验并保存」。
+- **`PairingService.hasPairedClient(sessionId)`**：新读方法，含过期判断（过期会话的访问令牌已不能
+  认证，算作「有客户端」正是这个判断要避免的那种等待）。它不是安全门禁，只是一个装配问题。
+- **本批最重要的测试**（`test/features/transfer/paired_nodes_test.dart`，3 例，**真实两个节点 +
+  真实 TLS**）：一条用例让**两个产品流程**直接对接——主机 `SendingFlow` 提供、客机
+  `ReceivingFlow` 取走并保存，**没有任何测试侧代劳**（此前的端到端用例总有一端由测试驱动：
+  发送用例由测试调 `acceptLocally`，接收用例由测试调 `prepareOutgoing`）。断言包括：
+  提供阶段确实是 `offeredToPeer`、模式是 `offer`、对端能看到该提供、最终**磁盘文件 SHA-256
+  与主机读到的文件相同**、主机终态是 `savedByPeer`、进度来自镜像。另一条用例固定
+  **没有配对客户端时选择推送**（并断言它落在有界拒绝上，而不是永远等下去）。
+- 运行：`dart format` 无改动、`flutter analyze` 无问题、`flutter test` **1224 项通过**
+  （1220 → 1224）。
+- **仍未完成**：① 服务端受理（`client_to_server` 的接收侧，即「只粘贴一侧时 A→B」）；
+  ② 断点续传未接；③ Windows 没有取件器（发路径、收目录都要手输）；
+  ④ **真机双向仍未验证**（Windows → Android 仍被设备安装弹窗阻塞），`applicationDirectory`
+  与 SAF 通道仍未在设备上执行过；⑤ 身份持久化未做。
+
+**历史记录（`t11-01-24` 时点的结论，保留以便核对判断如何变化）**：那一轮结束时两个应用实例
+**确实不能互传**——发送走 `client_to_server`（客户端推送），接收只受理发给本机客户端的提供，
+两者不在同一侧，A→B 与 B→A 都走不通；当时的端到端用例各自有一端由测试驱动
+（发送用例由测试调 `acceptLocally`，接收用例由测试调 `prepareOutgoing(serverToClient)`），
+因此只证明两半各自正确。这一条**不是被删除的失败证据，而是被 `t11-01-25` 解决的缺口**：
+当时列出的第 1 条路径（提供式发送）就是本轮实现的那条。
+
+**CI（`t11-01-24`）**：接收界面与其说明推送后，
+[run 35660194924](https://github.com/yanzhao77/NearSend/actions/runs/35660194924)（head `ac9d297`）
+**四作业全部通过**；同一分支两次连续推送各产生一次 `cancelled`（`concurrency.cancel-in-progress`
+取消上一轮），非失败结论。
+
+#### `t11-01-29`：把本阶段的验证证据收敛成一处，并记下第 12 次安装尝试
+
+- **新增证据汇总**：[T11-01 MVP 验证证据](testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md)。
+  它把「哪条用例证明了什么、端到端到什么程度」逐条列出（含两处限制：界面级用例是**单块 4 KiB** 载荷、
+  空间按 `unknown` 呈现），并把**没有验证的**单列一节——避免长篇台账被摘引成更强的结论。
+- **第 12 次真机安装尝试失败，原样记录**：设备 `22081283C` 已连接、屏幕已点亮，
+  `adb install -r build/app/outputs/flutter-apk/app-debug.apk` 仍为
+  `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`。这是设备上的**安装确认弹窗**
+  （或开发者选项的「USB 安装」开关），不是配置错误：`adb_install_need_confirm=0` 与
+  `verifier_verify_adb_installs=0` 均已确认无效。**结论不变**：本项目**从未在 Android 上运行过**，
+  `applicationDirectory` 与 SAF 通道同样未在设备上执行过。
+- **本阶段的收尾口径**：两个方向的数据面与界面都有「真实两个节点 + 真实 TLS + 两端都是产品代码」
+  的验证，**但没有真机证据**；真机双向验证是唯一剩余的人工环节，步骤见证据文件第 3 节。
+  在取得那份记录之前，**不得**声称 Android↔Windows 互传已验证。

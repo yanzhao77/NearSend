@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/network/control_authorization.dart';
 import 'package:nearsend/core/network/control_message.dart';
+import 'package:nearsend/core/network/task_ownership.dart';
 import 'package:nearsend/core/protocol/api_routes.dart';
 import 'package:nearsend/core/protocol/base64url.dart';
 import 'package:nearsend/core/protocol/protocol_exception.dart';
@@ -59,15 +60,27 @@ void main() {
     String? authorization,
     String? transferId = taskId,
     Map<String, ControlGrant>? overrides,
+    TaskOwnership ownership = const NoTaskOwnership(),
   }) {
     final Map<String, ControlGrant> table = overrides ?? grants;
-    return ControlAuthorizer(_MapAuthenticator(table)).authorize(
+    return ControlAuthorizer(
+      _MapAuthenticator(table),
+      ownership: ownership,
+    ).authorize(
       request: requestWith(authorization),
       route: route,
       transferId: transferId,
       nowMillis: 0,
     );
   }
+
+  /// An ownership table, so a session can be scoped to the tasks it is bound to.
+  TaskOwnership owns(Map<String, TaskOwner> table) => _MapOwnership(table);
+
+  final TaskOwner sessionOwnsTask = TaskOwner(
+    peerId: 'peer-a',
+    direction: TransferDirection.serverToClient,
+  );
 
   Matcher deniedWith(ProtocolErrorCode code) =>
       isA<ControlDenied>().having((ControlDenied d) => d.code, 'code', code);
@@ -252,12 +265,68 @@ void main() {
       );
     });
 
-    test('a session does not reach a transfer-scoped route yet', () {
-      // The session-to-transfer mapping is not modelled, so the conservative answer is to
-      // refuse rather than to accept a session for a transfer it may not own.
+    test(
+      'a session does not reach a transfer-scoped route without a binding',
+      () {
+        // The default ownership table owns nothing, so this stays the conservative answer: a
+        // session identity that is not bound to the transfer must not reach its routes.
+        final ControlAuthorization decision = decide(
+          route: ApiRoutes.pause,
+          authorization: 'Bearer $sessionToken',
+        );
+        expect(decision, deniedWith(ProtocolErrorCode.notFound));
+      },
+    );
+
+    test('a session whose peer owns the transfer reaches its routes', () {
+      // §7's `decision` row is transfer-scoped and §3 issues the task token only *after* the
+      // decision, so without this a client receiver could never decide at all.
       final ControlAuthorization decision = decide(
-        route: ApiRoutes.pause,
+        route: ApiRoutes.decision,
         authorization: 'Bearer $sessionToken',
+        ownership: owns(<String, TaskOwner>{taskId: sessionOwnsTask}),
+      );
+      expect(decision, isA<ControlAuthorized>());
+    });
+
+    test('a session bound to a different peer is refused as if absent', () {
+      // Same answer as a transfer that does not exist, so the status cannot be used to learn
+      // which transfers exist or who owns them.
+      final ControlAuthorization decision = decide(
+        route: ApiRoutes.decision,
+        authorization: 'Bearer $sessionToken',
+        ownership: owns(<String, TaskOwner>{
+          taskId: TaskOwner(
+            peerId: 'peer-b',
+            direction: TransferDirection.serverToClient,
+          ),
+        }),
+      );
+      expect(decision, deniedWith(ProtocolErrorCode.notFound));
+    });
+
+    test('a session whose task runs the wrong direction is 403, not 404', () {
+      // The resource exists and this peer owns it, so the honest answer is that this operation
+      // does not belong to the task's direction - `AGENTS.md` §5 makes that a mandatory check,
+      // and the mapping must not have opened a path around it.
+      final ControlAuthorization decision = decide(
+        route: ApiRoutes.decision,
+        authorization: 'Bearer $sessionToken',
+        ownership: owns(<String, TaskOwner>{
+          taskId: TaskOwner(
+            peerId: 'peer-a',
+            direction: TransferDirection.clientToServer,
+          ),
+        }),
+      );
+      expect(decision, deniedWith(ProtocolErrorCode.directionForbidden));
+    });
+
+    test('a binding for another transfer does not widen the session', () {
+      final ControlAuthorization decision = decide(
+        route: ApiRoutes.decision,
+        authorization: 'Bearer $sessionToken',
+        ownership: owns(<String, TaskOwner>{otherTaskId: sessionOwnsTask}),
       );
       expect(decision, deniedWith(ProtocolErrorCode.notFound));
     });
@@ -269,12 +338,26 @@ void main() {
           decide(
             route: ApiRoutes.status,
             authorization: 'Bearer $sessionToken',
+            // §7 lists a session among the credentials `status` accepts, and the session is
+            // scoped to the transfers it is bound to - so the ownership table is what makes
+            // this session's answer an authorisation rather than a guess.
+            ownership: owns(<String, TaskOwner>{taskId: sessionOwnsTask}),
           ),
           isA<ControlAuthorized>(),
         );
         expect(
           decide(route: ApiRoutes.status, authorization: 'Bearer $taskToken'),
           isA<ControlAuthorized>(),
+        );
+        expect(
+          decide(
+            route: ApiRoutes.status,
+            authorization: 'Bearer $sessionToken',
+          ),
+          deniedWith(ProtocolErrorCode.notFound),
+          reason:
+              'without a binding the session must not reach another peer task, so the '
+              'mapping cannot be bypassed by naming a transfer id',
         );
       },
     );
@@ -424,4 +507,14 @@ class _MapAuthenticator implements ControlAuthenticator {
   @override
   ControlGrant? authenticate({required String token, required int nowMillis}) =>
       grants[token];
+}
+
+/// Resolves owners from a fixed map, for the same reason.
+class _MapOwnership implements TaskOwnership {
+  const _MapOwnership(this.owners);
+
+  final Map<String, TaskOwner> owners;
+
+  @override
+  TaskOwner? ownerOf(String transferId) => owners[transferId];
 }
