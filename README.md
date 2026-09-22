@@ -2,54 +2,70 @@
 
 # NearSend · 近传
 
-### 无需互联网，让手机与电脑安全、可靠地互传大文件，断线后还能继续。
+### 不经过互联网，让手机与电脑在本地 Wi-Fi 上安全传输大文件。
 
-[![Project Status](https://img.shields.io/badge/status-S0%20technical%20validation-F5A623?style=for-the-badge)](#项目状态)
-[![Flutter](https://img.shields.io/badge/Flutter-cross--platform-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
-[![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Windows%20%7C%20iOS-536DFE?style=for-the-badge)](#平台路线图)
+[![Project Status](https://img.shields.io/badge/status-S0%20active%20%7C%20preview-F5A623?style=for-the-badge)](#项目状态)
+[![Latest Release](https://img.shields.io/github/v/release/yanzhao77/NearSend?display_name=tag&style=for-the-badge&color=2EA44F)](https://github.com/yanzhao77/NearSend/releases/latest)
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.5-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
+[![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-536DFE?style=for-the-badge)](#现在就下载)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge)](LICENSE)
 
-**本地直连 · 大文件友好 · 严格校验 · 持久化断点续传**
+**本地直连 · 流式传输 · 严格校验 · 持久化断点续传设计**
 
 </div>
 
 ---
 
+## 现在就下载
+
+当前已验证的 GitHub Release 基线是 **[v0.1.1](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1)**。它由 GitHub Actions 在提交 `16981244` 上构建，适合内部体验和验证；[Release 页面](https://github.com/yanzhao77/NearSend/releases) 会展示后续版本，向 `master` 的成功推送会自动递增 patch 版本并创建新的 Release。
+
+| 平台 | 安装包 | 说明 |
+| --- | --- | --- |
+| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-android.apk) | 当前使用 debug signing，仅供内部测试 |
+| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-windows-x64.zip) | 解压后运行桌面程序 |
+| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-macos.zip) | 未签名、未 notarization |
+| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-linux-x64.tar.gz) | 当前只构建 amd64 |
+| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/SHA256SUMS.txt) | 发布流水线自动生成 |
+
+> **预览版本边界**：构建产物和代码级双节点测试已经由 CI 验证，但 Android ↔ Windows 的真实设备双向大文件传输、断点恢复和正式签名发布仍未完成。不要把当前 APK、ZIP 或 DEB 当作稳定版或商店发行包。
+
 ## NearSend 是什么？
 
 NearSend 是一款面向手机与电脑的跨平台离线文件互传工具。它不依赖互联网、云服务器或账号系统：设备通过现有局域网连接，或由 Android 创建本地热点，再使用经过身份验证的 HTTPS 通道直接传输文件。
 
-NearSend 的目标不只是“传得快”，而是让几十 GiB 的大文件在网络中断、应用退出甚至设备重启之后，仍能从已经安全落盘并校验通过的位置继续传输。
+这里的“离线”是指**不需要互联网**，不是不需要网络。两台设备仍必须拥有可用的本地 Wi-Fi 链路。
 
-> **离线**在本项目中表示“不需要互联网”，设备之间仍需建立本地 Wi-Fi 链路。
+NearSend 的重点是可靠性：文件通过流式读写和有界缓冲处理，按块校验并把接收方已提交的 checkpoint 作为恢复依据，让网络中断、进程退出和设备重启后的恢复行为可验证、可诊断。
 
-## 为什么是 NearSend？
+## 当前能做什么
 
-| 能力 | NearSend 的设计 |
-|---|---|
-| 无互联网传输 | 同一局域网直接通信；无路由器时优先使用 Android LocalOnlyHotspot |
-| 可靠断点续传 | 以接收方 SQLite 的已提交块为唯一权威，支持进程退出和设备重启后恢复 |
-| 大文件支持 | 流式读写、有界缓冲与背压，目标支持至少 20 GiB 单文件，不把整文件载入内存 |
-| 内容完整性 | 默认 4 MiB 分块；每块 SHA-256 校验，完成后执行整文件 SHA-256 校验 |
-| 安全配对 | 二维码绑定 TLS 身份指纹，一次性配对令牌与任务级恢复授权分离 |
-| 清晰用户反馈 | 明确区分准备、传输、恢复校验、保存等阶段，并在接收前计算完整空间需求 |
-| 隐私优先 | 文件不经过第三方服务器；核心传输不需要账号、云日志或联网分析 |
+| 方向 | 当前状态 |
+| --- | --- |
+| 协议与数据模型 | `LFTM1` / `LFTC1` 清单编码、状态模型、错误模型和固定向量已有 Dart 独立实现；协议仍是草案，尚未冻结 |
+| 安全控制面 | TLS 1.3 下限、证书指纹绑定、一次性配对令牌、会话授权和控制端点已有实现与测试 |
+| 数据面 | SQLite manifest staging、授权、分块读写、终检与导出编排已有代码级测试；断点恢复的应用层编排仍在进行 |
+| Flutter 应用 | Android、Windows、iOS 工程和发送/接收界面骨架已建立；平台文件端口、真实设备双向流程和完整错误体验仍需验证 |
+| 自动化发布 | `master` 的 CI 成功后自动构建 Android、Windows、macOS、Linux 并创建 GitHub Release，附带 release notes 与 SHA-256 清单 |
 
-## 核心用户旅程
+**当前没有承诺的能力**：互联网远程传输、云端中转、BLE 文件承载、目录实时同步、后台无限运行、Windows MSIX、Android Play/AAB、正式代码签名和 iOS 发布。
+
+## 核心设计
 
 ```mermaid
 flowchart LR
-    A[建立本地连接] --> B[扫码并验证身份]
-    B --> C[选择与准备文件]
-    C --> D[确认空间并传输]
-    D --> E[校验、保存或恢复]
+    A[本地 Wi-Fi] --> B[二维码与 TLS 身份校验]
+    B --> C[清单与授权]
+    C --> D[流式分块传输]
+    D --> E[SQLite checkpoint]
+    E --> F[整文件校验与导出]
 ```
 
-1. 选择发送或接收；没有路由器时，由受支持的 Android 设备创建离线热点。
-2. 一台设备展示二维码，另一台设备扫码并验证服务端身份。
-3. 发送方选择文件，NearSend 显示扫描与哈希准备进度。
-4. 接收方确认文件清单、保存位置和峰值空间需求后开始传输。
-5. 中断时保留已验证内容；重连后先检查本地数据，只补传缺失块，最后校验并保存。
+- **一个共享协议核心**：协议字段、状态机、错误码、块摘要和版本规则不能由平台各自解释。
+- **接收方是断点权威**：只有已经写入、校验并在 SQLite 中提交的块才算恢复进度。
+- **先验证身份，再交付令牌**：二维码中的 TLS 指纹必须先匹配；不支持全局信任证书或明文降级。
+- **不把整文件读入内存**：大文件使用流式读写、有界缓冲和背压，哈希与磁盘操作不阻塞 Flutter UI isolate。
+- **平台差异留在适配层**：Android SAF URI、iOS 安全作用域资源和 Windows 存储句柄不能被业务层当作普通路径。
 
 ## 架构概览
 
@@ -63,128 +79,72 @@ flowchart TB
     STORE --> NATIVE
 ```
 
-核心设计原则：
-
-- **一个协议核心**：协议字段、状态机、错误码和摘要规则不能由各平台各自解释。
-- **接收方是断点权威**：只有完成校验、数据同步及 SQLite 事务提交的块才算可恢复进度。
-- **身份与地址分离**：IP、端口和 SSID 可以变化，已验证的设备身份与任务授权不能随重连丢失。
-- **安全不降级**：TLS 不可用或身份不匹配时明确失败，不回退到明文传输或全局忽略证书错误。
-- **平台能力如实表达**：Android URI、iOS 文件授权和 Windows 网络能力均通过适配层处理，不假设所有设备行为一致。
-
-## MVP 范围
-
-| 已纳入首版 | 暂不承诺 |
-|---|---|
-| Android ↔ Windows 双向传输 | 跨互联网远程传输 |
-| iOS 关键能力验证与后续正式集成 | 所有 Windows 网卡均能自动创建热点 |
-| 文件与多文件队列 | BLE 承载文件数据 |
-| 至少 20 GiB 单文件 | 目录实时同步 |
-| HTTPS、分块/整文件校验 | 移动端后台无限运行 |
-| 暂停、失败恢复、重启后续传 | 无交互静默安装更新 |
-| 空间预检、临时存储和最终导出 | 未下载云端占位文件的离线读取 |
-
-## 平台路线图
+## 路线图
 
 | 阶段 | 目标 | 状态 |
-|---|---|---|
-| S0 | 验证 Flutter I/O、TLS、SQLite 耐久性、Android 热点/URI、Windows 组网及 iOS 文件/网络边界 | **当前阶段** |
-| S1 | 冻结协议 v1、清单规范、状态机、错误码和固定测试向量 | 草案与 Python 参考向量已完成；跨语言验证与冻结待完成 |
-| S2 | 打通 Android + Windows 端到端小文件与大文件传输 | 待开始 |
-| S3 | 完成暂停、故障恢复、重启续传、空间管理与安全验收 | 待开始 |
-| S4 | 完成 iOS 正式集成、设备矩阵测试及发布准备 | 待开始 |
-
-计划发布渠道：
-
-- **Android**：内测签名 APK；正式版 Google Play，并保留可信直接下载渠道。
-- **Windows**：优先 MSIX，同时提供签名的直接下载包。
-- **iOS**：TestFlight 内测，App Store 正式发布。
+| --- | --- | --- |
+| S0 | 验证 Flutter I/O、TLS、SQLite 耐久性、局域网组网和平台文件边界 | **进行中** |
+| S1 | 冻结协议 v1、清单规范、状态机、错误码和固定测试向量 | 草案与参考向量已完成；冻结待完成 |
+| S2 | Android + Windows 真实设备端到端小文件与大文件传输 | 代码级闭环已有；真机闭环待完成 |
+| S3 | 暂停、故障恢复、重启续传、空间管理与安全验收 | 进行中，应用层 resume 和设备证据待补 |
+| S4 | iOS 正式集成、设备矩阵测试和发布准备 | 待开始 |
 
 ## 项目状态
 
-NearSend 目前处于 **S0 技术验证与协议细化阶段**，工程侧已完成 **M1 工程基线（T01-01）** 与 **CI 门禁（T01-02）**。仓库中的设计描述是目标和验收标准，不代表相应功能已经实现或经过真机验证。性能数据、兼容设备和最低系统版本会在实验完成后基于证据冻结。
+NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协议、配对、存储、分块、终检、UI 装配和 GitHub 发布流水线的可审阅实现；但这些实现必须和对应证据一起阅读，不能把“代码存在”“单元测试通过”或“CI 构建成功”当作完整产品验收。
 
-**截至 2026-09-20：** 已提交协议 v1.0-draft1、Python 参考探针及测试证据。24 项参考探针检查通过；Linux 本地完成 20 GiB 实际落盘回读和 10,000 个小文件校验。
+截至 **2026-09-22**：
 
-**T01-01 已建立 Android / Windows / iOS 三端 Flutter 工程与版本可追踪的壳应用：** `flutter analyze` 无问题，36 项 Flutter 测试通过，Android debug/release APK 与 Windows release 可执行文件构建成功；release APK 已在 **Xiaomi 25102RKBEC / Android 17 (API 37)** 真机安装并启动，Windows 10 22H2 上可正常运行，两端都能显示应用版本、Git 提交、协议版本与数据库 schema 版本。
+- `v0.1.1` 已由 GitHub Actions 成功发布，包含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 `SHA256SUMS.txt`。
+- 控制面、数据面和界面已有“真实两个节点 + 真实 TLS”的代码级测试，覆盖清单、授权、分块、校验和导出路径。
+- Android、Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器仍需目标设备证据；当前不能宣称跨平台产品闭环已验收。
+- Android 当前使用 debug signing；macOS 未签名、未 notarization；Linux 仅构建 amd64。正式签名材料必须通过受保护的 GitHub Environment 注入，不能提交到仓库。
 
-**T01-02 已把这些检查固化为 CI 门禁：** GitHub Actions 上四个作业——仓库检查（协议固定向量、Markdown 相对链接、敏感信息、依赖锁文件）、`dart format` / `flutter analyze` / `flutter test`、Android 构建、Windows 构建——在提交 `eb8c4d9` 上**全部真实通过**。Flutter 版本固定为 3.47.5 并校验归档 SHA-256。
+查看 [项目现状与进度台账](docs/PROJECT_LEDGER.md)、[MVP 验证证据](docs/testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md)、[S0 验证报告](docs/testing/S0-report.md) 和 [GitHub Actions 自动发版说明](docs/releases/GITHUB_ACTION_RELEASES.md)。
 
-**T02-01 已在 Dart 中独立实现协议清单编码：** `LFTM1`（清单摘要）与 `LFTC1`（块清单摘要）按 `docs/protocol/v1.0-draft1.md` §5.2/§5.3 编写，与 Python 参考实现生成的三个固定向量（空文件、UTF-8 中文路径、4 MiB + 3 字节尾块）**逐字节一致**，Flutter 测试 84 项通过。协议**仍未冻结**：完整错误模型与版本协商属 T02-02，且非 NFC 路径强制尚未实现（已在台账 §5 登记）。
+## 自动发版
 
-上述结果**不包含任何传输、配对、发现、存储或恢复能力**——这些尚未实现，应用内的发送与接收入口被显式禁用并标注未实现。CI 通过也不代表真机、网络、耐久性或安全结论。目前没有可分发安装包（release APK 使用调试签名）、没有 Windows 11 或 iOS 结论，也没有三端兼容性结论。
+`.github/workflows/ci.yml` 负责仓库检查、格式化、静态分析、测试以及 Android/Windows 构建。CI 在 `master` 成功后，`.github/workflows/release.yml` 自动：
 
-查看 **[项目现状与进度台账](docs/PROJECT_LEDGER.md)** · [T01-01 运行汇总](docs/testing/evidence/2026-09-20/t01-01-01/summary.md) · [T01-02 运行汇总](docs/testing/evidence/2026-09-20/t01-02-01/summary.md) · [S0 验证报告](docs/testing/S0-report.md) · [运行参考探针](tooling/s0/README.md)。
+1. 以已有最高版本 tag 为基线递增 patch 版本；
+2. 在原生 runner 上构建 Android、Windows、macOS 和 Linux 安装包；
+3. 生成 GitHub 自动 release notes，并追加构建 commit、Flutter 版本、架构和签名限制；
+4. 计算并上传 `SHA256SUMS.txt`；
+5. 创建带版本 tag 的 GitHub Release。
 
-本地一次跑完全部门禁：
+也可以从 GitHub Actions 页面手动触发 `workflow_dispatch`。发布设计、签名阻断项和当前资产清单见 [发布说明](docs/releases/GITHUB_ACTION_RELEASES.md)。
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tooling/scripts/check.ps1
-```
-
-当前优先事项：
-
-- 独立实现协议模型与固定向量比对（T02-01/T02-02），再冻结协议 v1。
-- 在目标设备复验 20 GiB 流式读写、哈希、内存上限与完整导出；Linux 本地参考实验已通过。
-- 在真实平台存储后端验证 checkpoint、重启及故障恢复；Linux 子进程中断实验已通过。
-- 验证 Android LocalOnlyHotspot、网络绑定和 SAF URI 重启恢复（B01–B03）。
-- 验证 Windows 离线组网路径、监听与防火墙行为（B08）。
-
-## 文档
+## 文档入口
 
 - [文档中心与推荐阅读顺序](docs/README.md)
-- [任务卡索引](docs/tasks/README.md)
-- [架构决策记录 ADR-0001 工程基线与标识](docs/decisions/ADR-0001-工程基线与标识.md)
-- [架构决策记录 ADR-0002 crypto 依赖与 SHA-256](docs/decisions/ADR-0002-crypto依赖与SHA256.md)
-- [Vibe Coding 开发流程](docs/DEVELOPMENT_WORKFLOW.md)
-- [系统架构](docs/architecture/SYSTEM_ARCHITECTURE.md)
-- [应用与端侧服务设计](docs/architecture/APP_AND_SERVICE_DESIGN.md)
-- [UI/UX 与视觉规范](docs/ui/UI_UX_SPEC.md)
-- [质量与验收策略](docs/testing/QUALITY_AND_ACCEPTANCE.md)
-- [Agent 任务手册](docs/AGENT_TASK_PLAYBOOK.md)
-- [完整技术方案 V2.1](docs/跨平台离线文件互传系统技术方案_V2.1.md)
-- [AI 与贡献者开发规则](AGENTS.md)
 - [项目现状与进度台账](docs/PROJECT_LEDGER.md)
-- [协议 v1.0-draft1](docs/protocol/v1.0-draft1.md)
-- [固定测试向量](docs/protocol/vectors-v1.json)
-- [S0 验证报告与真机执行单](docs/testing/S0-report.md)
-- [S0 参考探针运行说明](tooling/s0/README.md)
-- [构建与检查脚本说明](tooling/scripts/README.md)
-- [仓库级检查脚本说明](tooling/checks/README.md)
-- [CI 工作流](.github/workflows/ci.yml) · [Flutter 工具链安装脚本](tooling/ci/install_flutter.sh)
+- [任务卡索引](docs/tasks/README.md)
+- [协议 v1.0-draft1](docs/protocol/v1.0-draft1.md) · [固定测试向量](docs/protocol/vectors-v1.json)
+- [系统架构](docs/architecture/SYSTEM_ARCHITECTURE.md) · [应用与端侧服务设计](docs/architecture/APP_AND_SERVICE_DESIGN.md)
+- [UI/UX 与视觉规范](docs/ui/UI_UX_SPEC.md) · [质量与验收策略](docs/testing/QUALITY_AND_ACCEPTANCE.md)
+- [GitHub Actions 自动发版](docs/releases/GITHUB_ACTION_RELEASES.md)
+- [AI 与贡献者开发规则](AGENTS.md) · [开发流程](docs/DEVELOPMENT_WORKFLOW.md)
 
-`AGENTS.md` 是本项目对 Cursor、Claude Code、Codex 等 AI 编码工具的最高优先级项目规则，包含架构边界、安全要求、目录规范、开发工作流与必做检查。
-
-## 开发原则
-
-所有任务遵循：
-
-```text
-探索 → 规划 → 实现 → 验证 → 提交
-```
-
-贡献代码前请先阅读 [AGENTS.md](AGENTS.md)、[开发流程](docs/DEVELOPMENT_WORKFLOW.md) 和 [Agent 任务手册](docs/AGENT_TASK_PLAYBOOK.md)。复杂改动需要说明计划、风险和验收方式；每次交付必须报告实际测试结果、未执行项与剩余风险。协议、安全、存储、迁移和删除路径需要重点人工复核。
+`AGENTS.md` 是本项目对 Codex、Cursor、Claude Code 等 AI 编码工具的最高优先级规则，包含架构边界、安全要求、目录规范、开发工作流和必做检查。
 
 ## 参与项目
 
-项目仍处于早期阶段，欢迎围绕以下方向提交 Issue 或 Pull Request：
+欢迎围绕以下方向提交 Issue 或 Pull Request：
 
-- Flutter 跨平台大文件 I/O 与背压设计
-- Android/Windows/iOS 本地网络及文件授权适配
+- Flutter 跨平台大文件 I/O、背压和恢复编排
+- Android/Windows/iOS 本地网络、文件授权和平台适配
 - TLS 身份绑定与离线二维码配对
-- SQLite checkpoint、崩溃一致性与故障注入测试
-- 可访问、可理解的传输与恢复交互体验
+- SQLite checkpoint、崩溃一致性和故障注入测试
+- 可访问、可理解的传输、恢复和空间预检交互
 
-提交前请确保改动聚焦、测试可复现，并且没有把密钥、用户数据、构建产物或大文件样本加入仓库。
+贡献前请先阅读 [AGENTS.md](AGENTS.md)、[开发流程](docs/DEVELOPMENT_WORKFLOW.md) 和 [Agent 任务手册](docs/AGENT_TASK_PLAYBOOK.md)。提交必须保持改动聚焦，并且不能包含密钥、用户数据、构建产物或大文件样本。
 
 ## License
 
 [MIT License](LICENSE) © 2026 Azir
-
----
 
 <div align="center">
 
 **NearSend — Your files. Your devices. No cloud required.**
 
 </div>
-

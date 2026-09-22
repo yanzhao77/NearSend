@@ -16,6 +16,11 @@
 | 8 | [质量与验收策略](testing/QUALITY_AND_ACCEPTANCE.md) | 测试金字塔、设备矩阵、门禁与证据格式 | 开发、测试、发布 |
 | 9 | [Agent 任务手册](AGENT_TASK_PLAYBOOK.md) | 如何拆卡、领取、实现、验证和交接 | 所有编码 Agent |
 | 10 | [项目台账](PROJECT_LEDGER.md) | 当前事实、阻塞、任务状态与证据入口 | 全员 |
+| 11 | [GitHub Actions 自动发版](releases/GITHUB_ACTION_RELEASES.md) | 安装包、版本递增、Release 说明与签名限制 | 发布、维护者 |
+
+当前预览版本：[NearSend v0.1.1](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1)。
+README 负责面向使用者的快速入口；本台账负责项目事实和阻塞状态；发布文档负责
+GitHub Actions 的构建、版本和签名边界。三者必须同时更新，不能只修改聊天记录。
 
 ## 文档权威级别
 

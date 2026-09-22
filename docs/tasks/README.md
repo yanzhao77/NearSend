@@ -41,6 +41,7 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T03-02](T03-02.md) | Android→Windows 局域网端到端单文件闭环 | 进行中 | `feat/t03-02-lan-e2e` → [#56](https://github.com/yanzhao77/NearSend/pull/56) |
 | [T11-01](T11-01.md) | MVP 双向数据面（Android ↔ Windows） | 进行中（UI 与真机端到端未完成） | `feat/mvp-bidirectional-transfer` |
 | [T11-02](T11-02.md) | UI 装配：节点生命周期与「发送」接通会话 | 进行中（节点生命周期、真实 pin 上屏与配对已交付；选择→会话→进度、接收侧与真机第 6 项未完成） | `feat/mvp-bidirectional-transfer` |
+| T10 | 安装升级与发布 | 进行中（GitHub Actions 自动发版已完成；签名、升级和正式分发待完成） | [发布说明](../releases/GITHUB_ACTION_RELEASES.md) |
 
 各任务的完成依据见对应运行汇总：T01-01 [证据](../testing/evidence/2026-09-20/t01-01-01/summary.md)、
 T01-02 [证据](../testing/evidence/2026-09-20/t01-02-01/summary.md)、
@@ -54,3 +55,5 @@ T06-01 [证据](../testing/evidence/2026-09-20/t06-01-04/summary.md)。
 平台能力结论仍需目标设备证据。本表的状态必须与 [项目台账](../PROJECT_LEDGER.md) 一致。
 
 后续任务卡在依赖满足后再新建，不预先生成空卡。
+
+T10 当前以发布说明和项目台账作为事实源，暂不创建没有独立退出门槛的空任务卡。
