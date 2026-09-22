@@ -315,6 +315,7 @@ class NsStageProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool allComplete = activeIndex >= stages.length;
     final int safeActive = activeIndex.clamp(0, stages.length - 1);
     return Semantics(
       label: '传输阶段：${stages[safeActive]}',
@@ -327,6 +328,8 @@ class NsStageProgress extends StatelessWidget {
                 label: stages[index],
                 state: blockedIndex == index
                     ? NsStageState.blocked
+                    : allComplete
+                    ? NsStageState.complete
                     : index < safeActive
                     ? NsStageState.complete
                     : index == safeActive

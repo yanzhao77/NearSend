@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
+import 'package:nearsend/core/storage/storage_schema.dart';
 import 'package:nearsend/core/storage/storage_state_codec.dart';
 
 enum TaskOverviewStatus {
@@ -47,6 +48,46 @@ class TaskOverview {
       totalBytes <= 0 ? null : (committedBytes / totalBytes).clamp(0.0, 1.0);
 }
 
+class TaskFileOverview {
+  const TaskFileOverview({
+    required this.fileId,
+    required this.relativePath,
+    required this.sizeBytes,
+    required this.state,
+    required this.committedBytes,
+    required this.chunkCount,
+    this.exportResult,
+    this.targetUri,
+    this.savedPath,
+  });
+
+  final String fileId;
+  final String relativePath;
+  final int sizeBytes;
+  final FileState state;
+  final int committedBytes;
+  final int chunkCount;
+  final String? exportResult;
+  final String? targetUri;
+  final String? savedPath;
+
+  double? get progress =>
+      sizeBytes <= 0 ? null : (committedBytes / sizeBytes).clamp(0.0, 1.0);
+
+  bool get isFailed => state == FileState.failed || exportResult == 'failed';
+  bool get isSaved => state == FileState.completed && exportResult == 'saved';
+}
+
+class TaskDetail {
+  const TaskDetail({required this.task, required this.files});
+
+  final TaskOverview task;
+  final List<TaskFileOverview> files;
+
+  int get failedFileCount =>
+      files.where((TaskFileOverview file) => file.isFailed).length;
+}
+
 enum TaskCatalogFilter { all, active, paused, recoverable, completed, failed }
 
 /// Read model for task pages. It has no write path and never derives progress from byte counters
@@ -89,6 +130,59 @@ class TaskCatalogController extends ChangeNotifier {
       for (final TaskOverview task in _tasks)
         if (_matches(task, filter)) task,
     ];
+  }
+
+  TaskDetail? detail(String taskId) {
+    final NearSendDatabase? database = _database;
+    if (database == null) return null;
+    TaskOverview? task;
+    for (final TaskOverview candidate in _tasks) {
+      if (candidate.taskId == taskId) {
+        task = candidate;
+        break;
+      }
+    }
+    if (task == null) return null;
+    final rows = database.db.select(
+      '''
+SELECT
+  f.file_id,
+  f.relative_path,
+  f.size_bytes,
+  f.export_state,
+  f.chunk_count,
+  (SELECT COALESCE(SUM(c.length_bytes), 0) FROM chunks c
+    WHERE c.file_id = f.file_id AND c.state = 'committed') AS committed_bytes,
+  e.target_uri,
+  e.result AS export_result,
+  e.${StorageSchema.exportsSavedPathColumn} AS saved_path
+FROM files f
+LEFT JOIN exports e ON e.file_id = f.file_id
+WHERE f.task_id = ?
+ORDER BY f.rowid;
+''',
+      <Object?>[taskId],
+    );
+    return TaskDetail(
+      task: task,
+      files: <TaskFileOverview>[
+        for (final row in rows)
+          TaskFileOverview(
+            fileId: row['file_id'] as String,
+            relativePath: row['relative_path'] as String,
+            sizeBytes: row['size_bytes'] as int,
+            state: StorageStateCodec.decodeFile(
+              row['export_state'] as String,
+              fileId: row['file_id'] as String,
+            ),
+            committedBytes: row['committed_bytes'] as int,
+            chunkCount: row['chunk_count'] as int,
+            exportResult: row['export_result'] as String?,
+            targetUri: row['target_uri'] as String?,
+            savedPath: row['saved_path'] as String?,
+          ),
+      ],
+    );
   }
 
   static List<TaskOverview> _read(NearSendDatabase database) {

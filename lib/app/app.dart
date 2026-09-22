@@ -22,6 +22,7 @@ import 'package:nearsend/features/about/presentation/about_page.dart';
 import 'package:nearsend/features/settings/presentation/settings_page.dart';
 import 'package:nearsend/features/space/presentation/space_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
+import 'package:nearsend/features/tasks/presentation/task_detail_page.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
@@ -104,6 +105,7 @@ class NearSendApp extends StatefulWidget {
   static const String tasksRoute = '/tasks';
   static const String spaceRoute = '/space';
   static const String settingsRoute = '/settings';
+  static const String taskDetailRoute = '/task-detail';
 
   @override
   State<NearSendApp> createState() => _NearSendAppState();
@@ -353,6 +355,20 @@ class _NearSendAppState extends State<NearSendApp> {
                 SpaceOverviewPage(controller: _space),
             NearSendApp.settingsRoute: (_) =>
                 SettingsPage(controller: _settings, space: _space),
+            NearSendApp.taskDetailRoute: (BuildContext context) {
+              final Object? argument = ModalRoute.of(
+                context,
+              )?.settings.arguments;
+              if (argument is! String) {
+                return const Scaffold(
+                  body: NsErrorState(
+                    title: '缺少任务标识',
+                    message: '无法打开没有任务 ID 的详情页面。',
+                  ),
+                );
+              }
+              return TaskDetailPage(controller: _tasks, taskId: argument);
+            },
             NearSendApp.connectRoute: (BuildContext context) {
               // Which action the user came here for, so one connection screen can lead to the send flow
               // or the receive flow without duplicating itself.
