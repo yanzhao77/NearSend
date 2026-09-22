@@ -1064,3 +1064,19 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - **本阶段的收尾口径**：两个方向的数据面与界面都有「真实两个节点 + 真实 TLS + 两端都是产品代码」
   的验证，**但没有真机证据**；真机双向验证是唯一剩余的人工环节，步骤见证据文件第 3 节。
   在取得那份记录之前，**不得**声称 Android↔Windows 互传已验证。
+
+#### 里程碑分支已合并入 `master`（维护者指示，2026-09-22）
+
+- **PR [#58](https://github.com/yanzhao77/NearSend/pull/58) 已合并**（维护者明确指示，此前「不自我合并」的
+  约定由该指示解除）：合并提交 **`81cf3d1eb5f5ea341a5da429b272e5f26496ab56`**，base 为 `master`、
+  head 为 `feat/mvp-bidirectional-transfer`（`381e4c7`）。本地 `master` 已快进至 `81cf3d1`，
+  与 `origin/master` 一致，工作区干净。
+- **合并前的 CI**：head `381e4c7` 的
+  [run 35670630716](https://github.com/yanzhao77/NearSend/actions/runs/35670630716) **四作业全部通过**
+  （仓库检查、格式/分析/测试、Windows 构建、Android 构建）。
+- **合并后 `master` 上的 CI**：[run 35670933320](https://github.com/yanzhao77/NearSend/actions/runs/35670933320)
+  随 push 触发（`master` 的 `on.push` 分支规则）。
+- **这次合并**把本里程碑的 35 个提交（`5f4aac1` … `381e4c7`）带入 `master`：SQLite manifest 权威存储、
+  decision/authorization、两个方向的数据面与界面、真机安装解除与应用在设备上的首次运行。
+- **合并不等于目标完成**，这一点必须跟着这次合并一起读：**数据面真机双向互传仍无记录**，
+  且 `resume` 的应用层编排未做。目标卡与证据文件中的「未完成」一节不因合并而改变。
