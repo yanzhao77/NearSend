@@ -435,7 +435,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), saveTo.path);
       await tester.pump();
-      await tapText(tester, '接受并接收');
+      await tapText(tester, '接收并保存');
 
       await settle(
         tester,
@@ -591,7 +591,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), saved.path);
       await tester.pump();
-      await tapText(tester, '接受这次发送');
+      await tapText(tester, '接收并保存');
 
       await settle(
         tester,

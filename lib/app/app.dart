@@ -16,6 +16,7 @@ import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
 import 'package:nearsend/features/settings/presentation/settings_page.dart';
@@ -258,21 +259,35 @@ class _NearSendAppState extends State<NearSendApp> {
   /// the estimate is recorded as unknown, the flow refuses only a *proven* shortfall, and the screen
   /// says out loud that no pre-check was done. Adding the measurement is a platform task, and until
   /// it exists this is the honest arrangement.
-  ReceiverStorageContext _storageContext(String saveLocation) {
+  Future<ReceiverStorageContext> _storageContext(String saveLocation) async {
     const VolumeId appPrivate = VolumeId('app-private');
-    const VolumeId destination = VolumeId('save-location');
+    final PlatformStorageGateway gateway =
+        widget.storageGateway ?? const UnknownPlatformStorageGateway();
+    final StorageMeasurement measurement = await gateway.measureFreeSpace(
+      locationRef: saveLocation,
+    );
     return ReceiverStorageContext(
       stagingVolume: appPrivate,
-      exportVolume: destination,
+      exportVolume: measurement.volume,
       databaseVolume: appPrivate,
-      // Not `const`: a map keyed by a type with value equality cannot be a constant map, and the
-      // distinction here is not worth a different identifier type.
       availability: <VolumeId, VolumeAvailability>{
         appPrivate: const VolumeAvailability.unknown(),
-        destination: const VolumeAvailability.unknown(),
+        measurement.volume: measurement.availability,
       },
       saveLocationRef: saveLocation,
     );
+  }
+
+  Future<SpaceEstimateSnapshot?> _measureIncomingSpace(
+    ServerOffer offer,
+    String saveLocation,
+  ) async {
+    final ServerReceivingFlow? incoming = _incoming;
+    if (incoming == null) {
+      return null;
+    }
+    final ReceiverStorageContext context = await _storageContext(saveLocation);
+    return incoming.estimateFor(offer, context);
   }
 
   /// The peer state, as the connection screen renders it.
@@ -416,13 +431,19 @@ class _NearSendAppState extends State<NearSendApp> {
                   pushOffers: incoming?.pending ?? const <ServerOffer>[],
                   pushPhase: incoming?.phase ?? ServerReceivePhase.waiting,
                   pushSpaceVerdict: incoming?.spaceVerdict,
+                  pushSpaceEstimate: incoming?.spaceEstimate,
                   pushFailureReason: incoming?.failureReason,
                   pushSavedPaths: incoming?.savedPaths ?? const <String>[],
+                  onCheckPushSpace: _measureIncomingSpace,
+                  onPickLocation: widget.storageGateway == null
+                      ? null
+                      : () async =>
+                            widget.storageGateway!.pickReceiveDirectory(),
                   onAcceptPush: incoming == null
                       ? null
-                      : (offer, saveLocation) => incoming.accept(
+                      : (offer, saveLocation) async => incoming.accept(
                           offer,
-                          context: _storageContext(saveLocation),
+                          context: await _storageContext(saveLocation),
                           targetRef: saveLocation,
                         ),
                 ),

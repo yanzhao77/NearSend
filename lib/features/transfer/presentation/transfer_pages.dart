@@ -203,118 +203,121 @@ class _ConnectionPageState extends State<ConnectionPage> {
             constraints: const BoxConstraints(
               maxWidth: NearSendSizing.formMaxWidth,
             ),
-            child: ListView(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(NearSendSpacing.lg),
-              children: <Widget>[
-                // The order is the order of the questions a user has: can this device be connected
-                // to at all, and if not, why. "Not started yet" and "could not start" are different
-                // answers, and showing the first while the second is true would send them looking
-                // for a fault in the other device.
-                if (widget.unavailableReason != null)
-                  _Notice(
-                    text: widget.unavailableReason!,
-                    palette: palette,
-                    isError: true,
-                  )
-                else if (payload == null && widget.starting)
-                  _Notice(text: ConnectionPage.startingNote, palette: palette)
-                else if (payload == null)
-                  _Notice(
-                    text: ConnectionPage.emptySessionNote,
-                    palette: palette,
-                  )
-                else
-                  _PublishedPayload(
-                    payload: payload,
-                    palette: palette,
-                    deviceName: widget.localDeviceName,
-                    platform: widget.localPlatform,
-                  ),
-                const SizedBox(height: NearSendSpacing.xl),
-                Text(
-                  ConnectionPage.pasteHint,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: NearSendSpacing.sm),
-                TextField(
-                  controller: _controller,
-                  onChanged: _parse,
-                  maxLines: 4,
-                  minLines: 3,
-                  autofocus: false,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: '{"kind":"lft-pair", …}',
-                  ),
-                ),
-                const SizedBox(height: NearSendSpacing.sm),
-                if (_import.error != null)
-                  _Notice(
-                    text: _import.error!,
-                    palette: palette,
-                    isError: true,
-                  ),
-                if (_import.isAccepted && widget.onConnect != null)
-                  FilledButton.icon(
-                    onPressed: attempt.isBusy
-                        ? null
-                        : () => widget.onConnect?.call(_import.payload!),
-                    icon: const Icon(Icons.link),
-                    label: const Text('连接'),
-                  )
-                else if (_import.isAccepted)
-                  _Notice(
-                    text: ConnectionPage.noConnectorNote,
-                    palette: palette,
-                  ),
-                if (attempt.isBusy)
-                  Padding(
-                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: _Notice(
-                      text: ConnectionPage.connectingNote,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // The order is the order of the questions a user has: can this device be connected
+                  // to at all, and if not, why. "Not started yet" and "could not start" are different
+                  // answers, and showing the first while the second is true would send them looking
+                  // for a fault in the other device.
+                  if (widget.unavailableReason != null)
+                    _Notice(
+                      text: widget.unavailableReason!,
                       palette: palette,
+                      isError: true,
+                    )
+                  else if (payload == null && widget.starting)
+                    _Notice(text: ConnectionPage.startingNote, palette: palette)
+                  else if (payload == null)
+                    _Notice(
+                      text: ConnectionPage.emptySessionNote,
+                      palette: palette,
+                    )
+                  else
+                    _PublishedPayload(
+                      payload: payload,
+                      palette: palette,
+                      deviceName: widget.localDeviceName,
+                      platform: widget.localPlatform,
+                    ),
+                  const SizedBox(height: NearSendSpacing.xl),
+                  Text(
+                    ConnectionPage.pasteHint,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: NearSendSpacing.sm),
+                  TextField(
+                    controller: _controller,
+                    onChanged: _parse,
+                    maxLines: 4,
+                    minLines: 3,
+                    autofocus: false,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: '{"kind":"lft-pair", …}',
                     ),
                   ),
-                if (attempt.isConnected)
-                  Padding(
-                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        _Notice(
-                          text: ConnectionPage.connectedNote,
-                          palette: palette,
-                        ),
-                        if (widget.onContinue != null) ...<Widget>[
-                          const SizedBox(height: NearSendSpacing.sm),
-                          FilledButton.icon(
-                            onPressed: widget.onContinue,
-                            icon: const Icon(Icons.arrow_forward),
-                            label: Text(widget.continueLabel),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                if (attempt.hasFailed)
-                  Padding(
-                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: _Notice(
-                      text: _failureText(attempt),
+                  const SizedBox(height: NearSendSpacing.sm),
+                  if (_import.error != null)
+                    _Notice(
+                      text: _import.error!,
                       palette: palette,
                       isError: true,
                     ),
-                  ),
-                if (_import.isAccepted) ...<Widget>[
-                  const SizedBox(height: NearSendSpacing.md),
-                  _PeerPreview(
-                    payload: _import.payload!,
-                    deviceName: widget.peerDeviceName,
-                    platform: widget.peerPlatform,
-                    verified: attempt.isConnected,
-                  ),
+                  if (_import.isAccepted && widget.onConnect != null)
+                    FilledButton.icon(
+                      onPressed: attempt.isBusy
+                          ? null
+                          : () => widget.onConnect?.call(_import.payload!),
+                      icon: const Icon(Icons.link),
+                      label: const Text('连接'),
+                    )
+                  else if (_import.isAccepted)
+                    _Notice(
+                      text: ConnectionPage.noConnectorNote,
+                      palette: palette,
+                    ),
+                  if (attempt.isBusy)
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                      child: _Notice(
+                        text: ConnectionPage.connectingNote,
+                        palette: palette,
+                      ),
+                    ),
+                  if (attempt.isConnected)
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          _Notice(
+                            text: ConnectionPage.connectedNote,
+                            palette: palette,
+                          ),
+                          if (widget.onContinue != null) ...<Widget>[
+                            const SizedBox(height: NearSendSpacing.sm),
+                            FilledButton.icon(
+                              onPressed: widget.onContinue,
+                              icon: const Icon(Icons.arrow_forward),
+                              label: Text(widget.continueLabel),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  if (attempt.hasFailed)
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                      child: _Notice(
+                        text: _failureText(attempt),
+                        palette: palette,
+                        isError: true,
+                      ),
+                    ),
+                  if (_import.isAccepted) ...<Widget>[
+                    const SizedBox(height: NearSendSpacing.md),
+                    _PeerPreview(
+                      payload: _import.payload!,
+                      deviceName: widget.peerDeviceName,
+                      platform: widget.peerPlatform,
+                      verified: attempt.isConnected,
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

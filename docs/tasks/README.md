@@ -48,7 +48,7 @@ PR 仍然按 `docs/DEVELOPMENT_WORKFLOW.md` §6 的要求创建，并在描述�
 | [T12-04](T12-04.md) | 首页与关于页 | 待验证 | `feat/ui-baseline` |
 | [T12-05](T12-05.md) | 配对与连接页 | 待验证 | `feat/ui-baseline` |
 | [T12-06](T12-06.md) | 发送流程页面 | 待验证 | `feat/ui-baseline` |
-| [T12-07](T12-07.md) | 接收流程与空间预检 | 就绪 | `feat/ui-baseline` |
+| [T12-07](T12-07.md) | 接收流程与空间预检 | 待验证 | `feat/ui-baseline` |
 | [T12-08](T12-08.md) | 任务详情、传输详情与结果 | 就绪 | `feat/ui-baseline` |
 | [T12-09](T12-09.md) | Android、Windows、iOS 平台适配 | 就绪 | `feat/ui-baseline` |
 | [T12-10](T12-10.md) | UI 最终验收与证据 | 就绪 | `feat/ui-baseline` |

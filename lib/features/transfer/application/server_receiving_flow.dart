@@ -5,6 +5,7 @@ import 'package:nearsend/core/protocol/manifest.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/transfer_flow.dart';
@@ -98,6 +99,7 @@ class ServerReceivingFlow extends ChangeNotifier {
   int _currentIndex = 0;
   int _fileCount = 0;
   SpaceVerdict? _spaceVerdict;
+  SpaceEstimateSnapshot? _spaceEstimate;
 
   ServerReceivePhase get phase => _phase;
 
@@ -107,6 +109,9 @@ class ServerReceivingFlow extends ChangeNotifier {
   /// `unknown` means nobody measured the volumes, and a screen that showed it as a pass would be
   /// claiming a check that never happened.
   SpaceVerdict? get spaceVerdict => _spaceVerdict;
+
+  /// The last measured breakdown shown to the user before accepting an offer.
+  SpaceEstimateSnapshot? get spaceEstimate => _spaceEstimate;
 
   /// What this device is being asked to accept, from its own database.
   List<ServerOffer> get pending => List<ServerOffer>.unmodifiable(_pending);
@@ -195,22 +200,10 @@ class ServerReceivingFlow extends ChangeNotifier {
       // caller that skipped this would commit to a transfer that provably cannot fit. Only a
       // *proven* shortfall stops it - an unmeasurable volume is reported as unknown and left to the
       // user, because refusing on "we could not check" would refuse transfers that fit.
-      final SpacePlan plan = const SpacePlanner().plan(
-        files: <FileSpaceRequest>[
-          for (final ManifestFile file in _manifestOf(offer))
-            FileSpaceRequest(
-              fileId: file.fileId,
-              sizeBytes: file.sizeBytes,
-              stagingVolume: context.stagingVolume,
-              exportVolume: context.exportVolume,
-              stagingAlreadyAllocatedBytes: 0,
-            ),
-        ],
-        availability: context.availability,
-        volumeForDatabase: context.databaseVolume,
-      );
-      _spaceVerdict = plan.verdict;
-      if (plan.verdict == SpaceVerdict.insufficient) {
+      final SpaceEstimateSnapshot estimate = estimateFor(offer, context);
+      _spaceEstimate = estimate;
+      _spaceVerdict = estimate.verdict;
+      if (estimate.verdict == SpaceVerdict.insufficient) {
         throw const ServerReceiveRefused('空间不足：已按暂存与导出的峰值计算，需要先清理或更换保存位置。');
       }
 
@@ -279,6 +272,32 @@ class ServerReceivingFlow extends ChangeNotifier {
       _notify();
       return false;
     }
+  }
+
+  /// Measures an offer with the same planner and opaque storage context used by [accept].
+  ///
+  /// This has no side effects and does not authorize the transfer. It exists so the UI can show
+  /// every volume and require an explicit acknowledgement for an unknown reading before the user
+  /// presses the accept action.
+  SpaceEstimateSnapshot estimateFor(
+    ServerOffer offer,
+    ReceiverStorageContext context,
+  ) {
+    final SpacePlan plan = const SpacePlanner().plan(
+      files: <FileSpaceRequest>[
+        for (final ManifestFile file in _manifestOf(offer))
+          FileSpaceRequest(
+            fileId: file.fileId,
+            sizeBytes: file.sizeBytes,
+            stagingVolume: context.stagingVolume,
+            exportVolume: context.exportVolume,
+            stagingAlreadyAllocatedBytes: 0,
+          ),
+      ],
+      availability: context.availability,
+      volumeForDatabase: context.databaseVolume,
+    );
+    return SpaceEstimateSnapshot.of(plan);
   }
 
   /// The sealed manifest's files, which is what the space plan has to be built from.

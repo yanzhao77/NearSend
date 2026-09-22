@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
@@ -41,8 +43,11 @@ class ReceivePage extends StatefulWidget {
     this.pushOffers = const <ServerOffer>[],
     this.pushPhase = ServerReceivePhase.waiting,
     this.pushSpaceVerdict,
+    this.pushSpaceEstimate,
     this.pushFailureReason,
     this.pushSavedPaths = const <String>[],
+    this.onCheckPushSpace,
+    this.onPickLocation,
     this.onAcceptPush,
   });
 
@@ -79,8 +84,17 @@ class ReceivePage extends StatefulWidget {
   /// it as a pass would be claiming a check that never happened.
   final SpaceVerdict? pushSpaceVerdict;
 
+  /// The measured, per-volume breakdown for the pushed offer.
+  final SpaceEstimateSnapshot? pushSpaceEstimate;
+
   final String? pushFailureReason;
   final List<String> pushSavedPaths;
+  final Future<SpaceEstimateSnapshot?> Function(
+    ServerOffer offer,
+    String saveLocation,
+  )?
+  onCheckPushSpace;
+  final Future<String?> Function()? onPickLocation;
   final Future<bool> Function(ServerOffer offer, String saveLocation)?
   onAcceptPush;
 
@@ -95,6 +109,8 @@ class ReceivePage extends StatefulWidget {
 
   /// Shown when the plan proved the transfer does not fit; the acceptance is refused, not warned.
   static const String spaceInsufficientNote = '空间不足：按暂存与导出的峰值计算装不下，需要先清理或更换位置。';
+  static const String spacePendingNote = '填写保存位置后会先检查暂存、数据库和导出峰值空间。';
+  static const String unknownSpaceAcknowledgement = '我知道无法确认可用空间，仍承担传输中可能失败的风险';
 
   /// Heading for the section about transfers this device was asked to accept.
   static const String pushSectionHeading = '对方正在发给你';
@@ -124,6 +140,10 @@ class ReceivePage extends StatefulWidget {
 class _ReceivePageState extends State<ReceivePage> {
   final TextEditingController _location = TextEditingController();
   Timer? _poll;
+  final Map<String, SpaceEstimateSnapshot?> _checkedSpaces =
+      <String, SpaceEstimateSnapshot?>{};
+  final Map<String, String> _spaceCheckFailures = <String, String>{};
+  bool _unknownSpaceAcknowledged = false;
 
   @override
   void initState() {
@@ -134,10 +154,65 @@ class _ReceivePageState extends State<ReceivePage> {
   @override
   void didUpdateWidget(ReceivePage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.pushOffers != widget.pushOffers ||
+        oldWidget.pushSpaceEstimate != widget.pushSpaceEstimate) {
+      _checkedSpaces.clear();
+      if (widget.pushOffers.length == 1 && widget.pushSpaceEstimate != null) {
+        _checkedSpaces[widget.pushOffers.single.transferId] =
+            widget.pushSpaceEstimate;
+      }
+      _spaceCheckFailures.clear();
+      _unknownSpaceAcknowledged = false;
+    }
     if (oldWidget.phase != widget.phase ||
         oldWidget.pushPhase != widget.pushPhase) {
       _startPolling();
     }
+  }
+
+  Future<void> _checkPushSpace(ServerOffer offer, String location) async {
+    final Future<SpaceEstimateSnapshot?> Function(ServerOffer, String)? check =
+        widget.onCheckPushSpace;
+    if (check == null || location.trim().isEmpty) {
+      return;
+    }
+    setState(() => _spaceCheckFailures.remove(offer.transferId));
+    try {
+      final SpaceEstimateSnapshot? result = await check(offer, location.trim());
+      if (!mounted) return;
+      setState(() {
+        _checkedSpaces[offer.transferId] = result;
+        _unknownSpaceAcknowledged = false;
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() {
+        _checkedSpaces.remove(offer.transferId);
+        _spaceCheckFailures[offer.transferId] = '空间预检未完成，请重试或更换保存位置。';
+      });
+    }
+  }
+
+  void _onLocationChanged(String value) {
+    setState(() {
+      _unknownSpaceAcknowledged = false;
+      _checkedSpaces.clear();
+      _spaceCheckFailures.clear();
+    });
+    if (value.trim().isNotEmpty) {
+      for (final ServerOffer offer in widget.pushOffers) {
+        unawaited(_checkPushSpace(offer, value));
+      }
+    }
+  }
+
+  Future<void> _pickLocation() async {
+    final String? picked = await widget.onPickLocation?.call();
+    if (!mounted || picked == null || picked.trim().isEmpty) return;
+    _location
+      ..text = picked
+      ..selection = TextSelection.collapsed(offset: picked.length);
+    _onLocationChanged(picked);
   }
 
   @override
@@ -169,9 +244,6 @@ class _ReceivePageState extends State<ReceivePage> {
 
   @override
   Widget build(BuildContext context) {
-    final NearSendColors palette = NearSendColors.of(
-      Theme.of(context).brightness,
-    );
     final bool canAccept =
         !_isBusy &&
         widget.offers.isNotEmpty &&
@@ -199,24 +271,24 @@ class _ReceivePageState extends State<ReceivePage> {
                 if (widget.offers.isEmpty &&
                     (widget.phase == ReceivePhase.idle ||
                         widget.phase == ReceivePhase.offered))
-                  _Notice(palette: palette, text: ReceivePage.emptyNote),
+                  const NsInfoBanner(
+                    title: '等待文件',
+                    message: ReceivePage.emptyNote,
+                    tone: NsStatusTone.info,
+                  ),
                 for (final OfferSummary offer in widget.offers) ...<Widget>[
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(NearSendSpacing.md),
-                      child: Row(
-                        children: <Widget>[
-                          const Icon(Icons.download_outlined),
-                          const SizedBox(width: NearSendSpacing.sm),
-                          Expanded(
-                            child: Text(
-                              '${offer.fileCount} 个文件 · '
-                              '${formatBytes(offer.totalBytes)}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                        ],
-                      ),
+                  NsFileRow(
+                    fileName: '来自对方的文件',
+                    sizeLabel: formatBytes(offer.totalBytes),
+                    statusLabel: '${offer.fileCount} 个文件 · 待确认',
+                    statusTone: NsStatusTone.warning,
+                    icon: Icons.download_outlined,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: NearSendSpacing.xs),
+                    child: Text(
+                      '${offer.fileCount} 个文件 · ${formatBytes(offer.totalBytes)}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
                   const SizedBox(height: NearSendSpacing.sm),
@@ -225,18 +297,27 @@ class _ReceivePageState extends State<ReceivePage> {
                 TextField(
                   controller: _location,
                   enabled: !_isBusy,
-                  onChanged: (String _) => setState(() {}),
+                  onChanged: _onLocationChanged,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     hintText: ReceivePage.saveLocationHint,
                   ),
                 ),
+                if (widget.onPickLocation != null) ...<Widget>[
+                  const SizedBox(height: NearSendSpacing.sm),
+                  NsSecondaryButton(
+                    onPressed: _isBusy ? null : _pickLocation,
+                    icon: Icons.folder_open,
+                    label: '选择保存位置',
+                  ),
+                ],
                 if (widget.offers.isNotEmpty && _location.text.trim().isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: NearSendSpacing.xs),
-                    child: Text(
-                      ReceivePage.saveLocationRequired,
-                      style: Theme.of(context).textTheme.bodySmall,
+                    child: NsInfoBanner(
+                      title: '需要保存位置',
+                      message: ReceivePage.saveLocationRequired,
+                      tone: NsStatusTone.warning,
                     ),
                   ),
                 const SizedBox(height: NearSendSpacing.sm),
@@ -250,7 +331,7 @@ class _ReceivePageState extends State<ReceivePage> {
                             )
                           : null,
                       icon: const Icon(Icons.check),
-                      label: const Text('接受并接收'),
+                      label: const Text('接收并保存'),
                     ),
                   ),
                 if (widget.onAcceptPush != null) ...<Widget>[
@@ -267,33 +348,30 @@ class _ReceivePageState extends State<ReceivePage> {
                   for (final ServerOffer offer
                       in widget.pushOffers) ...<Widget>[
                     const SizedBox(height: NearSendSpacing.sm),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(NearSendSpacing.md),
-                        child: Row(
-                          children: <Widget>[
-                            const Icon(Icons.move_to_inbox_outlined),
-                            const SizedBox(width: NearSendSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                '${offer.fileCount} 个文件 · '
-                                '${formatBytes(offer.totalBytes)}',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ),
-                          ],
-                        ),
+                    NsFileRow(
+                      fileName: '来自对方的文件',
+                      sizeLabel: formatBytes(offer.totalBytes),
+                      statusLabel: '${offer.fileCount} 个文件 · 待确认',
+                      statusTone: NsStatusTone.warning,
+                      icon: Icons.move_to_inbox_outlined,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.xs),
+                      child: Text(
+                        '${offer.fileCount} 个文件 · ${formatBytes(offer.totalBytes)}',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
+                    ..._spaceWidgets(context, offer),
                     if (canAcceptPush(offer))
                       Padding(
                         padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                        child: FilledButton.icon(
+                        child: NsPrimaryButton(
                           onPressed: () => unawaited(
                             widget.onAcceptPush!(offer, _location.text.trim()),
                           ),
-                          icon: const Icon(Icons.check),
-                          label: const Text('接受这次发送'),
+                          icon: Icons.check,
+                          label: '接收并保存',
                         ),
                       ),
                   ],
@@ -301,43 +379,28 @@ class _ReceivePageState extends State<ReceivePage> {
                       _location.text.trim().isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.xs),
-                      child: Text(
-                        ReceivePage.saveLocationRequired,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  // The space answer, said as what it is. `unknown` is the one that matters most:
-                  // this build has no way to measure a volume, and a screen that stayed silent about
-                  // that would let the user believe the space was checked.
-                  if (widget.pushSpaceVerdict == SpaceVerdict.unknown)
-                    Padding(
-                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: _Notice(
-                        palette: palette,
-                        text: ReceivePage.spaceUnknownNote,
-                      ),
-                    ),
-                  if (widget.pushSpaceVerdict == SpaceVerdict.insufficient)
-                    Padding(
-                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: _Notice(
-                        palette: palette,
-                        text: ReceivePage.spaceInsufficientNote,
-                        isError: true,
+                      child: NsInfoBanner(
+                        title: '需要保存位置',
+                        message: ReceivePage.saveLocationRequired,
+                        tone: NsStatusTone.warning,
                       ),
                     ),
                   for (final String path in widget.pushSavedPaths)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: _Notice(palette: palette, text: '已保存：$path'),
+                      child: NsInfoBanner(
+                        title: '已保存',
+                        message: '已保存：$path',
+                        tone: NsStatusTone.success,
+                      ),
                     ),
                   if (widget.pushFailureReason != null)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: _Notice(
-                        palette: palette,
-                        text: widget.pushFailureReason!,
-                        isError: true,
+                      child: NsInfoBanner(
+                        title: '接收未完成',
+                        message: widget.pushFailureReason!,
+                        tone: NsStatusTone.error,
                       ),
                     ),
                 ],
@@ -349,7 +412,6 @@ class _ReceivePageState extends State<ReceivePage> {
                   fileCount: widget.fileCount,
                   failureReason: widget.failureReason,
                   savedPaths: widget.savedPaths,
-                  palette: palette,
                 ),
               ],
             ),
@@ -367,7 +429,152 @@ class _ReceivePageState extends State<ReceivePage> {
   bool canAcceptPush(ServerOffer offer) =>
       widget.onAcceptPush != null &&
       !_isPushing &&
-      _location.text.trim().isNotEmpty;
+      _location.text.trim().isNotEmpty &&
+      _effectiveVerdict(offer) != SpaceVerdict.insufficient &&
+      _effectiveVerdict(offer) != null &&
+      (_effectiveVerdict(offer) != SpaceVerdict.unknown ||
+          _unknownSpaceAcknowledged);
+
+  SpaceEstimateSnapshot? _effectiveSpace(ServerOffer offer) =>
+      _checkedSpaces[offer.transferId] ??
+      (widget.pushOffers.length == 1 &&
+              offer.transferId == widget.pushOffers.single.transferId
+          ? widget.pushSpaceEstimate
+          : null);
+
+  SpaceVerdict? _effectiveVerdict(ServerOffer offer) =>
+      _effectiveSpace(offer)?.verdict ??
+      (widget.pushOffers.length == 1 &&
+              offer.transferId == widget.pushOffers.single.transferId
+          ? widget.pushSpaceVerdict
+          : null);
+
+  List<Widget> _spaceWidgets(BuildContext context, ServerOffer offer) {
+    final SpaceEstimateSnapshot? estimate = _effectiveSpace(offer);
+    final SpaceVerdict? verdict = _effectiveVerdict(offer);
+    final String? checkFailure = _spaceCheckFailures[offer.transferId];
+    if (checkFailure != null) {
+      return <Widget>[
+        const SizedBox(height: NearSendSpacing.sm),
+        NsInfoBanner(
+          title: '空间预检失败',
+          message: checkFailure,
+          tone: NsStatusTone.error,
+        ),
+      ];
+    }
+    if (estimate == null) {
+      if (verdict == SpaceVerdict.insufficient) {
+        return <Widget>[
+          const SizedBox(height: NearSendSpacing.sm),
+          const NsInfoBanner(
+            title: '空间不足',
+            message: ReceivePage.spaceInsufficientNote,
+            tone: NsStatusTone.error,
+          ),
+        ];
+      }
+      if (verdict == SpaceVerdict.unknown) {
+        return <Widget>[
+          const SizedBox(height: NearSendSpacing.sm),
+          const NsInfoBanner(
+            title: '空间未知',
+            message: ReceivePage.spaceUnknownNote,
+            tone: NsStatusTone.warning,
+          ),
+          CheckboxListTile(
+            value: _unknownSpaceAcknowledged,
+            onChanged: (bool? value) =>
+                setState(() => _unknownSpaceAcknowledged = value ?? false),
+            title: const Text(ReceivePage.unknownSpaceAcknowledgement),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ];
+      }
+      return <Widget>[
+        const SizedBox(height: NearSendSpacing.sm),
+        NsInfoBanner(
+          title: '空间预检待完成',
+          message: ReceivePage.spacePendingNote,
+          tone: NsStatusTone.warning,
+        ),
+      ];
+    }
+    final List<Widget> widgets = <Widget>[
+      const SizedBox(height: NearSendSpacing.sm),
+      for (final SpaceVolumeSnapshot volume in estimate.volumes)
+        Padding(
+          padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
+          child: NsSpaceBreakdown(
+            title: volume.volumeRef,
+            status: _spaceStatus(volume.verdict),
+            statusLabel: _spaceStatusLabel(volume),
+            lines: <NsSpaceLine>[
+              NsSpaceLine(
+                label: '需要',
+                value: formatBytes(volume.requiredBytes),
+              ),
+              NsSpaceLine(
+                label: '可用',
+                value: volume.freeBytes == null
+                    ? '未知'
+                    : formatBytes(volume.freeBytes!),
+              ),
+              for (final SpaceLineSnapshot line in volume.lines)
+                NsSpaceLine(label: line.reason, value: formatBytes(line.bytes)),
+            ],
+            shortfallLabel: volume.shortfallBytes == null
+                ? null
+                : '还差 ${formatBytes(volume.shortfallBytes!)}',
+          ),
+        ),
+    ];
+    if (estimate.verdict == SpaceVerdict.unknown) {
+      widgets.add(
+        CheckboxListTile(
+          value: _unknownSpaceAcknowledged,
+          onChanged: (bool? value) =>
+              setState(() => _unknownSpaceAcknowledged = value ?? false),
+          title: const Text(ReceivePage.unknownSpaceAcknowledgement),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
+      );
+    }
+    if (estimate.verdict == SpaceVerdict.insufficient) {
+      widgets.add(
+        const NsInfoBanner(
+          title: '空间不足',
+          message: ReceivePage.spaceInsufficientNote,
+          tone: NsStatusTone.error,
+        ),
+      );
+    }
+    if (estimate.verdict == SpaceVerdict.unknown) {
+      widgets.add(
+        const NsInfoBanner(
+          title: '空间未知',
+          message: ReceivePage.spaceUnknownNote,
+          tone: NsStatusTone.warning,
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  static NsSpaceStatus _spaceStatus(SpaceVerdict verdict) => switch (verdict) {
+    SpaceVerdict.sufficient => NsSpaceStatus.sufficient,
+    SpaceVerdict.insufficient => NsSpaceStatus.insufficient,
+    SpaceVerdict.unknown => NsSpaceStatus.unknown,
+  };
+
+  static String _spaceStatusLabel(SpaceVolumeSnapshot volume) =>
+      switch (volume.verdict) {
+        SpaceVerdict.sufficient => '空间充足',
+        SpaceVerdict.insufficient => '空间不足',
+        SpaceVerdict.unknown => '无法确认',
+      };
 
   bool get _isPushing =>
       widget.pushPhase == ServerReceivePhase.accepting ||
@@ -390,7 +597,6 @@ class _PhaseSection extends StatelessWidget {
     required this.fileCount,
     required this.failureReason,
     required this.savedPaths,
-    required this.palette,
   });
 
   final ReceivePhase phase;
@@ -400,7 +606,6 @@ class _PhaseSection extends StatelessWidget {
   final int fileCount;
   final String? failureReason;
   final List<String> savedPaths;
-  final NearSendColors palette;
 
   @override
   Widget build(BuildContext context) {
@@ -435,14 +640,8 @@ class _PhaseSection extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Icon(Icons.check_circle_outline, color: palette.primary),
                     const SizedBox(width: NearSendSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        '已保存：$path',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
+                    Expanded(child: Text('已保存：$path')),
                   ],
                 ),
               ),
@@ -451,10 +650,10 @@ class _PhaseSection extends StatelessWidget {
         if (failureReason != null)
           Padding(
             padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-            child: _Notice(
-              palette: palette,
-              text: failureReason!,
-              isError: true,
+            child: NsInfoBanner(
+              title: '接收未完成',
+              message: failureReason!,
+              tone: NsStatusTone.error,
             ),
           ),
       ],
@@ -478,40 +677,6 @@ class _Stat extends StatelessWidget {
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
           Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
-      ),
-    );
-  }
-}
-
-class _Notice extends StatelessWidget {
-  const _Notice({
-    required this.palette,
-    required this.text,
-    this.isError = false,
-  });
-
-  final NearSendColors palette;
-  final String text;
-  final bool isError;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(NearSendSpacing.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Icon(
-              isError ? Icons.error_outline : Icons.info_outline,
-              color: isError ? palette.error : palette.primary,
-            ),
-            const SizedBox(width: NearSendSpacing.sm),
-            Expanded(
-              child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-            ),
-          ],
-        ),
       ),
     );
   }

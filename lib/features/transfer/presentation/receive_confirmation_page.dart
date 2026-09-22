@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
@@ -30,7 +31,7 @@ import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 /// consuming space, so the check is repeated before each file and before export. The page therefore
 /// renders the planner's own reason lines instead of restating the numbers, so what the user
 /// approves is what the planner explained.
-class ReceiveConfirmationPage extends StatelessWidget {
+class ReceiveConfirmationPage extends StatefulWidget {
   const ReceiveConfirmationPage({
     super.key,
     required this.fileCount,
@@ -78,11 +79,28 @@ class ReceiveConfirmationPage extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
-    final NearSendColors palette = NearSendColors.of(
-      Theme.of(context).brightness,
-    );
+  State<ReceiveConfirmationPage> createState() =>
+      _ReceiveConfirmationPageState();
+}
 
+class _ReceiveConfirmationPageState extends State<ReceiveConfirmationPage> {
+  bool _riskAcknowledged = false;
+
+  SpaceVerdict? get verdict => widget.estimate?.verdict;
+
+  bool get isBlocked => verdict == SpaceVerdict.insufficient;
+
+  bool get needsRiskAcknowledgement => verdict == SpaceVerdict.unknown;
+
+  String get spaceStatusLabel => switch (verdict) {
+    SpaceVerdict.sufficient => '空间检查通过（仍受 §16.2 的策略余量约束，不是保证）',
+    SpaceVerdict.insufficient => '空间不足，无法接收',
+    SpaceVerdict.unknown => '无法确认可用空间，需要你确认风险',
+    null => '未做空间检查',
+  };
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('接收确认')),
       body: SafeArea(
@@ -105,41 +123,58 @@ class ReceiveConfirmationPage extends StatelessWidget {
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: NearSendSpacing.sm),
-                        _Row(label: '文件数', value: '$fileCount'),
-                        _Row(label: '总大小', value: formatBytes(totalBytes)),
-                        if (saveLocationLabel != null)
-                          _Row(label: '保存位置', value: saveLocationLabel!),
+                        _Row(label: '文件数', value: '${widget.fileCount}'),
+                        _Row(
+                          label: '总大小',
+                          value: formatBytes(widget.totalBytes),
+                        ),
+                        if (widget.saveLocationLabel != null)
+                          _Row(label: '保存位置', value: widget.saveLocationLabel!),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: NearSendSpacing.lg),
                 _SpaceSection(
-                  estimate: estimate,
-                  palette: palette,
+                  estimate: widget.estimate,
                   statusLabel: spaceStatusLabel,
                 ),
                 const SizedBox(height: NearSendSpacing.xl),
                 if (isBlocked)
-                  FilledButton.icon(
-                    // Refused rather than offered: starting a transfer that cannot finish costs
-                    // the user the bytes already moved, and §11 pairs SPACE_INSUFFICIENT with
-                    // "free space or change the location" rather than with a retry.
-                    onPressed: null,
-                    icon: const Icon(Icons.block),
-                    label: const Text('空间不足，先清理或更换位置'),
-                  )
-                else
-                  FilledButton.icon(
-                    onPressed: onAccept,
-                    icon: const Icon(Icons.check),
-                    label: Text(needsRiskAcknowledgement ? '已知晓风险，仍然接收' : '接收'),
+                  const NsInfoBanner(
+                    title: '空间不足，无法接收',
+                    message: '请先清理空间或更换保存位置。',
+                    tone: NsStatusTone.error,
                   ),
+                if (needsRiskAcknowledgement) ...<Widget>[
+                  const NsInfoBanner(
+                    title: '空间未知',
+                    message: '无法确认此位置的可用空间，传输中仍可能失败。',
+                    tone: NsStatusTone.warning,
+                  ),
+                  CheckboxListTile(
+                    value: _riskAcknowledged,
+                    onChanged: (bool? value) =>
+                        setState(() => _riskAcknowledged = value ?? false),
+                    title: const Text('我知道空间无法确认，仍承担传输失败的风险'),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+                NsPrimaryButton(
+                  onPressed:
+                      isBlocked ||
+                          (needsRiskAcknowledgement && !_riskAcknowledged)
+                      ? null
+                      : widget.onAccept,
+                  icon: Icons.save_outlined,
+                  label: '接收并保存',
+                ),
                 const SizedBox(height: NearSendSpacing.sm),
-                OutlinedButton.icon(
-                  onPressed: onReject,
-                  icon: const Icon(Icons.close),
-                  label: const Text('拒绝'),
+                NsSecondaryButton(
+                  onPressed: widget.onReject,
+                  icon: Icons.close,
+                  label: '拒绝',
                 ),
               ],
             ),
@@ -151,14 +186,9 @@ class ReceiveConfirmationPage extends StatelessWidget {
 }
 
 class _SpaceSection extends StatelessWidget {
-  const _SpaceSection({
-    required this.estimate,
-    required this.palette,
-    required this.statusLabel,
-  });
+  const _SpaceSection({required this.estimate, required this.statusLabel});
 
   final SpaceEstimateSnapshot? estimate;
-  final NearSendColors palette;
   final String statusLabel;
 
   @override
@@ -167,77 +197,64 @@ class _SpaceSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Icon(
-              switch (snapshot?.verdict) {
-                SpaceVerdict.sufficient => Icons.check_circle_outline,
-                SpaceVerdict.insufficient => Icons.error_outline,
-                SpaceVerdict.unknown => Icons.help_outline,
-                null => Icons.info_outline,
-              },
-              color: switch (snapshot?.verdict) {
-                SpaceVerdict.sufficient => palette.primary,
-                SpaceVerdict.insufficient => palette.error,
-                _ => palette.warning,
-              },
-            ),
-            const SizedBox(width: NearSendSpacing.sm),
-            Expanded(
-              child: Text(
-                statusLabel,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-          ],
+        NsInfoBanner(
+          title: '空间预检',
+          message: statusLabel,
+          tone: _tone(snapshot?.verdict),
         ),
         if (snapshot != null) ...<Widget>[
           const SizedBox(height: NearSendSpacing.sm),
           for (final SpaceVolumeSnapshot volume in snapshot.volumes)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(NearSendSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      volume.volumeRef,
-                      style: Theme.of(context).textTheme.labelLarge,
+            Padding(
+              padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
+              child: NsSpaceBreakdown(
+                title: volume.volumeRef,
+                status: _spaceStatus(volume.verdict),
+                statusLabel: _volumeStatusLabel(volume.verdict),
+                lines: <NsSpaceLine>[
+                  NsSpaceLine(
+                    label: '需要',
+                    value: formatBytes(volume.requiredBytes),
+                  ),
+                  NsSpaceLine(
+                    label: '可用',
+                    value: volume.freeBytes == null
+                        ? '未知'
+                        : formatBytes(volume.freeBytes!),
+                  ),
+                  for (final SpaceLineSnapshot line in volume.lines)
+                    NsSpaceLine(
+                      label: line.reason,
+                      value: formatBytes(line.bytes),
                     ),
-                    const SizedBox(height: NearSendSpacing.xs),
-                    // The planner's own explanations, rendered rather than summarised: §16.2 asks
-                    // for the breakdown, and a total the user cannot decompose is a total they
-                    // cannot act on.
-                    for (final SpaceLineSnapshot line in volume.lines)
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          bottom: NearSendSpacing.xxs,
-                        ),
-                        child: Text(
-                          '${formatBytes(line.bytes)} — ${line.reason}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                    if (volume.shortfallBytes != null)
-                      Padding(
-                        padding: const EdgeInsets.only(
-                          top: NearSendSpacing.xxs,
-                        ),
-                        child: Text(
-                          '还差 ${formatBytes(volume.shortfallBytes!)}',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: palette.error),
-                        ),
-                      ),
-                  ],
-                ),
+                ],
+                shortfallLabel: volume.shortfallBytes == null
+                    ? null
+                    : '还差 ${formatBytes(volume.shortfallBytes!)}',
               ),
             ),
         ],
       ],
     );
   }
+
+  static NsStatusTone _tone(SpaceVerdict? verdict) => switch (verdict) {
+    SpaceVerdict.sufficient => NsStatusTone.success,
+    SpaceVerdict.insufficient => NsStatusTone.error,
+    SpaceVerdict.unknown || null => NsStatusTone.warning,
+  };
+
+  static NsSpaceStatus _spaceStatus(SpaceVerdict verdict) => switch (verdict) {
+    SpaceVerdict.sufficient => NsSpaceStatus.sufficient,
+    SpaceVerdict.insufficient => NsSpaceStatus.insufficient,
+    SpaceVerdict.unknown => NsSpaceStatus.unknown,
+  };
+
+  static String _volumeStatusLabel(SpaceVerdict verdict) => switch (verdict) {
+    SpaceVerdict.sufficient => '空间充足',
+    SpaceVerdict.insufficient => '空间不足',
+    SpaceVerdict.unknown => '无法确认',
+  };
 }
 
 class _Row extends StatelessWidget {
