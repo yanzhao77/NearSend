@@ -11,7 +11,9 @@ void main() {
         home: Scaffold(body: SingleChildScrollView(child: child)),
       );
 
-  testWidgets('primary button keeps a stable label while loading', (tester) async {
+  testWidgets('primary button keeps a stable label while loading', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       host(const NsPrimaryButton(label: '发送', onPressed: null, loading: true)),
     );
@@ -19,7 +21,9 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 
-  testWidgets('banner expresses warning with icon, text and action', (tester) async {
+  testWidgets('banner expresses warning with icon, text and action', (
+    tester,
+  ) async {
     bool acted = false;
     await tester.pumpWidget(
       host(
@@ -38,7 +42,9 @@ void main() {
     expect(acted, isTrue);
   });
 
-  testWidgets('file row truncates long names and shows semantic status', (tester) async {
+  testWidgets('file row truncates long names and shows semantic status', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       host(
         const NsFileRow(
@@ -50,16 +56,19 @@ void main() {
         ),
       ),
     );
-    expect(find.text('传输中'), findsOneWidget);
+    expect(find.text('传输中'), findsNWidgets(2));
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(
-      tester.widget<Text>(find.byType(Tooltip).first).data,
-      isNull,
-      reason: 'the visible text is allowed to ellipsize; Tooltip owns the full name',
+      tester.widget<Tooltip>(find.byType(Tooltip).first).message,
+      'a-very-long-file-name-that-keeps-its-extension.tar.gz',
+      reason:
+          'the visible text is allowed to ellipsize; Tooltip owns the full name',
     );
   });
 
-  testWidgets('stage progress distinguishes complete, active and pending', (tester) async {
+  testWidgets('stage progress distinguishes complete, active and pending', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       host(
         const NsStageProgress(
@@ -85,11 +94,13 @@ void main() {
       ),
     );
     expect(find.text('无法确认'), findsOneWidget);
-    expect(find.byIcon(Icons.warning_amber_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.warning_amber_outlined), findsNWidgets(2));
     expect(find.byIcon(Icons.check_circle_outline), findsNothing);
   });
 
-  testWidgets('components remain readable in dark theme at large text scale', (tester) async {
+  testWidgets('components remain readable in dark theme at large text scale', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),

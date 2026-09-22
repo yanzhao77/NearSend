@@ -65,18 +65,27 @@ abstract final class StorageMigrations {
     ),
     MigrationStep(
       version: 4,
-      description: 'manifest staging is persisted: staging, file pages and chunk pages (ADR-0004)',
+      description:
+          'manifest staging is persisted: staging, file pages and chunk pages (ADR-0004)',
       apply: StorageSchema.applyVersion4,
     ),
     MigrationStep(
       version: 5,
-      description: 'task credentials by digest, and the receiver authorisation record (§3, §6)',
+      description:
+          'task credentials by digest, and the receiver authorisation record (§3, §6)',
       apply: StorageSchema.applyVersion5,
     ),
     MigrationStep(
       version: 6,
-      description: 'a sending task remembers where it reads each file from (§7 chunk GET)',
+      description:
+          'a sending task remembers where it reads each file from (§7 chunk GET)',
       apply: StorageSchema.applyVersion6,
+    ),
+    MigrationStep(
+      version: 7,
+      description:
+          'non-secret application settings are persisted separately from credentials',
+      apply: StorageSchema.applyVersion7,
     ),
   ];
 
