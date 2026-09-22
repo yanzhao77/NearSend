@@ -202,6 +202,11 @@ jobs:
           key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
       - name: Install pinned Flutter
         run: bash tooling/ci/install_flutter.sh
+      - name: Generate macOS project when absent
+        run: |
+          if [ ! -f macos/Runner.xcodeproj/project.pbxproj ]; then
+            flutter create --platforms=macos --org com.nearsend --project-name nearsend .
+          fi
       - name: Resolve dependencies
         run: flutter pub get
       - name: Build macOS release
