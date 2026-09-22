@@ -13,7 +13,15 @@ enum NsStageState { complete, active, pending, blocked }
 enum NsSpaceStatus { sufficient, insufficient, unknown }
 
 /// Status rendered by a task card.
-enum NsTaskStatus { active, paused, recoverable, partial, completed, expired, failed }
+enum NsTaskStatus {
+  active,
+  paused,
+  recoverable,
+  partial,
+  completed,
+  expired,
+  failed,
+}
 
 class NsPrimaryButton extends StatelessWidget {
   const NsPrimaryButton({
@@ -31,16 +39,16 @@ class NsPrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => FilledButton.icon(
-        onPressed: loading ? null : onPressed,
-        icon: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(icon ?? Icons.arrow_forward),
-        label: Text(loading ? '处理中…' : label),
-      );
+    onPressed: loading ? null : onPressed,
+    icon: loading
+        ? const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(icon ?? Icons.arrow_forward),
+    label: Text(loading ? '处理中…' : label),
+  );
 }
 
 class NsSecondaryButton extends StatelessWidget {
@@ -57,10 +65,10 @@ class NsSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon ?? Icons.arrow_forward),
-        label: Text(label),
-      );
+    onPressed: onPressed,
+    icon: Icon(icon ?? Icons.arrow_forward),
+    label: Text(label),
+  );
 }
 
 class NsDangerButton extends StatelessWidget {
@@ -150,11 +158,7 @@ class NsInfoBanner extends StatelessWidget {
 }
 
 class NsStatusBadge extends StatelessWidget {
-  const NsStatusBadge({
-    super.key,
-    required this.label,
-    required this.tone,
-  });
+  const NsStatusBadge({super.key, required this.label, required this.tone});
 
   final String label;
   final NsStatusTone tone;
@@ -178,10 +182,9 @@ class NsStatusBadge extends StatelessWidget {
             const SizedBox(width: NearSendSpacing.xxs),
             Text(
               label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: semantic.color),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: semantic.color),
             ),
           ],
         ),
@@ -220,7 +223,10 @@ class NsFileRow extends StatelessWidget {
       ),
       child: Row(
         children: <Widget>[
-          Icon(icon, color: NearSendColors.of(Theme.of(context).brightness).primary),
+          Icon(
+            icon,
+            color: NearSendColors.of(Theme.of(context).brightness).primary,
+          ),
           const SizedBox(width: NearSendSpacing.sm),
           Expanded(
             child: Column(
@@ -229,7 +235,7 @@ class NsFileRow extends StatelessWidget {
                 Tooltip(
                   message: fileName,
                   child: Text(
-                    fileName,
+                    _middleEllipsis(fileName),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,
@@ -247,7 +253,10 @@ class NsFileRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: NearSendSpacing.sm),
-                    Text(sizeLabel, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      sizeLabel,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ),
                 if (progress != null) ...<Widget>[
@@ -273,6 +282,22 @@ class NsFileRow extends StatelessWidget {
               child: content,
             ),
           );
+  }
+
+  static String _middleEllipsis(String value) {
+    const int maxCharacters = 42;
+    if (value.runes.length <= maxCharacters) return value;
+    final List<int> characters = value.runes.toList();
+    final int extensionStart = value.lastIndexOf('.');
+    final String extension = extensionStart > 0
+        ? value.substring(extensionStart)
+        : '';
+    final int suffixLength = extension.runes.length;
+    final int prefixLength = maxCharacters - suffixLength - 1;
+    if (prefixLength < 8 || suffixLength >= maxCharacters) {
+      return '${String.fromCharCodes(characters.take(maxCharacters - 1))}…';
+    }
+    return '${String.fromCharCodes(characters.take(prefixLength))}…$extension';
   }
 }
 
@@ -303,10 +328,10 @@ class NsStageProgress extends StatelessWidget {
                 state: blockedIndex == index
                     ? NsStageState.blocked
                     : index < safeActive
-                        ? NsStageState.complete
-                        : index == safeActive
-                            ? NsStageState.active
-                            : NsStageState.pending,
+                    ? NsStageState.complete
+                    : index == safeActive
+                    ? NsStageState.active
+                    : NsStageState.pending,
                 isLast: index == stages.length - 1,
               ),
             ),
@@ -343,7 +368,9 @@ class _NsStageItem extends StatelessWidget {
       height: 24,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: state == NsStageState.pending ? semantic.softColor : semantic.color,
+        color: state == NsStageState.pending
+            ? semantic.softColor
+            : semantic.color,
         shape: BoxShape.circle,
         border: state == NsStageState.pending
             ? Border.all(color: semantic.color, width: 1.5)
@@ -360,7 +387,9 @@ class _NsStageItem extends StatelessWidget {
               Expanded(
                 child: Container(
                   height: 2,
-                  margin: const EdgeInsets.symmetric(horizontal: NearSendSpacing.xs),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: NearSendSpacing.xs,
+                  ),
                   color: semantic.color,
                 ),
               ),
@@ -372,9 +401,9 @@ class _NsStageItem extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: semantic.color,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: semantic.color),
         ),
       ],
     );
@@ -426,7 +455,12 @@ class NsSpaceBreakdown extends StatelessWidget {
             children: <Widget>[
               Icon(semantic.icon, color: semantic.color),
               const SizedBox(width: NearSendSpacing.sm),
-              Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
               NsStatusBadge(label: statusLabel, tone: tone),
             ],
           ),
@@ -437,16 +471,19 @@ class NsSpaceBreakdown extends StatelessWidget {
               child: Row(
                 children: <Widget>[
                   Expanded(child: Text(line.label)),
-                  Text(line.value, style: Theme.of(context).textTheme.labelLarge),
+                  Text(
+                    line.value,
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
                 ],
               ),
             ),
           if (shortfallLabel != null)
             Text(
               shortfallLabel!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: semantic.color,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: semantic.color),
             ),
         ],
       ),
@@ -479,7 +516,9 @@ class NsTaskCard extends StatelessWidget {
     final NsStatusTone tone = switch (status) {
       NsTaskStatus.active => NsStatusTone.active,
       NsTaskStatus.paused || NsTaskStatus.recoverable => NsStatusTone.warning,
-      NsTaskStatus.partial || NsTaskStatus.failed || NsTaskStatus.expired => NsStatusTone.error,
+      NsTaskStatus.partial ||
+      NsTaskStatus.failed ||
+      NsTaskStatus.expired => NsStatusTone.error,
       NsTaskStatus.completed => NsStatusTone.success,
     };
     final Widget card = Card(
@@ -497,9 +536,15 @@ class NsTaskCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(title, style: Theme.of(context).textTheme.titleMedium),
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                         const SizedBox(height: NearSendSpacing.xxs),
-                        Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ],
                     ),
                   ),
@@ -511,7 +556,10 @@ class NsTaskCard extends StatelessWidget {
                 LinearProgressIndicator(value: progress),
                 if (progressLabel != null) ...<Widget>[
                   const SizedBox(height: NearSendSpacing.xs),
-                  Text(progressLabel!, style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    progressLabel!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ],
             ],
@@ -519,7 +567,9 @@ class NsTaskCard extends StatelessWidget {
         ),
       ),
     );
-    return onPressed == null ? card : Semantics(button: true, label: title, child: card);
+    return onPressed == null
+        ? card
+        : Semantics(button: true, label: title, child: card);
   }
 }
 
@@ -541,24 +591,40 @@ class NsEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(NearSendSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(icon, size: 48, color: NearSendColors.of(Theme.of(context).brightness).textMuted),
-              const SizedBox(height: NearSendSpacing.md),
-              Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
-              const SizedBox(height: NearSendSpacing.xs),
-              Text(message, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
-              if (actionLabel != null && onAction != null) ...<Widget>[
-                const SizedBox(height: NearSendSpacing.md),
-                NsSecondaryButton(label: actionLabel!, onPressed: onAction, icon: Icons.refresh),
-              ],
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(NearSendSpacing.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            icon,
+            size: 48,
+            color: NearSendColors.of(Theme.of(context).brightness).textMuted,
           ),
-        ),
-      );
+          const SizedBox(height: NearSendSpacing.md),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: NearSendSpacing.xs),
+          Text(
+            message,
+            style: Theme.of(context).textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+          if (actionLabel != null && onAction != null) ...<Widget>[
+            const SizedBox(height: NearSendSpacing.md),
+            NsSecondaryButton(
+              label: actionLabel!,
+              onPressed: onAction,
+              icon: Icons.refresh,
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 }
 
 class NsErrorState extends StatelessWidget {
@@ -577,12 +643,12 @@ class NsErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => NsInfoBanner(
-        title: title,
-        message: message,
-        tone: NsStatusTone.error,
-        actionLabel: actionLabel,
-        onAction: onAction,
-      );
+    title: title,
+    message: message,
+    tone: NsStatusTone.error,
+    actionLabel: actionLabel,
+    onAction: onAction,
+  );
 }
 
 class NsPermissionExplainer extends StatelessWidget {
@@ -599,54 +665,60 @@ class NsPermissionExplainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => NsInfoBanner(
-        title: title,
-        message: message,
-        tone: NsStatusTone.warning,
-        actionLabel: onOpenSettings == null ? null : '打开系统设置',
-        onAction: onOpenSettings,
-      );
+    title: title,
+    message: message,
+    tone: NsStatusTone.warning,
+    actionLabel: onOpenSettings == null ? null : '打开系统设置',
+    onAction: onOpenSettings,
+  );
 }
 
 class _NsSemanticStyle {
-  const _NsSemanticStyle({required this.color, required this.softColor, required this.icon});
+  const _NsSemanticStyle({
+    required this.color,
+    required this.softColor,
+    required this.icon,
+  });
 
   final Color color;
   final Color softColor;
   final IconData icon;
 
   static _NsSemanticStyle of(BuildContext context, NsStatusTone tone) {
-    final NearSendColors colors = NearSendColors.of(Theme.of(context).brightness);
+    final NearSendColors colors = NearSendColors.of(
+      Theme.of(context).brightness,
+    );
     return switch (tone) {
       NsStatusTone.neutral => _NsSemanticStyle(
-          color: colors.textSecondary,
-          softColor: colors.subtle,
-          icon: Icons.circle_outlined,
-        ),
+        color: colors.textSecondary,
+        softColor: colors.subtle,
+        icon: Icons.circle_outlined,
+      ),
       NsStatusTone.info => _NsSemanticStyle(
-          color: colors.primary,
-          softColor: colors.primarySoft,
-          icon: Icons.info_outline,
-        ),
+        color: colors.primary,
+        softColor: colors.primarySoft,
+        icon: Icons.info_outline,
+      ),
       NsStatusTone.active => _NsSemanticStyle(
-          color: colors.primary,
-          softColor: colors.primarySoft,
-          icon: Icons.circle,
-        ),
+        color: colors.primary,
+        softColor: colors.primarySoft,
+        icon: Icons.circle,
+      ),
       NsStatusTone.success => _NsSemanticStyle(
-          color: colors.success,
-          softColor: colors.successSoft,
-          icon: Icons.check_circle_outline,
-        ),
+        color: colors.success,
+        softColor: colors.successSoft,
+        icon: Icons.check_circle_outline,
+      ),
       NsStatusTone.warning => _NsSemanticStyle(
-          color: colors.warning,
-          softColor: colors.warningSoft,
-          icon: Icons.warning_amber_outlined,
-        ),
+        color: colors.warning,
+        softColor: colors.warningSoft,
+        icon: Icons.warning_amber_outlined,
+      ),
       NsStatusTone.error => _NsSemanticStyle(
-          color: colors.error,
-          softColor: colors.errorSoft,
-          icon: Icons.error_outline,
-        ),
+        color: colors.error,
+        softColor: colors.errorSoft,
+        icon: Icons.error_outline,
+      ),
     };
   }
 }

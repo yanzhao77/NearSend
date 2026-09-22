@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/presentation/file_selection_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
@@ -96,10 +99,6 @@ class SendPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NearSendColors palette = NearSendColors.of(
-      Theme.of(context).brightness,
-    );
-
     return Scaffold(
       appBar: AppBar(title: const Text(heading)),
       body: SafeArea(
@@ -121,18 +120,36 @@ class SendPage extends StatelessWidget {
                     emptyNote,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                for (final SelectedFile file in report.files)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.insert_drive_file_outlined),
-                    title: Text(file.displayName),
-                    subtitle: file.relativePath == file.displayName
-                        ? null
-                        : Text(file.relativePath),
-                    trailing: Text(formatBytes(file.sizeBytes)),
+                if (report.files.isNotEmpty)
+                  SizedBox(
+                    height: math.min(
+                      420,
+                      math.max(104, report.files.length * 104.0),
+                    ),
+                    child: ListView.builder(
+                      itemCount: report.files.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final SelectedFile file = report.files[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: NearSendSpacing.xs,
+                          ),
+                          child: NsFileRow(
+                            fileName: file.relativePath,
+                            sizeLabel: formatBytes(file.sizeBytes),
+                            statusLabel: '待发送',
+                            statusTone: NsStatusTone.neutral,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 for (final String problem in report.problems)
-                  _Notice(palette: palette, text: problem, isError: true),
+                  NsInfoBanner(
+                    title: '文件准备提示',
+                    message: problem,
+                    tone: NsStatusTone.warning,
+                  ),
                 const SizedBox(height: NearSendSpacing.md),
                 if (onPick != null)
                   FilledButton.tonalIcon(
@@ -152,20 +169,19 @@ class SendPage extends StatelessWidget {
                   fileNumber: fileNumber,
                   fileCount: fileCount,
                   failureReason: failureReason,
-                  palette: palette,
                 ),
                 const SizedBox(height: NearSendSpacing.md),
-                FilledButton.icon(
+                NsPrimaryButton(
                   onPressed: report.canSend && !isBusy ? onSend : null,
-                  icon: const Icon(Icons.send_outlined),
-                  label: Text(actionLabel),
+                  icon: Icons.send_outlined,
+                  label: actionLabel,
                 ),
                 if (report.files.isNotEmpty) ...<Widget>[
                   const SizedBox(height: NearSendSpacing.sm),
-                  OutlinedButton.icon(
+                  NsSecondaryButton(
                     onPressed: isBusy ? null : onClear,
-                    icon: const Icon(Icons.clear_all),
-                    label: const Text('清空选择'),
+                    icon: Icons.clear_all,
+                    label: '清空选择',
                   ),
                 ],
               ],
@@ -186,7 +202,6 @@ class _PhaseSection extends StatelessWidget {
     required this.fileNumber,
     required this.fileCount,
     required this.failureReason,
-    required this.palette,
   });
 
   final SendPhase phase;
@@ -195,7 +210,6 @@ class _PhaseSection extends StatelessWidget {
   final int fileNumber;
   final int fileCount;
   final String? failureReason;
-  final NearSendColors palette;
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +220,12 @@ class _PhaseSection extends StatelessWidget {
         Text(
           SendPage.phaseLabel(phase),
           style: Theme.of(context).textTheme.titleSmall,
+        ),
+        const SizedBox(height: NearSendSpacing.sm),
+        NsStageProgress(
+          stages: const <String>['准备', '连接', '传输', '校验', '保存'],
+          activeIndex: _stageIndex(phase),
+          blockedIndex: phase == SendPhase.failed ? _stageIndex(phase) : null,
         ),
         if (phase == SendPhase.waitingForPeer)
           Padding(
@@ -243,21 +263,32 @@ class _PhaseSection extends StatelessWidget {
             const LinearProgressIndicator(),
           const SizedBox(height: NearSendSpacing.sm),
           _Stat(label: '已传 / 总量', value: figures.byteLabel),
-          _Stat(label: '速度', value: figures.speedLabel),
-          _Stat(label: '剩余时间', value: figures.remainingLabel),
+          if (phase == SendPhase.sending) ...<Widget>[
+            _Stat(label: '速度', value: figures.speedLabel),
+            _Stat(label: '剩余时间', value: figures.remainingLabel),
+          ],
         ],
         if (failureReason != null)
           Padding(
             padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-            child: _Notice(
-              palette: palette,
-              text: failureReason!,
-              isError: true,
+            child: NsInfoBanner(
+              title: '发送未完成',
+              message: failureReason!,
+              tone: NsStatusTone.error,
             ),
           ),
       ],
     );
   }
+
+  static int _stageIndex(SendPhase phase) => switch (phase) {
+    SendPhase.empty || SendPhase.ready || SendPhase.preparing => 0,
+    SendPhase.waitingForPeer || SendPhase.offeredToPeer => 1,
+    SendPhase.sending => 2,
+    SendPhase.awaitingVerification => 3,
+    SendPhase.savedByPeer => 4,
+    SendPhase.failed => 3,
+  };
 }
 
 /// The path entry a platform without a picker uses.
@@ -330,40 +361,6 @@ class _Stat extends StatelessWidget {
           Text(label, style: Theme.of(context).textTheme.bodyMedium),
           Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
-      ),
-    );
-  }
-}
-
-class _Notice extends StatelessWidget {
-  const _Notice({
-    required this.palette,
-    required this.text,
-    this.isError = false,
-  });
-
-  final NearSendColors palette;
-  final String text;
-  final bool isError;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(NearSendSpacing.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Icon(
-              isError ? Icons.error_outline : Icons.info_outline,
-              color: isError ? palette.error : palette.primary,
-            ),
-            const SizedBox(width: NearSendSpacing.sm),
-            Expanded(
-              child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-            ),
-          ],
-        ),
       ),
     );
   }
