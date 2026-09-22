@@ -1,0 +1,274 @@
+# Build and publish a GitHub Release after the master branch CI gate passes.
+# Every platform is built on its native runner; the publish job is the only job
+# allowed to create a tag or release.
+
+name: Release
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+
+jobs:
+  prepare:
+    name: Prepare release metadata
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'master')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Calculate next version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(bash tooling/release/next_version.sh)"
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "build_number=${GITHUB_RUN_NUMBER}"
+            echo "commit=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Preparing NearSend v$version from $(git rev-parse --short HEAD)"
+
+  build-android:
+    name: Build Android APK
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - name: Set up JDK
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+      - name: Install pinned Flutter
+        run: bash tooling/ci/install_flutter.sh
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Build release APK
+        run: >-
+          flutter build apk --release
+          --build-name "${{ needs.prepare.outputs.version }}"
+          --build-number "${{ needs.prepare.outputs.build_number }}"
+          --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
+          --dart-define=NS_GIT_DIRTY=false
+          --dart-define=NS_BUILD_CHANNEL=release
+      - name: Stage APK
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "dist/NearSend-${{ needs.prepare.outputs.version }}-android.apk"
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: nearsend-android
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  build-windows:
+    name: Build Windows package
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+      - name: Install pinned Flutter
+        shell: bash
+        run: bash tooling/ci/install_flutter.sh
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Build Windows release
+        run: >-
+          flutter build windows --release
+          --build-name "${{ needs.prepare.outputs.version }}"
+          --build-number "${{ needs.prepare.outputs.build_number }}"
+          --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
+          --dart-define=NS_GIT_DIRTY=false
+          --dart-define=NS_BUILD_CHANNEL=release
+      - name: Package Windows bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* `
+            -DestinationPath "dist/NearSend-${{ needs.prepare.outputs.version }}-windows-x64.zip"
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: nearsend-windows
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  build-linux:
+    name: Build Linux packages
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev dpkg-dev
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+      - name: Install pinned Flutter
+        run: bash tooling/ci/install_flutter.sh
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Build Linux release
+        run: >-
+          flutter build linux --release
+          --build-name "${{ needs.prepare.outputs.version }}"
+          --build-number "${{ needs.prepare.outputs.build_number }}"
+          --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
+          --dart-define=NS_GIT_DIRTY=false
+          --dart-define=NS_BUILD_CHANNEL=release
+      - name: Package Linux bundle
+        run: |
+          mkdir -p dist
+          bash tooling/release/package_linux_deb.sh \
+            "${{ needs.prepare.outputs.version }}" \
+            "${{ needs.prepare.outputs.build_number }}" \
+            build/linux/x64/release/bundle \
+            dist
+      - name: Upload packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: nearsend-linux
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-macos:
+    name: Build macOS package
+    needs: prepare
+    runs-on: macos-14
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - name: Cache Flutter SDK
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.0
+        with:
+          path: ${{ runner.temp }}/flutter-sdk
+          key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
+      - name: Install pinned Flutter
+        run: bash tooling/ci/install_flutter.sh
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Build macOS release
+        run: >-
+          flutter build macos --release
+          --build-name "${{ needs.prepare.outputs.version }}"
+          --build-number "${{ needs.prepare.outputs.build_number }}"
+          --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
+          --dart-define=NS_GIT_DIRTY=false
+          --dart-define=NS_BUILD_CHANNEL=release
+      - name: Package macOS application
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/macos/Build/Products/Release/nearsend.app \
+            "dist/NearSend-${{ needs.prepare.outputs.version }}-macos.zip"
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        with:
+          name: nearsend-macos
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Create GitHub Release
+    needs: [prepare, build-android, build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.commit }}
+      - name: Download packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          pattern: nearsend-*
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          cd dist
+          sha256sum * | sort -k2 > SHA256SUMS.txt
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="${{ needs.prepare.outputs.tag }}" \
+            -f target_commitish="${{ needs.prepare.outputs.commit }}" \
+            --jq .body > RELEASE_NOTES.md
+          cat >> RELEASE_NOTES.md <<'EOF'
+
+          ## Build details
+
+          - Commit: `${{ needs.prepare.outputs.commit }}`
+          - Flutter: `${{ env.FLUTTER_VERSION }}`
+          - Android package is currently built with the repository's debug signing configuration; configure a protected signing secret before distributing it outside internal testing.
+          - Linux packages target `amd64`.
+          - SHA-256 checksums are attached as `SHA256SUMS.txt`.
+          EOF
+      - name: Create release and upload packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.prepare.outputs.tag }}" dist/* \
+            --target "${{ needs.prepare.outputs.commit }}" \
+            --title "NearSend ${{ needs.prepare.outputs.tag }}" \
+            --notes-file RELEASE_NOTES.md
