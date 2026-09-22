@@ -568,6 +568,32 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - **因此目标不标记完成，也不标记 blocked**：仍有不依赖设备的工作可做（`resume` 编排、
   剩余空间平台测量、Windows 取件器），而真机验证只差一个人工动作。
 
+#### `t11-01-31`：**安装阻塞解除，应用首次在真机上运行**（真机证据的开端）
+
+- **阻塞已解除**：在设备上开启「通过 USB 安装应用」后，`adb install -r app-debug.apk` 返回
+  **`Success`**（第 14 次尝试，前 13 次皆为 `INSTALL_FAILED_USER_RESTRICTED`）。应用随即用
+  `am start` 启动，进程存活（`ps -A` 可见 `com.nearsend.app`）。
+- **首次真机执行的对象**：`lib/app/` 的节点生命周期、`AppDirectories` 的 Android 分支
+  （channel 方法 `applicationDirectory`）、`package:sqlite3` 的原生库加载、以及 SQLite 的
+  WAL/耐久 PRAGMA。证据是**应用私有目录里的实际文件**（`adb shell run-as com.nearsend.app ls -l files`）：
+  `nearsend.db`、`nearsend.db-wal`、`nearsend.db-shm`、`staging-root/staging/`。
+  这四样一起出现只能由「目录取自 `filesDir` + sqlite3 在 Android 上加载成功 + WAL 被接受 +
+  暂存布局已创建」共同解释。**这是本项目第一次在 Android 上跑起来**，也把
+  `applicationDirectory` 从未在设备执行过的旧结论改掉了。
+- **一次需要记录下来的假警报**：第一次检查 `files/` 时里面只有 `profileInstalled`、没有数据库，
+  当时的推断是「设备上打不开 sqlite」。**该推断是错的**——装上去的 APK 构建于 01:10，而
+  `applicationDirectory` 是 05:00 的提交（`f1c6b36`）才加入的：陈旧 APK 里通道不存在，
+  于是启动路径在解析目录时失败。重新构建并安装当前代码后，数据库随即出现。
+  **教训**：设备证据必须标明所装 APK 对应的提交，否则会把陈旧构建的失败读成产品缺陷。
+- **仍未完成（本轮到此为止）**：真正的**数据面**真机验证（`integration_test/android_bidirectional_transfer_test.dart`
+  对 Windows 节点双向互传）**没有跑**。原因是 Windows 侧的 harness 当前**启动失败**：
+  台账里记录的 `dart run tooling/spikes/lan_server/main.dart` 在本环境编译不过——
+  该文件导入了 `package:flutter/*`，而 `dart run` 不带 Flutter 的 SDK 库
+  （报错为 `'Offset' isn't a type` 之类的 flutter 内部错误）。**这是调用方式的问题，不是协议问题**；
+  下一轮要么改用能解析 Flutter 的启动方式（`flutter run -d windows <file>` 或把 harness 改为不依赖
+  Flutter 的纯 Dart 入口），要么把它做成 `flutter test` 可驱动的进程，然后按
+  [证据汇总](testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md) 第 3 节补齐两端记录。
+
 #### `t11-01-08` … `t11-01-10`：接收确认、文件选择结果、SAF 通道与选择控制器
 
 - **`ReceiveConfirmationPage` + `SpaceEstimateSnapshot` 渲染**（`t11-01-08`）：§16.2 要求逐卷解释性明细
