@@ -154,7 +154,7 @@ class _ReceivePageState extends State<ReceivePage> {
   @override
   void didUpdateWidget(ReceivePage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.pushOffers != widget.pushOffers ||
+    if (!_samePushOffers(oldWidget.pushOffers, widget.pushOffers) ||
         oldWidget.pushSpaceEstimate != widget.pushSpaceEstimate) {
       _checkedSpaces.clear();
       if (widget.pushOffers.length == 1 && widget.pushSpaceEstimate != null) {
@@ -168,6 +168,27 @@ class _ReceivePageState extends State<ReceivePage> {
         oldWidget.pushPhase != widget.pushPhase) {
       _startPolling();
     }
+  }
+
+  static bool _samePushOffers(
+    List<ServerOffer> previous,
+    List<ServerOffer> current,
+  ) {
+    if (previous.length != current.length) {
+      return false;
+    }
+    for (int index = 0; index < previous.length; index++) {
+      final ServerOffer before = previous[index];
+      final ServerOffer after = current[index];
+      if (before.transferId != after.transferId ||
+          before.manifestDigest != after.manifestDigest ||
+          before.direction != after.direction ||
+          before.fileCount != after.fileCount ||
+          before.totalBytes != after.totalBytes) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _checkPushSpace(ServerOffer offer, String location) async {

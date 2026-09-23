@@ -80,24 +80,21 @@ void main() {
       expect(stalled.remainingLabel, '已停止（无进展）');
     });
 
-    test(
-      'a reported figure beyond the total is clamped, never shown over 100%',
-      () {
-        final TransferProgress over = TransferProgress.start(
-          totalBytes: 100,
-          atMillis: 0,
-        ).updated(transferredBytes: 500, atMillis: 10);
+    test('a reported figure beyond the total is clamped, never shown over 100%', () {
+      final TransferProgress over = TransferProgress.start(
+        totalBytes: 100,
+        atMillis: 0,
+      ).updated(transferredBytes: 500, atMillis: 10);
 
-        expect(over.transferredBytes, 100);
-        expect(
-          over.fraction,
-          1.0,
-          reason:
-              'a figure over the manifest total can only come from a disagreement about what '
-              'the transfer contains, and the screen must not repeat it as fact',
-        );
-      },
-    );
+      expect(over.transferredBytes, 100);
+      expect(
+        over.fraction,
+        1.0,
+        reason:
+            'a figure over the manifest total can only come from a disagreement about what '
+            'the transfer contains, and the screen must not repeat it as fact',
+      );
+    });
 
     test('the phase words distinguish the states a user is waiting on', () {
       expect(TransferPhase.preparing.isActive, isTrue);
@@ -171,8 +168,7 @@ void main() {
       expect(
         find.text('继续'),
         findsNothing,
-        reason:
-            'a control that cannot apply is absent rather than disabled and confusing',
+        reason: 'a control that cannot apply is absent rather than disabled and confusing',
       );
     });
 
@@ -250,8 +246,7 @@ void main() {
       expect(
         find.textContaining('指纹'),
         findsWidgets,
-        reason:
-            'the page must tell the user to compare the fingerprint before connecting',
+        reason: 'the page must tell the user to compare the fingerprint before connecting',
       );
     });
 
@@ -319,76 +314,78 @@ void main() {
       },
     );
 
-    testWidgets('the connect action is absent, with a reason, when there is none', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: buildNearSendTheme(Brightness.light),
-          home: const ConnectionPage(payload: null),
-        ),
-      );
-      await tester.enterText(
-        find.byType(TextField),
-        '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
-        '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
-        '"sessionId":"11111111-2222-4333-8444-555555555555",'
-        '"candidates":[{"host":"10.0.0.9","port":18443}],'
-        '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
-      );
-      await tester.pump();
-
-      expect(
-        find.text('连接'),
-        findsNothing,
-        reason:
-            'a button that cannot act is a placeholder; the page states the gap instead of '
-            'offering a control that silently does nothing',
-      );
-      expect(find.text(ConnectionPage.noConnectorNote), findsOneWidget);
-    });
-
-    testWidgets('a connection attempt is shown as it proceeds and when it ends', (
-      tester,
-    ) async {
-      Future<void> pump(ConnectionAttempt attempt) => tester.pumpWidget(
-        MaterialApp(
-          theme: buildNearSendTheme(Brightness.light),
-          home: ConnectionPage(
-            payload: null,
-            onConnect: (_) {},
-            connection: attempt,
+    testWidgets(
+      'the connect action is absent, with a reason, when there is none',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: const ConnectionPage(payload: null),
           ),
-        ),
-      );
+        );
+        await tester.enterText(
+          find.byType(TextField),
+          '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
+          '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
+          '"sessionId":"11111111-2222-4333-8444-555555555555",'
+          '"candidates":[{"host":"10.0.0.9","port":18443}],'
+          '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
+        );
+        await tester.pump();
 
-      await pump(
-        const ConnectionAttempt(phase: ConnectionAttemptPhase.connecting),
-      );
-      expect(find.text(ConnectionPage.connectingNote), findsOneWidget);
+        expect(
+          find.text('连接'),
+          findsNothing,
+          reason:
+              'a button that cannot act is a placeholder; the page states the gap instead of '
+              'offering a control that silently does nothing',
+        );
+        expect(find.text(ConnectionPage.noConnectorNote), findsOneWidget);
+      },
+    );
 
-      await pump(
-        const ConnectionAttempt(phase: ConnectionAttemptPhase.connected),
-      );
-      expect(find.text(ConnectionPage.connectedNote), findsOneWidget);
+    testWidgets(
+      'a connection attempt is shown as it proceeds and when it ends',
+      (tester) async {
+        Future<void> pump(ConnectionAttempt attempt) => tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: ConnectionPage(
+              payload: null,
+              onConnect: (_) {},
+              connection: attempt,
+            ),
+          ),
+        );
 
-      await pump(
-        ConnectionAttempt(
-          phase: ConnectionAttemptPhase.failed,
-          reason: '无法连接到对方设备。',
-          peerFingerprint: 'cd' * 32,
-          pinMismatched: true,
-        ),
-      );
-      expect(find.textContaining('无法连接到对方设备。'), findsOneWidget);
-      expect(
-        find.textContaining('cd' * 32),
-        findsOneWidget,
-        reason:
-            'a mismatch is the one failure where the user needs the value they are disagreeing '
-            'about, and it is not a secret: the peer publishes it in its own payload',
-      );
-    });
+        await pump(
+          const ConnectionAttempt(phase: ConnectionAttemptPhase.connecting),
+        );
+        expect(find.text(ConnectionPage.connectingNote), findsOneWidget);
+
+        await pump(
+          const ConnectionAttempt(phase: ConnectionAttemptPhase.connected),
+        );
+        expect(find.text(ConnectionPage.connectedNote), findsOneWidget);
+
+        await pump(
+          ConnectionAttempt(
+            phase: ConnectionAttemptPhase.failed,
+            reason: '无法连接到对方设备。',
+            peerFingerprint: 'cd' * 32,
+            pinMismatched: true,
+          ),
+        );
+        expect(find.textContaining('无法连接到对方设备。'), findsOneWidget);
+        expect(
+          find.textContaining('cd' * 32),
+          findsOneWidget,
+          reason:
+              'a mismatch is the one failure where the user needs the value they are disagreeing '
+              'about, and it is not a secret: the peer publishes it in its own payload',
+        );
+      },
+    );
 
     testWidgets(
       'shows peer metadata as unknown until the fingerprint is verified',
@@ -437,30 +434,24 @@ void _noopPairing(PairingPayload _) {}
 /// with "free space or change the location, then retry", and `INTERRUPTED` has a resume as its exit -
 /// rendering either as 失败 would tell the user the transfer is over when it is not.
 void _phaseMappingTests() {
-  test(
-    'every task state maps to a phase, and the two recoverable ones are not failures',
-    () {
-      expect(
-        phaseForTransferState(TransferState.blocked),
-        TransferPhase.blocked,
-      );
-      expect(
-        phaseForTransferState(TransferState.interrupted),
-        TransferPhase.interrupted,
-      );
-      expect(
-        TransferPhase.blocked.label,
-        isNot(TransferPhase.failed.label),
-        reason: 'a blocked transfer is waiting on the user, not over',
-      );
-      expect(TransferPhase.interrupted.canInterrupt, isFalse);
-      expect(
-        TransferPhase.blocked.canInterrupt,
-        isFalse,
-        reason: '§10 gives blocked a user action as its exit, not a pause',
-      );
-    },
-  );
+  test('every task state maps to a phase, and the two recoverable ones are not failures', () {
+    expect(phaseForTransferState(TransferState.blocked), TransferPhase.blocked);
+    expect(
+      phaseForTransferState(TransferState.interrupted),
+      TransferPhase.interrupted,
+    );
+    expect(
+      TransferPhase.blocked.label,
+      isNot(TransferPhase.failed.label),
+      reason: 'a blocked transfer is waiting on the user, not over',
+    );
+    expect(TransferPhase.interrupted.canInterrupt, isFalse);
+    expect(
+      TransferPhase.blocked.canInterrupt,
+      isFalse,
+      reason: '§10 gives blocked a user action as its exit, not a pause',
+    );
+  });
 
   test('the states a user cannot tell apart collapse to one word', () {
     expect(

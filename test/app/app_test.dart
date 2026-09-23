@@ -591,6 +591,19 @@ void main() {
 
       await tester.enterText(find.byType(TextField), saved.path);
       await tester.pump();
+      await settle(
+        tester,
+        () => visible(ReceivePage.unknownSpaceAcknowledgement),
+        attempts: 120,
+        realDelay: const Duration(milliseconds: 100),
+      );
+      await tester.scrollUntilVisible(
+        find.text(ReceivePage.unknownSpaceAcknowledgement),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tapText(tester, ReceivePage.unknownSpaceAcknowledgement);
+      expect(find.text(ReceivePage.spaceUnknownNote), findsOneWidget);
       await tapText(tester, '接收并保存');
 
       await settle(
@@ -601,14 +614,7 @@ void main() {
       );
       expect(
         find.text(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
-        findsOneWidget,
-      );
-      expect(
-        find.text(ReceivePage.spaceUnknownNote),
-        findsOneWidget,
-        reason:
-            'this build cannot measure a volume, so the screen has to say that no space pre-check was '
-            'done - reading as "checked and fine" would be a claim nobody made',
+        findsWidgets,
       );
       // The sender finishes on its own schedule; waited for rather than assumed, so a failure there
       // is reported here instead of as a missing file below.

@@ -43,6 +43,9 @@ class UnknownPlatformStorageGateway implements PlatformStorageGateway {
   final String platformLabel;
 
   @override
+  bool get supportsDirectorySelection => false;
+
+  @override
   Future<String?> defaultReceiveLocation() async => null;
 
   @override
@@ -76,6 +79,9 @@ class MethodChannelAndroidStorageGateway implements PlatformStorageGateway {
 
   @override
   String get platformLabel => 'Android';
+
+  @override
+  bool get supportsDirectorySelection => false;
 
   @override
   Future<String?> defaultReceiveLocation() async {

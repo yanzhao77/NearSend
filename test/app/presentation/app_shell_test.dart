@@ -8,10 +8,6 @@ import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 
 void main() {
-  tearDown(() {
-    debugDefaultTargetPlatformOverride = null;
-  });
-
   Widget shell() => MaterialApp(
     theme: buildNearSendTheme(Brightness.light),
     home: NearSendAppShell(
@@ -24,19 +20,18 @@ void main() {
   testWidgets('desktop shell uses the full navigation rail above 900px', (
     tester,
   ) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(shell());
 
-    expect(find.byType(NavigationRail), findsOneWidget);
-    expect(find.text('首页'), findsOneWidget);
-    expect(find.text('设置'), findsOneWidget);
-    expect(find.text('任务'), findsOneWidget);
-  });
+    final NavigationRail rail = tester.widget<NavigationRail>(
+      find.byType(NavigationRail),
+    );
+    expect(rail.extended, isTrue);
+    expect(rail.destinations, hasLength(4));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('compact desktop shell keeps the 72px icon rail', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     await tester.binding.setSurfaceSize(const Size(899, 640));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(shell());
@@ -46,12 +41,17 @@ void main() {
     );
     expect(rail.extended, isFalse);
     expect(rail.minWidth, NearSendSizing.desktopSidebarCollapsedWidth);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('desktop content is in a focus traversal group', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     await tester.pumpWidget(shell());
 
-    expect(find.byType(FocusTraversalGroup), findsOneWidget);
-  });
+    expect(
+      find.descendant(
+        of: find.byType(NearSendAppShell),
+        matching: find.byType(FocusTraversalGroup),
+      ),
+      findsOneWidget,
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

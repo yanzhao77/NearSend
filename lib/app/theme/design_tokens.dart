@@ -392,7 +392,9 @@ ThemeData buildNearSendTheme(Brightness brightness) {
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(NearSendSizing.buttonHeight),
         padding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.lg),
-        textStyle: NearSendTypography.labelLarge.toTextStyle(colors.textPrimary),
+        textStyle: NearSendTypography.labelLarge.toTextStyle(
+          colors.textPrimary,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(NearSendRadii.button),
         ),
@@ -425,7 +427,9 @@ ThemeData buildNearSendTheme(Brightness brightness) {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(NearSendRadii.pill),
       ),
-      labelStyle: NearSendTypography.labelSmall.toTextStyle(colors.textSecondary),
+      labelStyle: NearSendTypography.labelSmall.toTextStyle(
+        colors.textSecondary,
+      ),
       secondaryLabelStyle: NearSendTypography.labelSmall.toTextStyle(
         colors.textSecondary,
       ),
@@ -455,9 +459,7 @@ ThemeData buildNearSendTheme(Brightness brightness) {
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: colors.textPrimary,
-      contentTextStyle: NearSendTypography.bodyMedium.toTextStyle(
-        colors.card,
-      ),
+      contentTextStyle: NearSendTypography.bodyMedium.toTextStyle(colors.card),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(NearSendRadii.button),
       ),
@@ -470,8 +472,12 @@ ThemeData buildNearSendTheme(Brightness brightness) {
     ),
     listTileTheme: ListTileThemeData(
       minVerticalPadding: NearSendSpacing.xs,
-      contentPadding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.md),
-      titleTextStyle: NearSendTypography.bodyMedium.toTextStyle(colors.textPrimary),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: NearSendSpacing.md,
+      ),
+      titleTextStyle: NearSendTypography.bodyMedium.toTextStyle(
+        colors.textPrimary,
+      ),
       subtitleTextStyle: NearSendTypography.labelSmall.toTextStyle(
         colors.textSecondary,
       ),
@@ -506,7 +512,9 @@ ThemeData buildNearSendTheme(Brightness brightness) {
           width: NearSendSizing.focusRingWidth,
         ),
       ),
-      labelStyle: NearSendTypography.bodyMedium.toTextStyle(colors.textSecondary),
+      labelStyle: NearSendTypography.bodyMedium.toTextStyle(
+        colors.textSecondary,
+      ),
       hintStyle: NearSendTypography.bodyMedium.toTextStyle(colors.textMuted),
       errorStyle: NearSendTypography.labelSmall.toTextStyle(colors.error),
     ),
