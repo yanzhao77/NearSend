@@ -213,7 +213,7 @@ jobs:
             CLASS="$class" perl -0pi -e '
               my $class = $ENV{CLASS};
               my $pragma = q{@pragma('\''vm:entry-point'\'')};
-              my $declaration = "class $class";
+              my $declaration = "final class $class";
               my $guard = $pragma . "\n" . $declaration;
               if (index($_, $guard) < 0) {
                 my $count = s/^\Q$declaration\E\b/$guard/m;
@@ -225,7 +225,7 @@ jobs:
             CLASS="$class" perl -0ne '
               my $class = $ENV{CLASS};
               my $pragma = q{@pragma('\''vm:entry-point'\'')};
-              my $needle = $pragma . "\nclass " . $class;
+              my $needle = $pragma . "\nfinal class " . $class;
               exit(index($_, $needle) >= 0 ? 0 : 1);
             ' "$target" || {
               echo "ERROR: Flutter macOS AOT workaround verification failed for ${class}" >&2
