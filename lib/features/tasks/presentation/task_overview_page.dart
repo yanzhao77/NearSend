@@ -99,9 +99,8 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
                         progress: task.progress,
                         progressLabel:
                             '${task.committedBytes} / ${task.totalBytes} B',
-                        onPressed: () => Navigator.of(
-                          context,
-                        ).pushNamed('/task-detail', arguments: task.taskId),
+                        onPressed: () => Navigator.of(context)
+                            .pushNamed('/task-detail', arguments: task.taskId),
                       ),
                     ),
               ],

@@ -246,8 +246,7 @@ CREATE TABLE manifest_chunks (
 
   /// Indexes schema version 4 adds.
   static const Map<String, String> version4Indexes = <String, String>{
-    'manifest_files_by_file':
-        'CREATE INDEX manifest_files_file ON manifest_files (transfer_id, file_id);',
+    'manifest_files_by_file': 'CREATE INDEX manifest_files_file ON manifest_files (transfer_id, file_id);',
     'manifest_staging_unsealed':
         'CREATE INDEX manifest_staging_open ON manifest_staging (sealed_at, '
         'first_content_at);',

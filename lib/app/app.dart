@@ -356,9 +356,9 @@ class _NearSendAppState extends State<NearSendApp> {
             NearSendApp.settingsRoute: (_) =>
                 SettingsPage(controller: _settings, space: _space),
             NearSendApp.taskDetailRoute: (BuildContext context) {
-              final Object? argument = ModalRoute.of(
-                context,
-              )?.settings.arguments;
+              final Object? argument = ModalRoute.of(context)
+                  ?.settings
+                  .arguments;
               if (argument is! String) {
                 return const Scaffold(
                   body: NsErrorState(
@@ -396,9 +396,9 @@ class _NearSendAppState extends State<NearSendApp> {
                     onConnect: widget.peer == null ? null : connect,
                     onContinue: _continueTarget(receiving) == null
                         ? null
-                        : () => Navigator.of(
-                            context,
-                          ).pushNamed(_continueTarget(receiving)!),
+                        : () =>
+                              Navigator.of(context)
+                                  .pushNamed(_continueTarget(receiving)!),
                     continueLabel: receiving
                         ? ConnectionPage.continueLabelReceive
                         : ConnectionPage.continueLabelSend,

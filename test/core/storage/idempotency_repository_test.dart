@@ -423,7 +423,7 @@ void main() {
           requestDigest: 'digest-1',
           leaseEpoch: 1,
           effect: () => const <String, Object?>{'state': 'WAITING_ACCEPT'},
-          retention: const Duration(milliseconds: 1),
+          retention: Duration.zero,
         );
         repository.beginInFlight(
           scope: scopeOf(ProtocolOperation.resume),

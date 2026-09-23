@@ -43,6 +43,9 @@ class _FakeStorageGateway implements PlatformStorageGateway {
   String get platformLabel => 'test';
 
   @override
+  bool get supportsDirectorySelection => false;
+
+  @override
   Future<String?> defaultReceiveLocation() async => 'opaque://location';
 
   @override

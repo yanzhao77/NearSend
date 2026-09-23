@@ -45,17 +45,17 @@ class HomePage extends StatelessWidget {
                 icon: Icons.north_east,
                 title: '发送文件',
                 message: '选择文件，连接本地设备并等待对方确认。',
-                onPressed: () => Navigator.of(
-                  context,
-                ).pushNamed(connectRoute, arguments: 'send'),
+                onPressed: () =>
+                    Navigator.of(context)
+                        .pushNamed(connectRoute, arguments: 'send'),
               ),
               _ActionCard(
                 icon: Icons.south,
                 title: '接收文件',
                 message: '查看对方提供的文件，确认位置后接收并保存。',
-                onPressed: () => Navigator.of(
-                  context,
-                ).pushNamed(connectRoute, arguments: 'receive'),
+                onPressed: () =>
+                    Navigator.of(context)
+                        .pushNamed(connectRoute, arguments: 'receive'),
               ),
             ];
             return ListView(

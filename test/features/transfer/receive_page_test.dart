@@ -145,8 +145,7 @@ void main() {
     expect(
       find.widgetWithText(FilledButton, '接收并保存'),
       findsNothing,
-      reason:
-          'there is nothing to accept, and a button for it would be a placeholder',
+      reason: 'there is nothing to accept, and a button for it would be a placeholder',
     );
     expect(
       refreshes,
@@ -197,8 +196,7 @@ void main() {
     expect(
       find.textContaining('/tmp/received/对方文件.bin'),
       findsOneWidget,
-      reason:
-          'the location is what the user chose and the only way they can find the file again',
+      reason: 'the location is what the user chose and the only way they can find the file again',
     );
     await unmount(tester);
   });
@@ -223,62 +221,62 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('a transfer being pushed to this device is shown and answerable', (
-    tester,
-  ) async {
-    ServerOffer? answered;
-    String? location;
-    await pump(
-      tester,
-      phase: ReceivePhase.idle,
-      pushOffers: <ServerOffer>[
-        ServerOffer(
-          transferId: '55555555-6666-4777-8888-999999999999',
-          manifestDigest:
-              'abababababababababababababababababababababababababababababababab',
-          direction: TransferDirection.clientToServer,
-          fileCount: 3,
-          totalBytes: 4 * 1024 * 1024,
-        ),
-      ],
-      pushSpaceVerdict: SpaceVerdict.sufficient,
-      onAcceptPush: (ServerOffer o, String where) async {
-        answered = o;
-        location = where;
-        return true;
-      },
-    );
+  testWidgets(
+    'a transfer being pushed to this device is shown and answerable',
+    (tester) async {
+      ServerOffer? answered;
+      String? location;
+      await pump(
+        tester,
+        phase: ReceivePhase.idle,
+        pushOffers: <ServerOffer>[
+          ServerOffer(
+            transferId: '55555555-6666-4777-8888-999999999999',
+            manifestDigest: 'abababababababababababababababababababababababababababababababab',
+            direction: TransferDirection.clientToServer,
+            fileCount: 3,
+            totalBytes: 4 * 1024 * 1024,
+          ),
+        ],
+        pushSpaceVerdict: SpaceVerdict.sufficient,
+        onAcceptPush: (ServerOffer o, String where) async {
+          answered = o;
+          location = where;
+          return true;
+        },
+      );
 
-    expect(find.text(ReceivePage.pushSectionHeading), findsOneWidget);
-    expect(
-      find.text('3 个文件 · 4.0 MiB'),
-      findsOneWidget,
-      reason:
-          'the offer is described from the sealed manifest, so the user is deciding about the '
-          'transfer they will actually receive',
-    );
+      expect(find.text(ReceivePage.pushSectionHeading), findsOneWidget);
+      expect(
+        find.text('3 个文件 · 4.0 MiB'),
+        findsOneWidget,
+        reason:
+            'the offer is described from the sealed manifest, so the user is deciding about the '
+            'transfer they will actually receive',
+      );
 
-    // Without a location there is nothing to accept into.
-    expect(
-      find.widgetWithText(FilledButton, '接收并保存'),
-      findsNothing,
-      reason:
-          '§6 keeps the acceptance and the save location together; offering the button before a '
-          'location exists would invite a decision that cannot be recorded',
-    );
+      // Without a location there is nothing to accept into.
+      expect(
+        find.widgetWithText(FilledButton, '接收并保存'),
+        findsNothing,
+        reason:
+            '§6 keeps the acceptance and the save location together; offering the button before a '
+            'location exists would invite a decision that cannot be recorded',
+      );
 
-    await tester.enterText(find.byType(TextField), '/tmp/pushed');
-    await tester.pump();
-    final Finder acceptButton = find.widgetWithText(FilledButton, '接收并保存');
-    await tester.ensureVisible(acceptButton);
-    await tester.pump();
-    await tester.tap(acceptButton);
-    await tester.pump();
+      await tester.enterText(find.byType(TextField), '/tmp/pushed');
+      await tester.pump();
+      final Finder acceptButton = find.widgetWithText(FilledButton, '接收并保存');
+      await tester.ensureVisible(acceptButton);
+      await tester.pump();
+      await tester.tap(acceptButton);
+      await tester.pump();
 
-    expect(answered?.transferId, '55555555-6666-4777-8888-999999999999');
-    expect(location, '/tmp/pushed');
-    await unmount(tester);
-  });
+      expect(answered?.transferId, '55555555-6666-4777-8888-999999999999');
+      expect(location, '/tmp/pushed');
+      await unmount(tester);
+    },
+  );
 
   testWidgets('an unmeasured volume is said out loud, not shown as a pass', (
     tester,
@@ -289,8 +287,7 @@ void main() {
       pushOffers: <ServerOffer>[
         ServerOffer(
           transferId: '77777777-8888-4999-8000-bbbbbbbbbbbb',
-          manifestDigest:
-              'abababababababababababababababababababababababababababababababab',
+          manifestDigest: 'abababababababababababababababababababababababababababababababab',
           direction: TransferDirection.clientToServer,
           fileCount: 1,
           totalBytes: 4 * 1024 * 1024,
@@ -314,8 +311,7 @@ void main() {
       pushOffers: <ServerOffer>[
         ServerOffer(
           transferId: '77777777-8888-4999-8000-bbbbbbbbbbbb',
-          manifestDigest:
-              'abababababababababababababababababababababababababababababababab',
+          manifestDigest: 'abababababababababababababababababababababababababababababababab',
           direction: TransferDirection.clientToServer,
           fileCount: 1,
           totalBytes: 4 * 1024 * 1024,

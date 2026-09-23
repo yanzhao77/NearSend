@@ -61,8 +61,7 @@ void main() {
     expect(
       tester.widget<Tooltip>(find.byType(Tooltip).first).message,
       'a-very-long-file-name-that-keeps-its-extension.tar.gz',
-      reason:
-          'the visible text is allowed to ellipsize; Tooltip owns the full name',
+      reason: 'the visible text is allowed to ellipsize; Tooltip owns the full name',
     );
   });
 

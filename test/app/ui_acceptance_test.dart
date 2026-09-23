@@ -27,8 +27,7 @@ void main() {
             child: Column(
               children: <Widget>[
                 NsFileRow(
-                  fileName:
-                      'an-extremely-long-project-export-name-that-keeps-the-extension.tar.gz',
+                  fileName: 'an-extremely-long-project-export-name-that-keeps-the-extension.tar.gz',
                   sizeLabel: '20.0 GiB',
                   statusLabel: '完整性校验失败，需要更换位置后重试',
                   statusTone: NsStatusTone.error,
@@ -54,7 +53,6 @@ void main() {
     'semantic labels expose status and stage without relying on colour',
     (tester) async {
       final SemanticsHandle semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
       await tester.pumpWidget(
         host(
           const Column(
@@ -71,6 +69,7 @@ void main() {
 
       expect(find.bySemanticsLabel('空间未知'), findsOneWidget);
       expect(find.bySemanticsLabel('传输阶段：校验'), findsOneWidget);
+      semantics.dispose();
     },
   );
 }

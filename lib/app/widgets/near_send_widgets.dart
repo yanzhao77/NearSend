@@ -168,6 +168,8 @@ class NsStatusBadge extends StatelessWidget {
     final _NsSemanticStyle semantic = _NsSemanticStyle.of(context, tone);
     return Semantics(
       label: label,
+      container: true,
+      excludeSemantics: true,
       child: Container(
         constraints: const BoxConstraints(minHeight: 28),
         padding: const EdgeInsets.symmetric(horizontal: NearSendSpacing.sm),
@@ -182,9 +184,8 @@ class NsStatusBadge extends StatelessWidget {
             const SizedBox(width: NearSendSpacing.xxs),
             Text(
               label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: semantic.color),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: semantic.color),
             ),
           ],
         ),
@@ -319,6 +320,8 @@ class NsStageProgress extends StatelessWidget {
     final int safeActive = activeIndex.clamp(0, stages.length - 1);
     return Semantics(
       label: '传输阶段：${stages[safeActive]}',
+      container: true,
+      excludeSemantics: true,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -404,9 +407,8 @@ class _NsStageItem extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: semantic.color),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: semantic.color),
         ),
       ],
     );
@@ -484,9 +486,8 @@ class NsSpaceBreakdown extends StatelessWidget {
           if (shortfallLabel != null)
             Text(
               shortfallLabel!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: semantic.color),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: semantic.color),
             ),
         ],
       ),
