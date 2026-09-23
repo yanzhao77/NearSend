@@ -1,10 +1,10 @@
 # NearSend 项目现状与进度台账
 
-更新日期：2026-09-22。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格与 GitHub Actions 发布结果。后续以本文件最新Git版本为准，不用聊天记录代替状态。
+更新日期：2026-09-23。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果与 T12 UI 合并状态。后续以本文件最新Git版本为准，不用聊天记录代替状态。
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器仍缺目标设备证据，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.1`；Android debug signing、macOS 未签名、Linux amd64 和协议未冻结仍是明确限制。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.1`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
 
 ## 1. 状态口径
 
@@ -34,10 +34,10 @@
 | D07 | Vibe Coding 开发流程 | 已完成：治理 | [流程](DEVELOPMENT_WORKFLOW.md) | 后续任务须形成需求—PR—证据—台账闭环 |
 | D08 | 系统架构 | 已完成：实施草案 | [架构](architecture/SYSTEM_ARCHITECTURE.md) | 平台依赖与部分接口待 S0 冻结 |
 | D09 | 应用与端侧服务设计 | 已完成：实施草案 | [端侧设计](architecture/APP_AND_SERVICE_DESIGN.md) | NearSend 无中心云后台；具体库待验证 |
-| D10 | UI/UX 与视觉基线 | 已完成：视觉设计；UI 改造进行中 | [设计入口](ui/README.md)、[样式指南](ui/STYLE_GUIDE.md)、[Design Token](../lib/app/theme/design_tokens.dart)、[T12 任务卡](tasks/T12-00.md) | T12-00 至 T12-10 已形成实现或证据记录；Android 真机截图、Windows/iOS 平台证据和 Flutter SDK 复测仍阻塞，不标记为全平台通过 |
+| D10 | UI/UX 与视觉基线 | 已完成：视觉设计与 UI 基线代码；平台验收阻塞 | [设计入口](ui/README.md)、[样式指南](ui/STYLE_GUIDE.md)、[Design Token](../lib/app/theme/design_tokens.dart)、[T12 任务卡](tasks/T12-00.md)、[PR #61](https://github.com/yanzhao77/NearSend/pull/61) | T12-00 至 T12-10 已形成实现或证据记录并合并到 `master`；Android 真机截图、Windows/iOS 平台证据和 Flutter SDK 复测仍阻塞，不标记为全平台通过 |
 | D11 | 质量与验收策略 | 已完成：设计 | [质量策略](testing/QUALITY_AND_ACCEPTANCE.md) | 设备阈值待目标端基线形成后冻结 |
 | D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡统一放在 [docs/tasks/](tasks/README.md)，见 ADR-0001 |
-| R01 | Flutter客户端与原生适配 | 部分完成：工程、核心层与代码级业务链路 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md) | 三端工程、Dart 协议/配对/存储/分块/终检核心及发送接收页面已有实现；真实设备文件端口、恢复编排、Windows 取件器和完整 UI 验收仍未完成 |
+| R01 | Flutter客户端与原生适配 | 部分完成：工程、核心层、UI 基线与代码级业务链路 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md)、[T12-10](tasks/T12-10.md) | T12 UI 基线已由 PR #61 合并；真实设备文件端口、恢复编排、Windows 取件器、Flutter SDK 复测和完整 UI 平台验收仍未完成 |
 | R02 | 安装包、签名构建及发布CI | 部分完成：自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.1 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | CI 门禁和发布流水线均已在 GitHub Actions 验证；发布签名与正式分发仍属 T10 |
 | R04 | 接收方持久化层 | 部分完成：schema v6 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2→v3→v4→v5→v6、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权、`SQLITE_FULL` 注入、**manifest staging 落 SQLite（v4）**、**任务凭证按摘要持久化与授权记录（v5）**、**发送端来源引用（v6）** 均已实现并测试；真实 OS `ENOSPC`、真机 `syncData` 与断电耐久性仍未验证 |
@@ -66,7 +66,7 @@
 | T00 文档与研发治理 | 已完成：设计 | 文档索引、流程、架构、端侧、UI、质量和 Agent 手册已提交；后续持续维护 |
 | T11-02 UI 装配 | **进行中**：发送/接收页面、节点生命周期、真实 pin 与两种受理路径已有代码级闭环；真机第 6 项、平台文件端口和完整错误/空间体验待做 | 见 [T11-02](tasks/T11-02.md)：目标设备双向流程、SAF/Windows 取件器、恢复与错误体验 |
 | T11-01 MVP 双向数据面 | **进行中**（`t11-01-01` 数据面）：真实两个节点 + 真实 TLS 的代码级双向路径已有；真机双向传输与应用层 resume 未完成，详见下方 §6 交付记录 | 真机双向传完真实文件、断点恢复、平台文件端口 |
-| T12 UI 全平台改造 | **阻塞**：T12-00 至 T12-09 已实现并有代码级证据，T12-10 已完成可执行验收覆盖；Flutter SDK 版本、Android 真机截图以及 Windows/iOS 环境证据仍缺失 | 主题、共享组件、响应式应用壳、真实任务/空间/设置页面、三端适配和证据按 [T12-00](tasks/T12-00.md) 至 [T12-10](tasks/T12-10.md) 逐项满足退出门槛 |
+| T12 UI 全平台改造 | **阻塞（代码已合并）**：T12-00 至 T12-09 已实现并有代码级证据，T12-10 已完成可执行验收覆盖并随 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) 合并到 `master`；Flutter SDK 版本、Android 真机截图以及 Windows/iOS 环境证据仍缺失 | 主题、共享组件、响应式应用壳、真实任务/空间/设置页面、三端适配和平台证据按 [T12-00](tasks/T12-00.md) 至 [T12-10](tasks/T12-10.md) 逐项满足退出门槛 |
 | T01 工程/构建/配置 | 已完成 | 两端可安装/运行、版本可追踪（§6.1）；检查与双端构建已固化为 CI 门禁（§6.2） |
 | T02 协议/模型/向量 | 部分完成：模型已收敛，但**发现三处草案缺口** | 草案、Python 向量与 Dart 独立实现逐字节一致（T02-01）；错误码/状态机/协议协商/幂等已实现（T02-02）；**冻结被 §5 登记的三项草案缺口阻塞**，另需原生实现比对 |
 | T03 配对与单文件链路 | **部分完成**：配对、TLS、授权、清单、seal、分块端点、checkpoint、终检与导出编排已有实现；代码级双向测试已通过，真机双向传输、指定网络绑定、平台文件端口和完整 UI 验收仍未完成 | 用户授权后端到端收发、鉴权负例、目标设备与恢复证据通过 |
@@ -1092,3 +1092,11 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - **发布边界**：Android 使用 debug signing，仅内部测试；macOS 未签名且未 notarization；Linux 目标为 amd64。此次发布证明的是 GitHub Actions 构建与资产归档成功，不替代真实设备双向传输、断点恢复、签名或商店发布验收。
 
 后续每次向 `master` 的成功推送都会沿同一 workflow 递增 patch 版本。发布版本、构建提交、资产清单和签名限制以 [发布说明](releases/GITHUB_ACTION_RELEASES.md) 为准；产品功能状态仍以本台账和对应测试证据为准。
+
+### 6.5 T12 UI 全平台改造（PR #61，2026-09-23）
+
+- [PR #61](https://github.com/yanzhao77/NearSend/pull/61) 已将 `feat/ui-baseline` squash 合并到 `master`，合并提交为 `880dfb8539c1f3a1d5b3cde7c2c69f50b5e7d19c`。
+- 本批次将 NearSend 的共享 Material 3 主题、UI 组件、响应式应用壳、任务/空间/设置真实读模型、首页/关于、配对、发送、接收、任务详情和结果页，以及 Android/Windows/iOS 适配代码带入主干。
+- 代码级验收证据已归档到 [`docs/testing/evidence/2026-09-22/t12-ui/`](testing/evidence/2026-09-22/t12-ui/)，覆盖 Light/Dark、200% 动态字体、窄宽度、长文案、空间三态、五阶段传输状态和真实数据库状态读取。
+- 合并不等于平台验收完成：当前 Flutter SDK 为 Dart `3.12.2`，项目基线要求 Dart `^3.13.4`；Android 真机截图、Windows 构建/截图、iOS 构建/真机、键盘/生命周期和屏幕阅读器证据仍未补齐。
+- 因此 T12 总任务保持“阻塞（代码已合并）”，不把未运行的构建、截图、真机交互或屏幕阅读器结果写成通过；后续复测必须在满足 SDK 要求并具备对应平台环境的机器上执行。
