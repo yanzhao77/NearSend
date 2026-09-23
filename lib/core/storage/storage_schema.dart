@@ -29,7 +29,7 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 6;
+  static const int currentVersion = 7;
 
   /// The table holding one staging proposal per transfer (§6, ADR-0004).
   static const String manifestStagingTable = 'manifest_staging';
@@ -246,7 +246,8 @@ CREATE TABLE manifest_chunks (
 
   /// Indexes schema version 4 adds.
   static const Map<String, String> version4Indexes = <String, String>{
-    'manifest_files_by_file': 'CREATE INDEX manifest_files_file ON manifest_files (transfer_id, file_id);',
+    'manifest_files_by_file':
+        'CREATE INDEX manifest_files_file ON manifest_files (transfer_id, file_id);',
     'manifest_staging_unsealed':
         'CREATE INDEX manifest_staging_open ON manifest_staging (sealed_at, '
         'first_content_at);',
@@ -332,6 +333,9 @@ CREATE TABLE task_receiver_mirror (
   /// adapter resolves.
   static const String taskSourcesTable = 'task_sources';
 
+  /// The table holding non-secret application settings.
+  static const String appSettingsTable = 'app_settings';
+
   /// Tables schema version 6 adds.
   static const Map<String, String> version6Tables = <String, String>{
     taskSourcesTable: '''
@@ -346,6 +350,19 @@ CREATE TABLE task_sources (
 
   /// Indexes schema version 6 adds.
   static const Map<String, String> version6Indexes = <String, String>{};
+
+  /// Tables schema version 7 adds: non-secret application settings.
+  static const Map<String, String> version7Tables = <String, String>{
+    appSettingsTable: '''
+CREATE TABLE app_settings (
+  setting_key   TEXT PRIMARY KEY,
+  setting_value TEXT NOT NULL,
+  updated_at    INTEGER NOT NULL
+);''',
+  };
+
+  /// Indexes schema version 7 adds.
+  static const Map<String, String> version7Indexes = <String, String>{};
 
   /// The indexes this schema version defines.
   static const Map<String, String> indexes = <String, String>{
@@ -440,6 +457,16 @@ CREATE TABLE task_sources (
     }
   }
 
+  /// Applies schema version 7 to [db]: adds non-secret application settings.
+  static void applyVersion7(Database db) {
+    for (final String ddl in version7Tables.values) {
+      db.execute(ddl);
+    }
+    for (final String ddl in version7Indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
   /// The names of every table in this schema version, including the metadata table.
   static Set<String> get tableNames => <String>{
     metaTable,
@@ -447,5 +474,6 @@ CREATE TABLE task_sources (
     ...version4Tables.keys,
     ...version5Tables.keys,
     ...version6Tables.keys,
+    ...version7Tables.keys,
   };
 }

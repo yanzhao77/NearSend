@@ -1,17 +1,28 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:nearsend/app/application/app_settings_repository.dart';
+import 'package:nearsend/app/application/settings_controller.dart';
+import 'package:nearsend/app/application/space_overview_controller.dart';
+import 'package:nearsend/app/application/task_catalog_controller.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
+import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
-import 'package:nearsend/features/home/presentation/home_page.dart';
+import 'package:nearsend/features/settings/presentation/settings_page.dart';
+import 'package:nearsend/features/space/presentation/space_overview_page.dart';
+import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
+import 'package:nearsend/features/tasks/presentation/task_detail_page.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
@@ -20,6 +31,7 @@ import 'package:nearsend/features/transfer/application/server_receiving_flow.dar
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
+import 'package:nearsend/platform/platform_storage_gateway.dart';
 
 /// NearSend application root.
 ///
@@ -51,6 +63,7 @@ class NearSendApp extends StatefulWidget {
     this.session,
     this.peer,
     this.transferIdFactory,
+    this.storageGateway,
   });
 
   /// This device's node, when the application has one.
@@ -65,6 +78,8 @@ class NearSendApp extends StatefulWidget {
   /// transfer on the other side must be able to name it, and §4 makes identifier generation a
   /// protocol concern rather than a platform one.
   final String Function()? transferIdFactory;
+
+  final PlatformStorageGateway? storageGateway;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
@@ -87,12 +102,22 @@ class NearSendApp extends StatefulWidget {
   /// The receive confirmation, which `docs/ui/UI_UX_SPEC.md` §5 keeps as its own step so the
   /// space check cannot be skipped by accepting on the connection screen.
   static const String receiveConfirmRoute = '/receive-confirm';
+  static const String tasksRoute = '/tasks';
+  static const String spaceRoute = '/space';
+  static const String settingsRoute = '/settings';
+  static const String taskDetailRoute = '/task-detail';
 
   @override
   State<NearSendApp> createState() => _NearSendAppState();
 }
 
 class _NearSendAppState extends State<NearSendApp> {
+  late final TaskCatalogController _tasks = TaskCatalogController();
+  late final SpaceOverviewController _space = SpaceOverviewController(
+    gateway: widget.storageGateway,
+  );
+  late final SettingsController _settings = SettingsController();
+
   /// The sending flow, once there is a verified peer and a node to send from.
   ///
   /// Created on a successful connection rather than at startup, because a flow with no peer would be
@@ -132,6 +157,9 @@ class _NearSendAppState extends State<NearSendApp> {
       engine: node.engine,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
+    _tasks.attach(node.database);
+    _settings.attach(AppSettingsRepository(node.database));
+    unawaited(_space.refresh());
     if (mounted) {
       setState(() {});
     }
@@ -150,6 +178,9 @@ class _NearSendAppState extends State<NearSendApp> {
     _flow?.dispose();
     _receiving?.dispose();
     _incoming?.dispose();
+    _tasks.dispose();
+    _space.dispose();
+    _settings.dispose();
     super.dispose();
   }
 
@@ -208,6 +239,20 @@ class _NearSendAppState extends State<NearSendApp> {
             : NearSendApp.receiveRoute)
       : (_flow == null ? null : NearSendApp.sendRoute);
 
+  String get _connectionLabel => switch (widget.session?.phase) {
+    NodePhase.ready => '本机已就绪',
+    NodePhase.starting => '正在启动',
+    NodePhase.failed => '节点不可用',
+    NodePhase.stopped || null => '未启动',
+  };
+
+  NsStatusTone get _connectionTone => switch (widget.session?.phase) {
+    NodePhase.ready => NsStatusTone.success,
+    NodePhase.starting => NsStatusTone.active,
+    NodePhase.failed => NsStatusTone.error,
+    NodePhase.stopped || null => NsStatusTone.warning,
+  };
+
   /// The storage context a pushed transfer is accepted with.
   ///
   /// **The availability is unknown on purpose.** This build has no way to measure a volume - there
@@ -216,21 +261,35 @@ class _NearSendAppState extends State<NearSendApp> {
   /// the estimate is recorded as unknown, the flow refuses only a *proven* shortfall, and the screen
   /// says out loud that no pre-check was done. Adding the measurement is a platform task, and until
   /// it exists this is the honest arrangement.
-  ReceiverStorageContext _storageContext(String saveLocation) {
+  Future<ReceiverStorageContext> _storageContext(String saveLocation) async {
     const VolumeId appPrivate = VolumeId('app-private');
-    const VolumeId destination = VolumeId('save-location');
+    final PlatformStorageGateway gateway =
+        widget.storageGateway ?? const UnknownPlatformStorageGateway();
+    final StorageMeasurement measurement = await gateway.measureFreeSpace(
+      locationRef: saveLocation,
+    );
     return ReceiverStorageContext(
       stagingVolume: appPrivate,
-      exportVolume: destination,
+      exportVolume: measurement.volume,
       databaseVolume: appPrivate,
-      // Not `const`: a map keyed by a type with value equality cannot be a constant map, and the
-      // distinction here is not worth a different identifier type.
       availability: <VolumeId, VolumeAvailability>{
         appPrivate: const VolumeAvailability.unknown(),
-        destination: const VolumeAvailability.unknown(),
+        measurement.volume: measurement.availability,
       },
       saveLocationRef: saveLocation,
     );
+  }
+
+  Future<SpaceEstimateSnapshot?> _measureIncomingSpace(
+    ServerOffer offer,
+    String saveLocation,
+  ) async {
+    final ServerReceivingFlow? incoming = _incoming;
+    if (incoming == null) {
+      return null;
+    }
+    final ReceiverStorageContext context = await _storageContext(saveLocation);
+    return incoming.estimateFor(offer, context);
   }
 
   /// The peer state, as the connection screen renders it.
@@ -263,130 +322,186 @@ class _NearSendAppState extends State<NearSendApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'NearSend',
-      debugShowCheckedModeBanner: false,
-      theme: buildNearSendTheme(Brightness.light),
-      darkTheme: buildNearSendTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
-      initialRoute: NearSendApp.homeRoute,
-      routes: <String, WidgetBuilder>{
-        NearSendApp.homeRoute: (_) => const HomePage(),
-        NearSendApp.aboutRoute: (_) => const AboutPage(),
-        NearSendApp.connectRoute: (BuildContext context) {
-          // Which action the user came here for, so one connection screen can lead to the send flow
-          // or the receive flow without duplicating itself.
-          final bool receiving =
-              ModalRoute.of(context)?.settings.arguments ==
-              NearSendApp.receiveArgument;
-          return ListenableBuilder(
-            // Both sessions: the published payload arrives asynchronously, and a connection attempt
-            // changes without any navigation happening.
-            listenable: Listenable.merge(<Listenable?>[
-              widget.session,
-              widget.peer,
-            ]),
-            builder: (BuildContext context, Widget? _) {
-              final NodeSession? session = widget.session;
-              return ConnectionPage(
-                payload: session?.payload,
-                starting: session?.phase == NodePhase.starting,
-                // Only a *failed* node has a reason to state. A node that is starting has none, and a
-                // build with no node at all has nothing to say beyond the empty-session note.
-                unavailableReason: session?.phase == NodePhase.failed
-                    ? session!.failureReason
-                    : null,
-                connection: attempt,
-                onConnect: widget.peer == null ? null : connect,
-                onContinue: _continueTarget(receiving) == null
-                    ? null
-                    : () =>
-                          Navigator.of(context)
-                              .pushNamed(_continueTarget(receiving)!),
-                continueLabel: receiving
-                    ? ConnectionPage.continueLabelReceive
-                    : ConnectionPage.continueLabelSend,
-              );
-            },
-          );
-        },
-        NearSendApp.receiveRoute: (BuildContext context) {
-          final ReceivingFlow? receiving = _receiving;
-          final ServerReceivingFlow? incoming = _incoming;
-          if (receiving == null && incoming == null) {
-            // Reachable only by a hand-typed route before the node is up: there is nothing to ask
-            // and nothing to be pushed yet.
-            return const Scaffold(body: Center(child: Text('本机节点尚未就绪，无法接收。')));
-          }
-          return ListenableBuilder(
-            listenable: Listenable.merge(<Listenable?>[receiving, incoming]),
-            builder: (BuildContext context, Widget? _) => ReceivePage(
-              phase: receiving?.phase ?? ReceivePhase.idle,
-              offers: receiving?.offers ?? const <OfferSummary>[],
-              progress: receiving?.progress,
-              fileName: receiving?.currentFileName,
-              fileNumber: receiving?.currentFileNumber ?? 0,
-              fileCount: receiving?.fileCount ?? 0,
-              failureReason: receiving?.failureReason,
-              savedPaths: receiving?.savedPaths ?? const <String>[],
-              // Both halves are asked, because §6 announces neither: a client's view of what the
-              // peer offers, and this device's own view of what is being pushed to it.
-              onRefresh: () async {
-                await receiving?.refresh();
-                await incoming?.refresh();
-              },
-              onAccept: (offer, saveLocation) async =>
-                  await receiving?.accept(
-                    offer,
-                    saveLocationRef: saveLocation,
-                  ) ??
-                  false,
-              pushOffers: incoming?.pending ?? const <ServerOffer>[],
-              pushPhase: incoming?.phase ?? ServerReceivePhase.waiting,
-              pushSpaceVerdict: incoming?.spaceVerdict,
-              pushFailureReason: incoming?.failureReason,
-              pushSavedPaths: incoming?.savedPaths ?? const <String>[],
-              onAcceptPush: incoming == null
-                  ? null
-                  : (offer, saveLocation) => incoming.accept(
-                      offer,
-                      context: _storageContext(saveLocation),
-                      targetRef: saveLocation,
-                    ),
+    return ListenableBuilder(
+      listenable: _settings,
+      builder: (BuildContext context, Widget? child) {
+        final ThemeMode themeMode =
+            switch (_settings.settings.themePreference) {
+              AppThemePreference.system => ThemeMode.system,
+              AppThemePreference.light => ThemeMode.light,
+              AppThemePreference.dark => ThemeMode.dark,
+            };
+        return MaterialApp(
+          title: 'NearSend',
+          debugShowCheckedModeBanner: false,
+          theme: buildNearSendTheme(Brightness.light),
+          darkTheme: buildNearSendTheme(Brightness.dark),
+          themeMode: themeMode,
+          initialRoute: NearSendApp.homeRoute,
+          routes: <String, WidgetBuilder>{
+            NearSendApp.homeRoute: (BuildContext context) => NearSendAppShell(
+              tasks: _tasks,
+              space: _space,
+              settings: _settings,
+              deviceName: _settings.settings.deviceName,
+              connectionLabel: _connectionLabel,
+              connectionTone: _connectionTone,
+              onContinueTask: () =>
+                  Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
             ),
-          );
-        },
-        NearSendApp.sendRoute: (BuildContext context) {
-          final SendingFlow? flow = _flow;
-          if (flow == null) {
-            // Reachable only by a hand-typed route: the send action is what creates a flow, and a
-            // screen without one would have a send button with nothing behind it.
-            return const Scaffold(body: Center(child: Text('还没有建立连接，无法发送。')));
-          }
-          return ListenableBuilder(
-            listenable: flow,
-            builder: (BuildContext context, Widget? _) {
-              // A picker exists on a platform whose files are documents, and a path field exists on
-              // a platform whose files are paths. Both are the same selection underneath.
-              final bool hasPicker = flow.selection.hasPicker;
-              return SendPage(
-                report: flow.report,
-                phase: flow.phase,
-                progress: flow.progress,
-                fileName: flow.currentFileName,
-                fileNumber: flow.currentFileNumber,
-                fileCount: flow.fileCount,
-                failureReason: flow.failureReason,
-                onPick: hasPicker ? flow.pick : null,
-                onAddPath: hasPicker
-                    ? null
-                    : (String path) => flow.addPaths(<String>[path]),
-                onSend: flow.send,
-                onClear: flow.clear,
+            NearSendApp.aboutRoute: (_) => const AboutPage(),
+            NearSendApp.tasksRoute: (_) => TaskOverviewPage(controller: _tasks),
+            NearSendApp.spaceRoute: (_) =>
+                SpaceOverviewPage(controller: _space),
+            NearSendApp.settingsRoute: (_) =>
+                SettingsPage(controller: _settings, space: _space),
+            NearSendApp.taskDetailRoute: (BuildContext context) {
+              final Object? argument = ModalRoute.of(
+                context,
+              )?.settings.arguments;
+              if (argument is! String) {
+                return const Scaffold(
+                  body: NsErrorState(
+                    title: '缺少任务标识',
+                    message: '无法打开没有任务 ID 的详情页面。',
+                  ),
+                );
+              }
+              return TaskDetailPage(controller: _tasks, taskId: argument);
+            },
+            NearSendApp.connectRoute: (BuildContext context) {
+              // Which action the user came here for, so one connection screen can lead to the send flow
+              // or the receive flow without duplicating itself.
+              final bool receiving =
+                  ModalRoute.of(context)?.settings.arguments ==
+                  NearSendApp.receiveArgument;
+              return ListenableBuilder(
+                // Both sessions: the published payload arrives asynchronously, and a connection attempt
+                // changes without any navigation happening.
+                listenable: Listenable.merge(<Listenable?>[
+                  widget.session,
+                  widget.peer,
+                ]),
+                builder: (BuildContext context, Widget? _) {
+                  final NodeSession? session = widget.session;
+                  return ConnectionPage(
+                    payload: session?.payload,
+                    starting: session?.phase == NodePhase.starting,
+                    // Only a *failed* node has a reason to state. A node that is starting has none, and a
+                    // build with no node at all has nothing to say beyond the empty-session note.
+                    unavailableReason: session?.phase == NodePhase.failed
+                        ? session!.failureReason
+                        : null,
+                    connection: attempt,
+                    onConnect: widget.peer == null ? null : connect,
+                    onContinue: _continueTarget(receiving) == null
+                        ? null
+                        : () => Navigator.of(
+                            context,
+                          ).pushNamed(_continueTarget(receiving)!),
+                    continueLabel: receiving
+                        ? ConnectionPage.continueLabelReceive
+                        : ConnectionPage.continueLabelSend,
+                    localDeviceName: _settings.settings.deviceName,
+                    localPlatform: defaultTargetPlatform.name,
+                  );
+                },
               );
             },
-          );
-        },
+            NearSendApp.receiveRoute: (BuildContext context) {
+              final ReceivingFlow? receiving = _receiving;
+              final ServerReceivingFlow? incoming = _incoming;
+              if (receiving == null && incoming == null) {
+                // Reachable only by a hand-typed route before the node is up: there is nothing to ask
+                // and nothing to be pushed yet.
+                return const Scaffold(
+                  body: Center(child: Text('本机节点尚未就绪，无法接收。')),
+                );
+              }
+              return ListenableBuilder(
+                listenable: Listenable.merge(<Listenable?>[
+                  receiving,
+                  incoming,
+                ]),
+                builder: (BuildContext context, Widget? _) => ReceivePage(
+                  phase: receiving?.phase ?? ReceivePhase.idle,
+                  offers: receiving?.offers ?? const <OfferSummary>[],
+                  progress: receiving?.progress,
+                  fileName: receiving?.currentFileName,
+                  fileNumber: receiving?.currentFileNumber ?? 0,
+                  fileCount: receiving?.fileCount ?? 0,
+                  failureReason: receiving?.failureReason,
+                  savedPaths: receiving?.savedPaths ?? const <String>[],
+                  // Both halves are asked, because §6 announces neither: a client's view of what the
+                  // peer offers, and this device's own view of what is being pushed to it.
+                  onRefresh: () async {
+                    await receiving?.refresh();
+                    await incoming?.refresh();
+                  },
+                  onAccept: (offer, saveLocation) async =>
+                      await receiving?.accept(
+                        offer,
+                        saveLocationRef: saveLocation,
+                      ) ??
+                      false,
+                  pushOffers: incoming?.pending ?? const <ServerOffer>[],
+                  pushPhase: incoming?.phase ?? ServerReceivePhase.waiting,
+                  pushSpaceVerdict: incoming?.spaceVerdict,
+                  pushSpaceEstimate: incoming?.spaceEstimate,
+                  pushFailureReason: incoming?.failureReason,
+                  pushSavedPaths: incoming?.savedPaths ?? const <String>[],
+                  onCheckPushSpace: _measureIncomingSpace,
+                  onPickLocation:
+                      widget.storageGateway == null ||
+                          !widget.storageGateway!.supportsDirectorySelection
+                      ? null
+                      : () async =>
+                            widget.storageGateway!.pickReceiveDirectory(),
+                  onAcceptPush: incoming == null
+                      ? null
+                      : (offer, saveLocation) async => incoming.accept(
+                          offer,
+                          context: await _storageContext(saveLocation),
+                          targetRef: saveLocation,
+                        ),
+                ),
+              );
+            },
+            NearSendApp.sendRoute: (BuildContext context) {
+              final SendingFlow? flow = _flow;
+              if (flow == null) {
+                // Reachable only by a hand-typed route: the send action is what creates a flow, and a
+                // screen without one would have a send button with nothing behind it.
+                return const Scaffold(
+                  body: Center(child: Text('还没有建立连接，无法发送。')),
+                );
+              }
+              return ListenableBuilder(
+                listenable: flow,
+                builder: (BuildContext context, Widget? _) {
+                  // A picker exists on a platform whose files are documents, and a path field exists on
+                  // a platform whose files are paths. Both are the same selection underneath.
+                  final bool hasPicker = flow.selection.hasPicker;
+                  return SendPage(
+                    report: flow.report,
+                    phase: flow.phase,
+                    progress: flow.progress,
+                    fileName: flow.currentFileName,
+                    fileNumber: flow.currentFileNumber,
+                    fileCount: flow.fileCount,
+                    failureReason: flow.failureReason,
+                    onPick: hasPicker ? flow.pick : null,
+                    onAddPath: hasPicker
+                        ? null
+                        : (String path) => flow.addPaths(<String>[path]),
+                    onSend: flow.send,
+                    onClear: flow.clear,
+                  );
+                },
+              );
+            },
+          },
+        );
       },
     );
   }

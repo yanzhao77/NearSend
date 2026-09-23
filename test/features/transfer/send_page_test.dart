@@ -80,47 +80,44 @@ void main() {
     );
   });
 
-  testWidgets(
-    'the two waits a user could mistake for a hang say which they are',
-    (tester) async {
-      await pump(tester, phase: SendPhase.preparing);
-      expect(
-        find.text(SendPage.phaseLabel(SendPhase.preparing)),
-        findsOneWidget,
-      );
+  testWidgets('the two waits a user could mistake for a hang say which they are', (
+    tester,
+  ) async {
+    await pump(tester, phase: SendPhase.preparing);
+    expect(find.text(SendPage.phaseLabel(SendPhase.preparing)), findsOneWidget);
 
-      await pump(tester, phase: SendPhase.waitingForPeer);
-      expect(
-        find.text(SendPage.phaseLabel(SendPhase.waitingForPeer)),
-        findsOneWidget,
-      );
-      expect(
-        find.text(SendPage.waitingNote),
-        findsOneWidget,
-        reason:
-            'the offer is sealed and the peer has not answered: without this the screen shows a '
-            'stillness that reads as a fault in this device',
-      );
-      expect(
-        SendPage.phaseLabel(SendPhase.preparing),
-        isNot(SendPage.phaseLabel(SendPhase.waitingForPeer)),
-        reason: 'one is local work and the other is the peer, and they are not interchangeable',
-      );
+    await pump(tester, phase: SendPhase.waitingForPeer);
+    expect(
+      find.text(SendPage.phaseLabel(SendPhase.waitingForPeer)),
+      findsOneWidget,
+    );
+    expect(
+      find.text(SendPage.waitingNote),
+      findsOneWidget,
+      reason:
+          'the offer is sealed and the peer has not answered: without this the screen shows a '
+          'stillness that reads as a fault in this device',
+    );
+    expect(
+      SendPage.phaseLabel(SendPhase.preparing),
+      isNot(SendPage.phaseLabel(SendPhase.waitingForPeer)),
+      reason:
+          'one is local work and the other is the peer, and they are not interchangeable',
+    );
 
-      await pump(tester, phase: SendPhase.offeredToPeer);
-      expect(
-        find.text(SendPage.offeredNote),
-        findsOneWidget,
-        reason:
-            'here the next move is the peer taking the file, which is a third kind of wait and '
-            'needs its own sentence rather than the one about a decision',
-      );
-      expect(
-        SendPage.phaseLabel(SendPhase.offeredToPeer),
-        isNot(SendPage.phaseLabel(SendPhase.waitingForPeer)),
-      );
-    },
-  );
+    await pump(tester, phase: SendPhase.offeredToPeer);
+    expect(
+      find.text(SendPage.offeredNote),
+      findsOneWidget,
+      reason:
+          'here the next move is the peer taking the file, which is a third kind of wait and '
+          'needs its own sentence rather than the one about a decision',
+    );
+    expect(
+      SendPage.phaseLabel(SendPhase.offeredToPeer),
+      isNot(SendPage.phaseLabel(SendPhase.waitingForPeer)),
+    );
+  });
 
   testWidgets('the one sending state that may say the peer saved it', (
     tester,
@@ -194,7 +191,8 @@ void main() {
     expect(
       label,
       contains('校验'),
-      reason: 'the screen must name what is still outstanding, not merely avoid the word 完成',
+      reason:
+          'the screen must name what is still outstanding, not merely avoid the word 完成',
     );
   });
 
@@ -211,7 +209,48 @@ void main() {
     expect(
       find.text('重新发送'),
       findsOneWidget,
-      reason: 'a failure with no way forward leaves the user with a selection they cannot use',
+      reason:
+          'a failure with no way forward leaves the user with a selection they cannot use',
+    );
+  });
+
+  testWidgets('keeps the extension visible for a long selected filename', (
+    tester,
+  ) async {
+    const SelectedFile longFile = SelectedFile(
+      fileId: '00000000-0000-4000-8000-000000000003',
+      relativePath:
+          'directory/another-directory/very-long-report-name-that-must-stay-readable.tar.gz',
+      sizeBytes: 128,
+      sourceRef: '/tmp/long-report.tar.gz',
+    );
+    await pump(
+      tester,
+      phase: SendPhase.ready,
+      report: FileSelectionReport.of(const <SelectedFile>[longFile]),
+    );
+
+    expect(find.textContaining('.gz'), findsOneWidget);
+  });
+
+  testWidgets('does not show network speed during verification', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      phase: SendPhase.awaitingVerification,
+      progress: TransferProgress.start(totalBytes: 100, atMillis: 0).updated(
+        phase: TransferPhase.verifying,
+        transferredBytes: 100,
+        atMillis: 1000,
+      ),
+    );
+
+    expect(find.text('速度'), findsNothing);
+    expect(find.text('剩余时间'), findsNothing);
+    expect(
+      find.text(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+      findsOneWidget,
     );
   });
 
@@ -229,27 +268,24 @@ void main() {
     expect(send.onPressed, isNull);
   });
 
-  test(
-    'a selection beyond the protocol limit is refused before anything starts',
-    () {
-      // §5's chunk limit is the one a user can reach with ordinary files: 4 MiB chunks and a
-      // transfer bound mean a very large multi-file selection is refused here rather than after the
-      // manifest upload.
-      final SelectedFile huge = SelectedFile(
-        fileId: '00000000-0000-4000-8000-000000000002',
-        relativePath: 'huge.bin',
-        // One chunk past the transfer's limit, so the refusal is about the count rather than about
-        // a rounding that happened to land exactly on the bound.
-        sizeBytes:
-            (ProtocolLimits.maxChunksPerTransfer + 1) *
-            ProtocolLimits.chunkSizeBytes,
-        sourceRef: '/tmp/huge.bin',
-      );
-      final FileSelectionReport report = FileSelectionReport.of(<SelectedFile>[
-        huge,
-      ]);
-      expect(report.canSend, isFalse);
-      expect(report.problems.join('|'), contains('分块总数超过上限'));
-    },
-  );
+  test('a selection beyond the protocol limit is refused before anything starts', () {
+    // §5's chunk limit is the one a user can reach with ordinary files: 4 MiB chunks and a
+    // transfer bound mean a very large multi-file selection is refused here rather than after the
+    // manifest upload.
+    final SelectedFile huge = SelectedFile(
+      fileId: '00000000-0000-4000-8000-000000000002',
+      relativePath: 'huge.bin',
+      // One chunk past the transfer's limit, so the refusal is about the count rather than about
+      // a rounding that happened to land exactly on the bound.
+      sizeBytes:
+          (ProtocolLimits.maxChunksPerTransfer + 1) *
+          ProtocolLimits.chunkSizeBytes,
+      sourceRef: '/tmp/huge.bin',
+    );
+    final FileSelectionReport report = FileSelectionReport.of(<SelectedFile>[
+      huge,
+    ]);
+    expect(report.canSend, isFalse);
+    expect(report.problems.join('|'), contains('分块总数超过上限'));
+  });
 }

@@ -3,11 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/features/home/presentation/home_page.dart';
 
-/// T01-01 shell behaviour.
-///
-/// The home shell must expose the two primary actions with equal weight and
-/// must not present them as working functionality. See
-/// `docs/AGENT_TASK_PLAYBOOK.md` §9.
+/// T12-04 acceptance for the real home shell.
 void main() {
   Future<void> pumpHomePage(WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: HomePage()));
@@ -16,30 +12,31 @@ void main() {
   testWidgets('renders both primary actions', (tester) async {
     await pumpHomePage(tester);
 
-    expect(find.text('发送文件'), findsOneWidget);
-    expect(find.text('接收文件'), findsOneWidget);
+    expect(find.text('发送文件'), findsAtLeastNWidgets(1));
+    expect(find.text('接收文件'), findsAtLeastNWidgets(1));
     expect(find.byType(FilledButton), findsNWidgets(2));
   });
 
-  testWidgets('primary actions are disabled and labelled as not implemented', (
-    tester,
-  ) async {
-    await pumpHomePage(tester);
+  testWidgets(
+    'primary actions are enabled and explain the completion boundary',
+    (tester) async {
+      await pumpHomePage(tester);
 
-    for (final FilledButton button in tester.widgetList<FilledButton>(
-      find.byType(FilledButton),
-    )) {
-      expect(
-        button.onPressed,
-        isNotNull,
-        reason:
-            'both actions are now wired to the real connection screen; the note below them '
-            'states what is still missing rather than the button pretending to work',
-      );
-    }
+      for (final FilledButton button in tester.widgetList<FilledButton>(
+        find.byType(FilledButton),
+      )) {
+        expect(
+          button.onPressed,
+          isNotNull,
+          reason: 'the primary actions open the real connection flow',
+        );
+      }
 
-    expect(find.text(HomePage.remainingWorkNote), findsNWidgets(2));
-  });
+      final Finder completionNote = find.text(HomePage.remainingWorkNote);
+      await tester.scrollUntilVisible(completionNote, 300);
+      expect(completionNote, findsOneWidget);
+    },
+  );
 
   testWidgets('explains that no internet is required but a local link is', (
     tester,

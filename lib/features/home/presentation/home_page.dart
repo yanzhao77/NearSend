@@ -1,115 +1,134 @@
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 
-/// NearSend home shell.
+/// The first screen for the four-section application shell.
 ///
-/// Scope is the information architecture of `docs/ui/UI_UX_SPEC.md` §4 "首页":
-///
-/// * 发送文件 / 接收文件 as the two primary actions with equal visual weight;
-/// * 继续任务 only when recoverable tasks exist — none exist yet, so it is not
-///   rendered at all rather than rendered empty;
-/// * the empty-state sentence explaining that no internet is needed but a
-///   local Wi-Fi link is.
-///
-/// ## The actions now do something, and the note says how much
-///
-/// They were disabled shells while no transport existed. Both are now wired to real routes: the
-/// send action opens the connection screen, which publishes this device's real pairing payload
-/// and accepts one that the user pastes, and the receive action opens the same screen with the
-/// receive wording. So the buttons are no longer a placeholder.
-///
-/// The note underneath is **not** removed, because the flows below this screen are not finished:
-/// choosing files still needs the platform picker, and the transfer screen has no engine behind it
-/// yet on a device. A reviewer must not read an enabled button as "file transfer works", and
-/// `docs/AGENT_TASK_PLAYBOOK.md` §9 forbids presenting a partial capability as a finished one. So
-/// the note stays and says precisely what is still missing.
+/// The page receives read-only presentation facts from the shell. It does not invent a network
+/// state or a recoverable task: both values come from the application/session layer.
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    this.deviceName = 'NearSend',
+    this.connectionLabel = '连接状态未知',
+    this.connectionTone = NsStatusTone.warning,
+    this.hasRecoverableTasks = false,
+    this.recoverableTaskCount = 0,
+    this.onContinue,
+  });
+
+  final String deviceName;
+  final String connectionLabel;
+  final NsStatusTone connectionTone;
+  final bool hasRecoverableTasks;
+  final int recoverableTaskCount;
+  final VoidCallback? onContinue;
 
   static const String connectRoute = '/connect';
   static const String transferRoute = '/transfer';
-
-  /// Shown under each action. States the remaining gap rather than "not implemented", which is
-  /// no longer true of the button itself.
-  ///
-  /// The middle sentence is the one that matters: a transfer between two installations works when
-  /// **both** devices have pasted the other's connection information, because then each is a client
-  /// of the other and the sending side offers the file for the other to pull. With only one paste,
-  /// only the pasted-into device can send (the other direction would need a server-side acceptance
-  /// this build does not have yet). A note that said only 已接通 would be read as "随便哪一端都能发".
-  static const String remainingWorkNote =
-      '发送与接收均已接通（两端都粘贴对方的连接信息更省事；只粘贴一侧也能传）；'
-      '续传、Windows 取件器与真机双向验证仍未完成。';
-
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
-
   static const String baselineNotice =
-      '当前仍为工程壳：协议、配对、存储与双向数据面已有实现和测试，“发送”与“接收”两条界面路径已接通，'
-      '两台设备经真实 TLS 互传后各自校验并落盘。尚未完成：断点续传、Windows 取件器、'
-      '剩余空间的平台测量（因此暂不做空间预检并如实说明），以及真机双向验证。';
+      '当前版本会如实展示协议、配对、存储和平台能力；尚未验证或未测量的能力不会显示为已完成。';
+  static const String remainingWorkNote = '发送和接收都需要对端设备参与；完成只表示文件已校验并保存。';
 
   @override
   Widget build(BuildContext context) {
-    final NearSendColors palette = NearSendColors.of(
-      Theme.of(context).brightness,
-    );
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('NearSend'),
-        actions: <Widget>[
-          IconButton(
-            onPressed: () => Navigator.of(context).pushNamed('/about'),
-            tooltip: '版本与诊断信息',
-            icon: const Icon(Icons.info_outline),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('首页')),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: NearSendSizing.formMaxWidth,
-            ),
-            child: ListView(
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final bool wide = constraints.maxWidth >= 700;
+            final List<Widget> actions = <Widget>[
+              _ActionCard(
+                icon: Icons.north_east,
+                title: '发送文件',
+                message: '选择文件，连接本地设备并等待对方确认。',
+                onPressed: () => Navigator.of(
+                  context,
+                ).pushNamed(connectRoute, arguments: 'send'),
+              ),
+              _ActionCard(
+                icon: Icons.south,
+                title: '接收文件',
+                message: '查看对方提供的文件，确认位置后接收并保存。',
+                onPressed: () => Navigator.of(
+                  context,
+                ).pushNamed(connectRoute, arguments: 'receive'),
+              ),
+            ];
+            return ListView(
               padding: const EdgeInsets.all(NearSendSpacing.lg),
               children: <Widget>[
-                _BaselineNotice(palette: palette),
-                const SizedBox(height: NearSendSpacing.lg),
-                Text(
-                  emptyStateExplanation,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                _DeviceStatus(
+                  deviceName: deviceName,
+                  connectionLabel: connectionLabel,
+                  tone: connectionTone,
+                ),
+                const SizedBox(height: NearSendSpacing.md),
+                const NsInfoBanner(
+                  title: '本地连接说明',
+                  message: emptyStateExplanation,
+                  tone: NsStatusTone.info,
+                ),
+                const SizedBox(height: NearSendSpacing.md),
+                const NsInfoBanner(
+                  title: '当前能力状态',
+                  message: baselineNotice,
+                  tone: NsStatusTone.warning,
                 ),
                 const SizedBox(height: NearSendSpacing.xl),
-                _PrimaryAction(
-                  icon: Icons.upload_file_outlined,
-                  label: '发送文件',
-                  onPressed: () =>
-                      Navigator.of(context)
-                          .pushNamed(connectRoute, arguments: 'send'),
-                ),
+                Text('开始传输', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: NearSendSpacing.sm),
-                _PrimaryAction(
-                  icon: Icons.download_outlined,
-                  label: '接收文件',
-                  onPressed: () =>
-                      Navigator.of(context)
-                          .pushNamed(connectRoute, arguments: 'receive'),
+                if (wide)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Expanded(child: actions[0]),
+                      const SizedBox(width: NearSendSpacing.md),
+                      Expanded(child: actions[1]),
+                    ],
+                  )
+                else ...<Widget>[
+                  actions[0],
+                  const SizedBox(height: NearSendSpacing.sm),
+                  actions[1],
+                ],
+                const SizedBox(height: NearSendSpacing.sm),
+                Text(
+                  remainingWorkNote,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (hasRecoverableTasks) ...<Widget>[
+                  const SizedBox(height: NearSendSpacing.xl),
+                  NsTaskCard(
+                    title: '继续未完成任务',
+                    subtitle: '$recoverableTaskCount 个任务可以继续检查或恢复',
+                    status: NsTaskStatus.recoverable,
+                    statusLabel: '可恢复',
+                    onPressed: onContinue,
+                  ),
+                ],
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _BaselineNotice extends StatelessWidget {
-  const _BaselineNotice({required this.palette});
+class _DeviceStatus extends StatelessWidget {
+  const _DeviceStatus({
+    required this.deviceName,
+    required this.connectionLabel,
+    required this.tone,
+  });
 
-  final NearSendColors palette;
+  final String deviceName;
+  final String connectionLabel;
+  final NsStatusTone tone;
 
   @override
   Widget build(BuildContext context) {
@@ -117,15 +136,26 @@ class _BaselineNotice extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(NearSendSpacing.md),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Icon(Icons.construction_outlined, color: palette.warning),
+            const CircleAvatar(child: Icon(Icons.compare_arrows)),
             const SizedBox(width: NearSendSpacing.sm),
             Expanded(
-              child: Text(
-                HomePage.baselineNotice,
-                style: Theme.of(context).textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text('本机设备', style: Theme.of(context).textTheme.labelSmall),
+                  Text(
+                    deviceName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(width: NearSendSpacing.sm),
+            Flexible(
+              child: NsStatusBadge(label: connectionLabel, tone: tone),
             ),
           ],
         ),
@@ -134,40 +164,49 @@ class _BaselineNotice extends StatelessWidget {
   }
 }
 
-/// A primary action with an explicit note about what still lies below it.
-///
-/// The enabled state and the note are deliberately kept together: a button that works is not the
-/// same claim as a flow that works, and separating them is how the second gets implied by the
-/// first.
-class _PrimaryAction extends StatelessWidget {
-  const _PrimaryAction({
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
     required this.icon,
-    required this.label,
+    required this.title,
+    required this.message,
     required this.onPressed,
   });
 
   final IconData icon;
-  final String label;
+  final String title;
+  final String message;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        FilledButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon),
-          label: Text(label),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: NearSendSpacing.xxs),
-          child: Text(
-            HomePage.remainingWorkNote,
-            style: Theme.of(context).textTheme.bodySmall,
+    return Card(
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(NearSendRadii.card),
+        child: Padding(
+          padding: const EdgeInsets.all(NearSendSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                icon,
+                size: 32,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: NearSendSpacing.sm),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: NearSendSpacing.xs),
+              Text(message, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: NearSendSpacing.md),
+              NsPrimaryButton(
+                label: title == '发送文件' ? '发送' : '接收',
+                icon: icon,
+                onPressed: onPressed,
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

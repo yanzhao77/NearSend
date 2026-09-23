@@ -7,6 +7,7 @@ import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/app_directories.dart';
+import 'package:nearsend/platform/platform_storage_gateway.dart';
 
 /// Starts the application, with this device's node behind it.
 ///
@@ -28,6 +29,9 @@ Future<void> main() async {
   final AndroidFileGateway? gateway = Platform.isAndroid
       ? MethodChannelAndroidFileGateway()
       : null;
+  final PlatformStorageGateway? storageGateway = Platform.isAndroid
+      ? MethodChannelAndroidStorageGateway()
+      : null;
 
   runApp(
     NearSendApp(
@@ -36,6 +40,7 @@ Future<void> main() async {
         gateway: gateway,
       ),
       peer: PeerSession(),
+      storageGateway: storageGateway,
     ),
   );
 }

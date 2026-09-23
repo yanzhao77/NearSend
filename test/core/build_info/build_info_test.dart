@@ -68,7 +68,11 @@ void main() {
     test('schema display uses the storage schema authority', () {
       // Pinned on purpose: bumping the schema has to be a deliberate act, and the display must
       // never be a second definition of the number.
-      expect(StorageSchema.currentVersion, 6);
+      expect(
+        StorageSchema.currentVersion,
+        7,
+        reason: 'T12-03 adds the non-secret app_settings migration',
+      );
       expect(
         dbSchemaDisplay,
         startsWith('${StorageSchema.currentVersion}'),

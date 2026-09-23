@@ -179,6 +179,16 @@ Win32Window::MessageHandler(HWND hwnd,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_GETMINMAXINFO: {
+      auto min_max = reinterpret_cast<MINMAXINFO*>(lparam);
+      // Keep the Flutter shell above the UI baseline's single-column threshold. The content still
+      // handles narrower embedded/test constraints, but a real native window cannot become a
+      // layout that the product does not support.
+      min_max->ptMinTrackSize.x = 900;
+      min_max->ptMinTrackSize.y = 640;
+      return 0;
+    }
+
     case WM_DESTROY:
       window_handle_ = nullptr;
       Destroy();

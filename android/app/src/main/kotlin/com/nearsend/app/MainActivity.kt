@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.os.StatFs
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -72,6 +73,12 @@ class MainActivity : FlutterActivity() {
                 "applicationDirectory" -> result.success(
                     applicationContext.filesDir.absolutePath,
                 )
+                "defaultReceiveLocation" -> result.success(
+                    defaultReceiveLocation(),
+                )
+                "measureFreeSpace" -> result.success(
+                    measureFreeSpace(call.argument<String>("locationRef")),
+                )
                 "pickFiles" -> pickFiles(result)
                 "probe" -> result.success(probe(uriOf(call)))
                 "readChunk" -> result.success(
@@ -106,6 +113,40 @@ class MainActivity : FlutterActivity() {
     }
 
     // --- picking ------------------------------------------------------------------------------
+
+    /** The default is app-private and therefore writable by the existing path-based exporter. */
+    private fun defaultReceiveLocation(): String {
+        val directory = java.io.File(applicationContext.filesDir, "received")
+        if (!directory.exists() && !directory.mkdirs()) {
+            throw IllegalStateException("the default receive directory could not be created")
+        }
+        return directory.absolutePath
+    }
+
+    /** Returns an honest unknown answer for opaque provider references. */
+    private fun measureFreeSpace(locationRef: String?): Map<String, Any?> {
+        if (locationRef.isNullOrBlank() || locationRef.startsWith("content://")) {
+            return mapOf(
+                "volume" to "unknown",
+                "label" to "保存位置",
+                "freeBytes" to null,
+            )
+        }
+        return try {
+            val stat = StatFs(locationRef)
+            mapOf(
+                "volume" to "android-app-private",
+                "label" to "应用私有存储",
+                "freeBytes" to stat.availableBytes,
+            )
+        } catch (_: Exception) {
+            mapOf(
+                "volume" to "unknown",
+                "label" to "保存位置",
+                "freeBytes" to null,
+            )
+        }
+    }
 
     private fun pickFiles(result: MethodChannel.Result) {
         if (pendingPick != null) {

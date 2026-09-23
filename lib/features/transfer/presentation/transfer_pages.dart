@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
@@ -86,6 +87,10 @@ class ConnectionPage extends StatefulWidget {
     this.connection = const ConnectionAttempt(),
     this.onContinue,
     this.continueLabel = continueLabelSend,
+    this.localDeviceName = 'NearSend',
+    this.localPlatform = '当前平台',
+    this.peerDeviceName = '对端设备名称未提供',
+    this.peerPlatform = '对端平台未提供',
   });
 
   /// The payload this device publishes, or null when it has not opened a session.
@@ -120,6 +125,13 @@ class ConnectionPage extends StatefulWidget {
   /// wrong for one of them.
   final String continueLabel;
 
+  /// Display-only identity labels. The current pairing protocol does not carry remote device
+  /// metadata, so missing values remain explicitly unknown rather than being inferred.
+  final String localDeviceName;
+  final String localPlatform;
+  final String peerDeviceName;
+  final String peerPlatform;
+
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
   static const String startingNote = '正在启动本机节点，稍后这里会显示本机连接信息…';
@@ -130,6 +142,7 @@ class ConnectionPage extends StatefulWidget {
 
   /// Shown once the peer proved the identity the payload named (§2).
   static const String connectedNote = '已连接：对方证书指纹与连接信息一致。';
+  static const String fingerprintPendingNote = '完成连接前，指纹只表示待验证信息，不代表已信任。';
 
   /// The action that follows a verified connection.
   static const String continueLabelSend = '选择文件';
@@ -190,104 +203,121 @@ class _ConnectionPageState extends State<ConnectionPage> {
             constraints: const BoxConstraints(
               maxWidth: NearSendSizing.formMaxWidth,
             ),
-            child: ListView(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(NearSendSpacing.lg),
-              children: <Widget>[
-                // The order is the order of the questions a user has: can this device be connected
-                // to at all, and if not, why. "Not started yet" and "could not start" are different
-                // answers, and showing the first while the second is true would send them looking
-                // for a fault in the other device.
-                if (widget.unavailableReason != null)
-                  _Notice(
-                    text: widget.unavailableReason!,
-                    palette: palette,
-                    isError: true,
-                  )
-                else if (payload == null && widget.starting)
-                  _Notice(text: ConnectionPage.startingNote, palette: palette)
-                else if (payload == null)
-                  _Notice(
-                    text: ConnectionPage.emptySessionNote,
-                    palette: palette,
-                  )
-                else
-                  _PublishedPayload(payload: payload, palette: palette),
-                const SizedBox(height: NearSendSpacing.xl),
-                Text(
-                  ConnectionPage.pasteHint,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: NearSendSpacing.sm),
-                TextField(
-                  controller: _controller,
-                  onChanged: _parse,
-                  maxLines: 4,
-                  minLines: 3,
-                  autofocus: false,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: '{"kind":"lft-pair", …}',
-                  ),
-                ),
-                const SizedBox(height: NearSendSpacing.sm),
-                if (_import.error != null)
-                  _Notice(
-                    text: _import.error!,
-                    palette: palette,
-                    isError: true,
-                  ),
-                if (_import.isAccepted && widget.onConnect != null)
-                  FilledButton.icon(
-                    onPressed: attempt.isBusy
-                        ? null
-                        : () => widget.onConnect?.call(_import.payload!),
-                    icon: const Icon(Icons.link),
-                    label: const Text('连接'),
-                  )
-                else if (_import.isAccepted)
-                  _Notice(
-                    text: ConnectionPage.noConnectorNote,
-                    palette: palette,
-                  ),
-                if (attempt.isBusy)
-                  Padding(
-                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: _Notice(
-                      text: ConnectionPage.connectingNote,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  // The order is the order of the questions a user has: can this device be connected
+                  // to at all, and if not, why. "Not started yet" and "could not start" are different
+                  // answers, and showing the first while the second is true would send them looking
+                  // for a fault in the other device.
+                  if (widget.unavailableReason != null)
+                    _Notice(
+                      text: widget.unavailableReason!,
                       palette: palette,
+                      isError: true,
+                    )
+                  else if (payload == null && widget.starting)
+                    _Notice(text: ConnectionPage.startingNote, palette: palette)
+                  else if (payload == null)
+                    _Notice(
+                      text: ConnectionPage.emptySessionNote,
+                      palette: palette,
+                    )
+                  else
+                    _PublishedPayload(
+                      payload: payload,
+                      palette: palette,
+                      deviceName: widget.localDeviceName,
+                      platform: widget.localPlatform,
+                    ),
+                  const SizedBox(height: NearSendSpacing.xl),
+                  Text(
+                    ConnectionPage.pasteHint,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: NearSendSpacing.sm),
+                  TextField(
+                    controller: _controller,
+                    onChanged: _parse,
+                    maxLines: 4,
+                    minLines: 3,
+                    autofocus: false,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: '{"kind":"lft-pair", …}',
                     ),
                   ),
-                if (attempt.isConnected)
-                  Padding(
-                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        _Notice(
-                          text: ConnectionPage.connectedNote,
-                          palette: palette,
-                        ),
-                        if (widget.onContinue != null) ...<Widget>[
-                          const SizedBox(height: NearSendSpacing.sm),
-                          FilledButton.icon(
-                            onPressed: widget.onContinue,
-                            icon: const Icon(Icons.arrow_forward),
-                            label: Text(widget.continueLabel),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                if (attempt.hasFailed)
-                  Padding(
-                    padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                    child: _Notice(
-                      text: _failureText(attempt),
+                  const SizedBox(height: NearSendSpacing.sm),
+                  if (_import.error != null)
+                    _Notice(
+                      text: _import.error!,
                       palette: palette,
                       isError: true,
                     ),
-                  ),
-              ],
+                  if (_import.isAccepted && widget.onConnect != null)
+                    FilledButton.icon(
+                      onPressed: attempt.isBusy
+                          ? null
+                          : () => widget.onConnect?.call(_import.payload!),
+                      icon: const Icon(Icons.link),
+                      label: const Text('连接'),
+                    )
+                  else if (_import.isAccepted)
+                    _Notice(
+                      text: ConnectionPage.noConnectorNote,
+                      palette: palette,
+                    ),
+                  if (attempt.isBusy)
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                      child: _Notice(
+                        text: ConnectionPage.connectingNote,
+                        palette: palette,
+                      ),
+                    ),
+                  if (attempt.isConnected)
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          _Notice(
+                            text: ConnectionPage.connectedNote,
+                            palette: palette,
+                          ),
+                          if (widget.onContinue != null) ...<Widget>[
+                            const SizedBox(height: NearSendSpacing.sm),
+                            FilledButton.icon(
+                              onPressed: widget.onContinue,
+                              icon: const Icon(Icons.arrow_forward),
+                              label: Text(widget.continueLabel),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  if (attempt.hasFailed)
+                    Padding(
+                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                      child: _Notice(
+                        text: _failureText(attempt),
+                        palette: palette,
+                        isError: true,
+                      ),
+                    ),
+                  if (_import.isAccepted) ...<Widget>[
+                    const SizedBox(height: NearSendSpacing.md),
+                    _PeerPreview(
+                      payload: _import.payload!,
+                      deviceName: widget.peerDeviceName,
+                      platform: widget.peerPlatform,
+                      verified: attempt.isConnected,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -311,10 +341,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
 }
 
 class _PublishedPayload extends StatelessWidget {
-  const _PublishedPayload({required this.payload, required this.palette});
+  const _PublishedPayload({
+    required this.payload,
+    required this.palette,
+    required this.deviceName,
+    required this.platform,
+  });
 
   final PairingPayload payload;
   final NearSendColors palette;
+  final String deviceName;
+  final String platform;
 
   @override
   Widget build(BuildContext context) {
@@ -326,6 +363,10 @@ class _PublishedPayload extends StatelessWidget {
           children: <Widget>[
             Text('本机连接信息', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: NearSendSpacing.sm),
+            _Field(label: '设备名', value: deviceName),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '平台', value: platform),
+            const SizedBox(height: NearSendSpacing.xs),
             _Field(label: '证书指纹（pin）', value: payload.serverFingerprint),
             const SizedBox(height: NearSendSpacing.xs),
             _Field(
@@ -368,6 +409,71 @@ class _PublishedPayload extends StatelessWidget {
   }
 }
 
+class _PeerPreview extends StatelessWidget {
+  const _PeerPreview({
+    required this.payload,
+    required this.deviceName,
+    required this.platform,
+    required this.verified,
+  });
+
+  final PairingPayload payload;
+  final String deviceName;
+  final String platform;
+  final bool verified;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(NearSendSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.devices_outlined),
+                const SizedBox(width: NearSendSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '对端设备',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                NsStatusBadge(
+                  label: verified ? '已验证' : '待验证',
+                  tone: verified ? NsStatusTone.success : NsStatusTone.warning,
+                ),
+              ],
+            ),
+            const SizedBox(height: NearSendSpacing.sm),
+            _Field(label: '设备名', value: deviceName),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '平台', value: platform),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '地址', value: _addresses),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '待核对指纹', value: payload.serverFingerprint),
+            if (!verified) ...<Widget>[
+              const SizedBox(height: NearSendSpacing.sm),
+              const NsInfoBanner(
+                title: '请先核对指纹',
+                message: ConnectionPage.fingerprintPendingNote,
+                tone: NsStatusTone.warning,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _addresses => <String>[
+    for (final PairingCandidate candidate in payload.candidates)
+      '${candidate.host}:${candidate.port}',
+  ].join('、');
+}
+
 class _Field extends StatelessWidget {
   const _Field({required this.label, required this.value});
 
@@ -399,23 +505,10 @@ class _Notice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(NearSendSpacing.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Icon(
-              isError ? Icons.error_outline : Icons.info_outline,
-              color: isError ? palette.error : palette.primary,
-            ),
-            const SizedBox(width: NearSendSpacing.sm),
-            Expanded(
-              child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-            ),
-          ],
-        ),
-      ),
+    return NsInfoBanner(
+      title: isError ? '连接未完成' : '连接状态',
+      message: text,
+      tone: isError ? NsStatusTone.error : NsStatusTone.info,
     );
   }
 }
