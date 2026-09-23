@@ -202,6 +202,37 @@ jobs:
           key: flutter-${{ runner.os }}-${{ env.FLUTTER_VERSION }}
       - name: Install pinned Flutter
         run: bash tooling/ci/install_flutter.sh
+      - name: Patch Flutter macOS AOT windowing workaround
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version | grep -Fq "Flutter ${FLUTTER_VERSION} "
+          target="${RUNNER_TEMP}/flutter-sdk/flutter/packages/flutter/lib/src/widgets/_window_macos.dart"
+          test -f "$target"
+          for class in _WindowCreationRequest _Size _Offset _Rect _Constraints; do
+            CLASS="$class" perl -0pi -e '
+              my $class = $ENV{CLASS};
+              my $pragma = q{@pragma('\''vm:entry-point'\'')};
+              my $declaration = "class $class";
+              my $guard = $pragma . "\n" . $declaration;
+              if (index($_, $guard) < 0) {
+                my $count = s/^\Q$declaration\E\b/$guard/m;
+                die "missing $declaration in $ARGV\n" unless $count;
+              }
+            ' "$target"
+          done
+          for class in _WindowCreationRequest _Size _Offset _Rect _Constraints; do
+            CLASS="$class" perl -0ne '
+              my $class = $ENV{CLASS};
+              my $pragma = q{@pragma('\''vm:entry-point'\'')};
+              my $needle = $pragma . "\nclass " . $class;
+              exit(index($_, $needle) >= 0 ? 0 : 1);
+            ' "$target" || {
+              echo "ERROR: Flutter macOS AOT workaround verification failed for ${class}" >&2
+              exit 1
+            }
+          done
+          echo "Applied Flutter macOS AOT workaround to ${target}"
       - name: Generate macOS project when absent
         run: |
           if [ ! -f macos/Runner.xcodeproj/project.pbxproj ]; then
@@ -265,6 +296,7 @@ jobs:
 
           - Commit: `${{ needs.prepare.outputs.commit }}`
           - Flutter: `${{ env.FLUTTER_VERSION }}`
+          - macOS release applies the scoped Flutter 3.47.5 AOT windowing workaround for upstream issue #191575.
           - Android package is currently built with the repository's debug signing configuration; configure a protected signing secret before distributing it outside internal testing.
           - Linux packages target `amd64`.
           - SHA-256 checksums are attached as `SHA256SUMS.txt`.
