@@ -20,6 +20,10 @@
 | V12-02 全量测试 | 通过 | `fvm flutter test --reporter compact`，1275 项全部通过；`flutter analyze` 无问题 |
 | V12-03 设置与接收确认定向测试 | 通过 | 设置页与接收页 18 项通过；两个真实 TLS UI 文件传输用例纳入全量回归 |
 | V12-03 全量测试 | 通过 | `fvm flutter test --reporter compact`，1285 项全部通过；`flutter analyze` 无问题 |
+| V12-04 身份与迁移定向测试 | 通过 | 长期身份载荷、schema v8→v9、公开元数据、peer 历史、节点重启和 MethodChannel 测试通过 |
+| V12-04 全量测试 | 通过 | `fvm flutter test --reporter compact`，1301 项全部通过；覆盖旧数据库首次建立身份与已绑定身份丢失后的失败关闭 |
+| V12-04 Android Kotlin 编译 | 通过 | `:app:compileDebugKotlin` 成功，含 Keystore AES-GCM 身份存储 |
+| V12-04 Windows DPAPI 编译 | 受阻 | 当前主机不是 Windows；必须由 Windows CI/主机验证 C++ 编译和当前用户作用域持久化 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
@@ -112,6 +116,29 @@ fvm flutter test test/features/settings/settings_page_test.dart \
 
 fvm flutter test --reporter compact
 结果：1285 tests passed
+```
+
+## V12-04 第一阶段自动化证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test test/core/security/installation_identity_test.dart \
+  test/core/storage/installation_identity_repository_test.dart \
+  test/core/storage/peer_repository_test.dart \
+  test/core/storage/storage_migration_test.dart \
+  test/platform/platform_identity_store_test.dart \
+  test/app/node_runtime_test.dart test/app/node_session_test.dart
+结果：通过
+
+fvm flutter test --reporter compact
+结果：1301 tests passed
+
+./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
+结果：BUILD SUCCESSFUL
 ```
 
 ## 证据规则

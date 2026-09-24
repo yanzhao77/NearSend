@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/node_runtime.dart';
 import 'package:nearsend/app/node_session.dart';
+import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
 /// The application's node, as the connection screen sees it.
@@ -82,11 +83,14 @@ void main() {
         String commonName = 'NearSend',
         AndroidFileGateway? gateway,
         List<String>? candidateAddresses,
+        InstallationIdentityProvider identityProvider =
+            const EphemeralInstallationIdentityProvider(),
       }) {
         opened++;
         return NodeRuntime(
           directory: directory,
           candidateAddresses: candidateAddresses ?? const <String>['127.0.0.1'],
+          identityProvider: identityProvider,
         );
       }
 

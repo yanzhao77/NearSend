@@ -22,18 +22,17 @@
 ///
 /// ## What it does not decide
 ///
-/// **Identity persistence.** `NearSendNode.open` mints a fresh TLS identity every time, so the pin
-/// this session publishes changes at every launch. That is an open item with real consequences
-/// (where the private key lives, what re-pairing means when it is gone), and inventing a half-answer
-/// here - a key file beside the database - is the "cheap secret store" `AGENTS.md` §5 rules out. So
-/// the note beside the pin on the connection screen is true today, and the day persistence lands
-/// that note and this paragraph change together.
+/// **Identity persistence.** The provider states whether its identity is platform-protected and
+/// persistent. The UI only removes the restart warning for that case. A missing or corrupt secure
+/// identity becomes a failed node state; this class never falls back to a newly generated identity
+/// over an existing database.
 library;
 
 import 'package:flutter/foundation.dart';
 
 import 'package:nearsend/app/node_runtime.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 
@@ -62,6 +61,7 @@ typedef NodeRuntimeFactory = NodeRuntime Function({
   String commonName,
   AndroidFileGateway? gateway,
   List<String>? candidateAddresses,
+  InstallationIdentityProvider identityProvider,
 });
 
 /// Owns the application's node and publishes the state a screen renders.
@@ -72,6 +72,7 @@ class NodeSession extends ChangeNotifier {
     this.commonName = 'NearSend',
     this.gateway,
     this.candidateAddresses,
+    this.identityProvider = const EphemeralInstallationIdentityProvider(),
     this.openRuntime = NodeRuntime.new,
   });
 
@@ -86,6 +87,8 @@ class NodeSession extends ChangeNotifier {
 
   /// The addresses to publish, or null to read them from the network interfaces.
   final List<String>? candidateAddresses;
+
+  final InstallationIdentityProvider identityProvider;
 
   /// Opens the runtime. Overridable so a test can state its own, and so a failure to open one is
   /// reachable without a broken filesystem.
@@ -113,6 +116,9 @@ class NodeSession extends ChangeNotifier {
 
   /// The running node, or null when none is.
   NearSendNode? get node => _runtime?.node;
+
+  bool get hasPersistentIdentity =>
+      _runtime?.hasPersistentIdentity ?? identityProvider.isPersistent;
 
   /// The runtime, for the parts of the application that need its gateway or engine.
   NodeRuntime? get runtime => _runtime;
@@ -154,6 +160,7 @@ class NodeSession extends ChangeNotifier {
         commonName: commonName,
         gateway: gateway,
         candidateAddresses: candidateAddresses,
+        identityProvider: identityProvider,
       );
       final NearSendNode node = await opened.start();
       _runtime = opened;
@@ -207,6 +214,9 @@ class NodeSession extends ChangeNotifier {
   /// Only three conditions are distinguishable to a user, and only one of them has a remedy, so the
   /// rest collapse into a single sentence rather than leaking an exception's text into the UI.
   static String _reasonFor(Object error) {
+    if (error is IdentityRecoveryRequired) {
+      return '本机安全身份缺失或损坏，已停止启动以避免冒充旧设备。请重新建立本机身份并重新配对。';
+    }
     if (error is StateError) {
       return noAddressReason;
     }

@@ -410,6 +410,8 @@ class _NearSendAppState extends State<NearSendApp> {
                         : ConnectionPage.continueLabelSend,
                     localDeviceName: _settings.settings.deviceName,
                     localPlatform: defaultTargetPlatform.name,
+                    persistentLocalIdentity:
+                        session?.hasPersistentIdentity ?? false,
                   );
                 },
               );

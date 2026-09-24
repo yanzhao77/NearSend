@@ -91,6 +91,7 @@ class ConnectionPage extends StatefulWidget {
     this.localPlatform = '当前平台',
     this.peerDeviceName = '对端设备名称未提供',
     this.peerPlatform = '对端平台未提供',
+    this.persistentLocalIdentity = false,
   });
 
   /// The payload this device publishes, or null when it has not opened a session.
@@ -131,6 +132,7 @@ class ConnectionPage extends StatefulWidget {
   final String localPlatform;
   final String peerDeviceName;
   final String peerPlatform;
+  final bool persistentLocalIdentity;
 
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
@@ -148,13 +150,7 @@ class ConnectionPage extends StatefulWidget {
   static const String continueLabelSend = '选择文件';
   static const String continueLabelReceive = '查看对方提供的文件';
 
-  /// Shown under the published pin, because that pin is not stable across launches.
-  ///
-  /// The node generates a fresh TLS identity every time it opens, so the fingerprint a peer
-  /// recorded last time will not match this time. That is a real limitation of the current build and
-  /// the screen has to say so: a person comparing fingerprints with the peer would otherwise see a
-  /// change and reasonably suspect the wrong thing. It disappears when identity persistence lands,
-  /// and it must disappear **then** rather than being left behind as a stale warning.
+  /// Shown only when the current platform is using the explicit ephemeral identity provider.
   static const String ephemeralIdentityNote =
       '本机身份在每次启动时重新生成，因此这个指纹下次启动会变；配对结果无法跨重启保留。';
 
@@ -231,6 +227,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       palette: palette,
                       deviceName: widget.localDeviceName,
                       platform: widget.localPlatform,
+                      persistentIdentity: widget.persistentLocalIdentity,
                     ),
                   const SizedBox(height: NearSendSpacing.xl),
                   Text(
@@ -346,12 +343,14 @@ class _PublishedPayload extends StatelessWidget {
     required this.palette,
     required this.deviceName,
     required this.platform,
+    required this.persistentIdentity,
   });
 
   final PairingPayload payload;
   final NearSendColors palette;
   final String deviceName;
   final String platform;
+  final bool persistentIdentity;
 
   @override
   Widget build(BuildContext context) {
@@ -384,24 +383,23 @@ class _PublishedPayload extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: NearSendSpacing.sm),
-            // Said because it is currently true and a user would otherwise be misled: the node
-            // mints a fresh TLS identity every time it opens, so this pin is not the same one the
-            // next launch will show. Without this line a person comparing fingerprints across two
-            // launches would conclude the peer changed identity, and a pairing they thought they
-            // had made would look like it had been tampered with.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Icon(Icons.info_outline, color: palette.warning),
-                const SizedBox(width: NearSendSpacing.sm),
-                Expanded(
-                  child: Text(
-                    ConnectionPage.ephemeralIdentityNote,
-                    style: Theme.of(context).textTheme.bodySmall,
+            // Unsupported platforms and tests still use an explicit ephemeral provider, and must
+            // keep stating that limitation. Android/Windows production hide it only after their
+            // platform-protected provider has loaded successfully.
+            if (!persistentIdentity)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.info_outline, color: palette.warning),
+                  const SizedBox(width: NearSendSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      ConnectionPage.ephemeralIdentityNote,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),

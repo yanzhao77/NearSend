@@ -29,7 +29,7 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 8;
+  static const int currentVersion = 9;
 
   /// The table holding one staging proposal per transfer (§6, ADR-0004).
   static const String manifestStagingTable = 'manifest_staging';
@@ -338,6 +338,9 @@ CREATE TABLE task_receiver_mirror (
   /// The receiver's durable local name and destination for every offered file.
   static const String receiveOutputPlansTable = 'receive_output_plans';
 
+  /// Public metadata for the installation identity. Private key bytes never enter this table.
+  static const String localIdentityTable = 'local_identity';
+
   /// Tables schema version 6 adds.
   static const Map<String, String> version6Tables = <String, String>{
     taskSourcesTable: '''
@@ -386,6 +389,23 @@ CREATE TABLE receive_output_plans (
 
   static const Map<String, String> version8Indexes = <String, String>{
     'receive_outputs_by_transfer': 'CREATE INDEX receive_outputs_transfer ON receive_output_plans (transfer_id);',
+  };
+
+  static const Map<String, String> version9Tables = <String, String>{
+    localIdentityTable: '''
+CREATE TABLE local_identity (
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  device_id      TEXT    NOT NULL,
+  public_key     TEXT    NOT NULL,
+  key_reference  TEXT    NOT NULL,
+  format_version INTEGER NOT NULL,
+  created_at     INTEGER NOT NULL
+);''',
+  };
+
+  static const Map<String, String> version9Indexes = <String, String>{
+    'peers_by_last_seen':
+        'CREATE INDEX peers_last_seen ON peers (last_seen_at DESC);',
   };
 
   /// The indexes this schema version defines.
@@ -501,6 +521,29 @@ CREATE TABLE receive_output_plans (
     }
   }
 
+  /// Applies schema version 9: stable local identity metadata and richer peer history.
+  static void applyVersion9(Database db) {
+    for (final String ddl in version9Tables.values) {
+      db.execute(ddl);
+    }
+    db.execute('ALTER TABLE peers ADD COLUMN identity_public_key TEXT;');
+    db.execute('ALTER TABLE peers ADD COLUMN platform TEXT;');
+    db.execute(
+      "ALTER TABLE peers ADD COLUMN trust_state TEXT NOT NULL DEFAULT 'unknown' "
+      "CHECK (trust_state IN ('unknown', 'authorized', 'revoked'));",
+    );
+    db.execute('ALTER TABLE peers ADD COLUMN paired_at INTEGER;');
+    db.execute('ALTER TABLE peers ADD COLUMN last_verified_at INTEGER;');
+    db.execute(
+      "UPDATE peers SET trust_state = CASE WHEN authorized = 1 "
+      "THEN 'authorized' ELSE 'revoked' END, paired_at = last_seen_at, "
+      'last_verified_at = CASE WHEN authorized = 1 THEN last_seen_at ELSE NULL END;',
+    );
+    for (final String ddl in version9Indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
   /// The names of every table in this schema version, including the metadata table.
   static Set<String> get tableNames => <String>{
     metaTable,
@@ -510,5 +553,6 @@ CREATE TABLE receive_output_plans (
     ...version6Tables.keys,
     ...version7Tables.keys,
     ...version8Tables.keys,
+    ...version9Tables.keys,
   };
 }

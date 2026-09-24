@@ -183,6 +183,39 @@ void main() {
         reason: 'merely seeing a device again must not re-authorise it',
       );
     });
+
+    test('only a matching authorised identity records verified presence', () {
+      int now = 10;
+      peers = PeerRepository(database, now: () => now);
+      peers.recordUserAuthorization(
+        peerId: peerId,
+        identityFingerprint: fingerprintA,
+        identityPublicKey: 'public-key',
+        platform: 'android',
+      );
+      now = 20;
+
+      expect(
+        peers.recordVerifiedPresence(
+          peerId: peerId,
+          identityFingerprint: fingerprintB,
+        ),
+        isFalse,
+      );
+      expect(peers.history().single.lastVerifiedAt, 10);
+
+      expect(
+        peers.recordVerifiedPresence(
+          peerId: peerId,
+          identityFingerprint: fingerprintA,
+        ),
+        isTrue,
+      );
+      final PeerRecord record = peers.history().single;
+      expect(record.lastVerifiedAt, 20);
+      expect(record.identityPublicKey, 'public-key');
+      expect(record.platform, 'android');
+    });
   });
 
   group('storage shape', () {
@@ -198,12 +231,17 @@ void main() {
         'identity_fingerprint',
         'authorized',
         'last_seen_at',
+        'identity_public_key',
+        'platform',
+        'trust_state',
+        'paired_at',
+        'last_verified_at',
       ]);
       for (final String column in columns) {
         expect(
           column.contains('token') ||
               column.contains('secret') ||
-              column.contains('key') ||
+              (column.contains('key') && column != 'identity_public_key') ||
               column.contains('password'),
           isFalse,
           reason:

@@ -250,6 +250,31 @@ void main() {
       );
     });
 
+    testWidgets(
+      'persistent platform identity removes only the restart warning',
+      (tester) async {
+        final PairingPayload payload = PairingPayload.parse(
+          '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
+          '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
+          '"sessionId":"11111111-2222-4333-8444-555555555555",'
+          '"candidates":[{"host":"192.168.1.5","port":18443}],'
+          '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: ConnectionPage(
+              payload: payload,
+              persistentLocalIdentity: true,
+            ),
+          ),
+        );
+
+        expect(find.text(ConnectionPage.ephemeralIdentityNote), findsNothing);
+        expect(find.text(payload.serverFingerprint), findsOneWidget);
+      },
+    );
+
     testWidgets('a pasted payload is parsed by the same strict parser', (
       tester,
     ) async {

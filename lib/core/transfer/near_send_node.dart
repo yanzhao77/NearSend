@@ -57,6 +57,7 @@ import 'package:nearsend/core/storage/export_service.dart';
 import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/idempotency_repository.dart';
+import 'package:nearsend/core/storage/installation_identity_repository.dart';
 import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
@@ -237,20 +238,33 @@ class NearSendNode {
     SourceBytes Function(String sourceRef, int sizeBytes)? sourceResolver,
     ExportSink Function(LocalStagingLayout, StagingFileSink)? exportSinkFactory,
     ExportNamingPolicy exportNaming = const ExportNamingPolicy(),
+    TlsIdentity? tlsIdentity,
+    DeviceIdentity? deviceIdentity,
   }) async {
     final Directory root = Directory(directory);
     if (!root.existsSync()) {
       await root.create(recursive: true);
     }
 
-    final TlsIdentity identity = generateTlsIdentity(
-      commonName: commonName,
-      subjectAltNames: candidateAddresses,
-    );
+    final TlsIdentity identity =
+        tlsIdentity ??
+        generateTlsIdentity(
+          commonName: commonName,
+          subjectAltNames: candidateAddresses,
+        );
 
     final NearSendDatabase database = NearSendDatabase.open(
       path: '${root.path}${Platform.pathSeparator}nearsend.db',
     );
+    try {
+      if (deviceIdentity != null) {
+        InstallationIdentityMetadataRepository(database)
+            .ensureMatches(deviceIdentity);
+      }
+    } on Object {
+      database.close();
+      rethrow;
+    }
 
     final TransferRepository transfers = TransferRepository(database);
     final ChunkRepository tasks = ChunkRepository(database);

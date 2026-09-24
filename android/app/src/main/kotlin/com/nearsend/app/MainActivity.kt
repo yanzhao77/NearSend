@@ -49,11 +49,13 @@ import java.nio.channels.FileChannel
 class MainActivity : FlutterActivity() {
 
     private val channelName = "com.nearsend.app/files"
+    private val identityChannelName = "com.nearsend.app/secure_identity"
 
     /** The single in-flight pick, so a second request cannot race the first. */
     private var pendingPick: MethodChannel.Result? = null
     private val pickRequestCode = 4711
     private val storageLocations by lazy { AndroidStorageLocations(this) }
+    private val secureIdentity by lazy { AndroidSecureIdentityStore(applicationContext) }
 
     /** Open write channels, keyed by URI, so a chunked write does not reopen per chunk. */
     private val writeChannels = HashMap<String, FileChannel>()
@@ -62,6 +64,26 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result -> handle(call, result) }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, identityChannelName)
+            .setMethodCallHandler { call, result -> handleIdentity(call, result) }
+    }
+
+    private fun handleIdentity(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            when (call.method) {
+                "readIdentity" -> result.success(secureIdentity.read())
+                "writeIdentity" -> {
+                    secureIdentity.write(
+                        call.argument<String>("value")
+                            ?: throw IllegalArgumentException("an identity value is required"),
+                    )
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        } catch (error: Exception) {
+            result.error("NS-IDENTITY", error.javaClass.simpleName, null)
+        }
     }
 
     private fun handle(call: MethodCall, result: MethodChannel.Result) {

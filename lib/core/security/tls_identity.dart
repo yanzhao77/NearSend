@@ -46,6 +46,7 @@ import 'package:pointycastle/macs/hmac.dart';
 import 'package:pointycastle/random/fortuna_random.dart';
 import 'package:pointycastle/signers/ecdsa_signer.dart';
 
+import 'package:nearsend/core/protocol/protocol_validation.dart';
 import 'package:nearsend/core/security/pairing_trust.dart';
 
 /// Object identifiers this module writes. Named, so no call site carries a dotted string.
@@ -92,6 +93,47 @@ class TlsIdentity {
   @override
   String toString() =>
       'TlsIdentity(pin=$pin, certificate=${certificateDer.length}B)';
+}
+
+/// The installation's long-term device identity, separate from its TLS leaf.
+///
+/// The public key and its digest may be persisted as peer metadata. The PKCS#8 private key must
+/// only be serialized inside the platform secure-store envelope.
+class DeviceIdentity {
+  DeviceIdentity({
+    required this.publicKeyDer,
+    required this.privateKeyPkcs8Der,
+  });
+
+  final Uint8List publicKeyDer;
+  final Uint8List privateKeyPkcs8Der;
+
+  String get deviceId => bytesToSha256Hex(SHA256Digest().process(publicKeyDer));
+
+  @override
+  String toString() => 'DeviceIdentity(deviceId=$deviceId)';
+}
+
+/// Generates a P-256 identity used to recognize an installation across sessions.
+DeviceIdentity generateDeviceIdentity() {
+  final ECDomainParameters curve = ECCurve_prime256v1();
+  final FortunaRandom random = secureRandom();
+  final AsymmetricKeyPair<PublicKey, PrivateKey> pair =
+      (ECKeyGenerator()..init(
+            ParametersWithRandom(ECKeyGeneratorParameters(curve), random),
+          ))
+          .generateKeyPair();
+  final ECPublicKey publicKey = pair.publicKey as ECPublicKey;
+  final ECPrivateKey privateKey = pair.privateKey as ECPrivateKey;
+  final ECPoint point = publicKey.Q!;
+  final Uint8List publicKeyDer = _sequence(<Uint8List>[
+    _algorithmIdentifier(_oidEcPublicKey, _oidPrime256v1),
+    _bitString(point.getEncoded(false)),
+  ]);
+  return DeviceIdentity(
+    publicKeyDer: publicKeyDer,
+    privateKeyPkcs8Der: _pkcs8(privateKey, point),
+  );
 }
 
 /// Generates a fresh self-signed P-256 identity.

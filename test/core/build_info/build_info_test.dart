@@ -70,8 +70,8 @@ void main() {
       // never be a second definition of the number.
       expect(
         StorageSchema.currentVersion,
-        8,
-        reason: 'V12-02 adds durable receive output plans',
+        9,
+        reason: 'V12-04 adds public installation identity metadata and peer history',
       );
       expect(
         dbSchemaDisplay,

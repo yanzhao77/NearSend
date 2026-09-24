@@ -88,6 +88,11 @@ abstract final class StorageMigrations {
       description: 'receiver output names and destinations are persisted before acceptance',
       apply: StorageSchema.applyVersion8,
     ),
+    MigrationStep(
+      version: 9,
+      description: 'stable local identity metadata and peer trust history',
+      apply: StorageSchema.applyVersion9,
+    ),
   ];
 
   /// The version a fresh database reaches by applying every step.
