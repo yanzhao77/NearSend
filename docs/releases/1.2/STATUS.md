@@ -31,11 +31,11 @@
 | V12-03 设置与确认 UI | 当前环境完成 | 默认目录选择先复查权限再持久化；单/多文件在一次弹框中确认位置与本地名称；取消、非法名、撤权和空间不足均不会接受；两个真实 TLS 方向已从确认 UI 保存并校验文件 | Android/Windows 实机验证系统选择器、重启授权、撤权修复与多文件保存 |
 | V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据；已知设备挑战已将身份、就绪状态和 TLS pin 绑定并可更新最近实时验证；Windows CI release 构建通过 | Android/Windows 重启、DPAPI 持久化和双向挑战实测 |
 | V12-05 mDNS 发现 | 进行中 | 固定 `bonsoir 7.1.5`；实现最小 TXT、严格候选解析、发布/浏览/更新/丢失/停止生命周期；Android Kotlin 与 iOS Simulator 构建通过 | Android/Windows 同网双机发现并完成身份认证；验证隔离网络与网络切换清理 |
-| V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现无设备名广告、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；14 项定向测试、1322 项全量测试及 Windows CI release 构建通过 | Android/Windows 双机验证不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期 |
+| V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现有界展示名、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；当前自动化与 Android 构建通过 | Android/Windows 双机验证名称互操作、不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期 |
 | V12-07 统一安全配对 | 部分完成，PAKE 受阻 | 已实现已授权设备 P-256 新鲜挑战、角色/版本/ready/TLS pin 绑定、30 秒有效期、重放/撤销/身份替换失败关闭；现有 QR 指纹与一次性令牌路径保留 | 选择满足审计、向量和 Android/Windows/iOS 支持的成熟 PAKE；双机验证双向挑战 |
 | V12-08 热点与数据通道 | 部分完成，路由绑定受阻 | 已实现认证端点优先的有界网络选择、Android LocalOnlyHotspot/系统确认入网 lease 与资源释放、Windows 系统设置回退；凭据不持久化/不输出 | Android 真机验证热点与指定 Network socket；Windows 主机验证 Native Wi-Fi 事件/profile/恢复后再开放自动加入 |
 | V12-09 二维码入口 | 进行中 | 严格 `nearsend-bootstrap` v1、旧码兼容、真实会话二维码、移动离线摄像头、Windows 有界图片导入及扫码后系统入网→TLS pin 配对协调已实现；Android 与 Windows CI 构建通过 | 摄像头/导图/热点二维码实测；向用户呈现平台入网错误 |
-| V12-10 首页雷达与在线历史 | 部分完成 | 默认关闭的就绪状态机已真实启停 mDNS/BLE；首页合并历史、mDNS、BLE 候选，只有新鲜已授权证明显示绿色状态 | 将已知设备挑战接入生产 BLE/mDNS 控制链路；完成首次 PAKE、候选点击配对和双机实测 |
+| V12-10 首页雷达与在线历史 | 部分完成 | 默认关闭的就绪状态机已真实启停 mDNS/BLE；首页显示发现到的设备名称，点击候选展示所选对端信息；只有新鲜已授权证明显示绿色状态 | 将已知设备挑战接入生产 BLE/mDNS 控制链路；完成首次 PAKE、候选点击配对和双机实测 |
 | V12-11 系统打开与异常收尾 | 代码与当前环境自动化完成，平台交互验证受阻 | 保存结果和任务详情只在真实最终句柄存在时提供系统打开/定位；Android 使用 SAF/FileProvider，Windows 使用 Shell API；后台关闭雷达，扫码、BLE、mDNS、热点/入网 lease 均有收尾路径；1369 项全量测试及 Android/Windows CI 构建通过 | Android 真机验证 SAF/FileProvider；Windows 主机实测 Shell 动作；补后台切换、权限撤销和热点清理实机证据 |
 | V12-12 回归与发布准备 | 当前环境完成，目标设备验收受阻 | 格式、分析、1369 项测试、Android debug/release、Windows release、iOS Simulator、文档链接、敏感信息和 CI 工作流检查通过；README、状态、验收和台账已收口 | Android/Windows 双机执行剩余矩阵；补 PAKE、指定网络绑定、热点和大文件证据后才能发布 |
 
@@ -104,8 +104,9 @@
 
 - `bonsoir 7.1.5` 与项目固定工具链兼容，MIT 许可，依赖及传递依赖摘要写入锁文件。Android 使用
   NSD，Windows 使用 WinDNS，Darwin 使用 Bonjour；依赖只处理系统发现，不参与身份或 TLS 信任。
-- `_nearsend._tcp` TXT 仅发布协议 major/minor、短期实例 UUID 和 `discovery.mdns.v1`。不发布设备
-  名称、长期身份、公钥、TLS pin、令牌、热点凭据、文件或路径。发现结果始终是未认证候选。
+- `_nearsend._tcp` TXT 发布协议 major/minor、短期实例 UUID、`discovery.mdns.v1`，以及有界的可选
+  展示字段 `dn`（设备名）和 `pf`（平台）。展示字段属于未认证候选元数据，不发布长期身份、公钥、
+  TLS pin、令牌、热点凭据、文件或路径，也不能授予信任或点亮就绪状态。
 - 解析限制能力/地址数量，拒绝畸形版本和 UUID，过滤本机回环、未指定及多播地址，保留合法 IPv6
   zone。HTTPS 节点监听并生成配对会话后才发布；停止时先撤销浏览和广播。
 - 12 项 mDNS/节点生命周期定向测试及 1308 项全量测试通过；Android 主应用和插件 Kotlin 编译通过；iOS Simulator
@@ -117,8 +118,9 @@
 - 固定并审查 `bluetooth_low_energy 6.2.1`：MIT 许可、兼容 Dart 3.13.4 / Flutter 3.47.5，提供
   Android/Windows central 与 peripheral、GATT、MTU、write 和 notification API。平台插件只负责
   系统能力，不参与身份认证或文件传输。
-- 广告不包含设备名、身份、公钥、TLS pin 或秘密。固定 service UUID 的 service data 仅含格式/
-  协议版本和 48 位临时实例标签；发现记录始终是未认证候选。
+- 固定 service UUID 的 service data 仅含格式/协议版本和 48 位临时实例标签，不含身份、公钥、
+  TLS pin 或秘密。平台支持时使用标准本地名称字段发布最多 20 UTF-8 字节的有界展示名；名称仍是
+  未认证候选元数据。Windows 插件不支持设置自定义广播名称时保持“未命名”，不伪造名称。
 - 控制帧固定 16 字节头，逻辑消息上限 16 KiB、帧上限 512 字节、15 秒超时、每对端一个在途重组、
   总计 16 个对端。自动化覆盖默认 20 字节帧、最大消息、截断、坏版本、重复、乱序、重放和超时。
 - 两端都可作为 central/peripheral，GATT 角色不决定后续文件方向。停止时撤销扫描、广告、连接、
@@ -179,10 +181,10 @@
 
 ## V12-10 首页雷达阶段记录
 
-- 应用每次启动默认未就绪。HTTPS 接收节点继续运行，但 mDNS 广播/浏览与 BLE 广播/扫描只有用户
-  开启雷达后才启动；关闭按顺序停止两类资源，并清除未认证候选和内存中的在线证明。
-- 就绪状态区分 `off`、`starting`、`ready`、`stopping` 和 `error`，启动期间禁用重复切换并显示
-  真实失败说明。BLE 权限只在用户开启时请求，拒绝不会关闭手动连接和二维码入口。
+- 应用每次启动两个发现入口都默认关闭。HTTPS 接收节点继续运行；mDNS 广播/浏览与 BLE 广告/扫描
+  分别由 Wi-Fi 和蓝牙开关启动，关闭一个入口不会停止另一个入口的资源或清除其候选。
+- 两个入口各自区分 `off`、`starting`、`ready`、`stopping` 和 `error`，启动期间禁用对应开关并
+  显示真实失败说明。BLE 权限只在用户开启蓝牙入口时请求，拒绝不会关闭 Wi-Fi、手动连接和二维码入口。
 - 历史、mDNS 与 BLE 使用不同事实来源。mDNS/BLE 广告始终显示为“候选”且没有状态灯；只有数据库
   中仍为 authorized 的长期身份完成新鲜 `VerifiedPeerSession(ready=true)` 后才显示绿色状态，证明
   过期、关闭就绪或撤销授权后立即/按期熄灭。设备名称和地址不参与身份判断。
@@ -229,6 +231,54 @@
   `docs/testing/evidence/2026-09-24/v1.2-upgrade/summary.md`。未执行的 Android/Windows 双机、
   不同 Wi-Fi、无路由热点、大文件、权限撤销、IP 改变、身份伪装和后台资源矩阵继续保持未通过。
 - 本分支只准备实现和证据，不合并 `master`、不创建正式版本、不发布 Release。
+
+## 权限入口加固记录
+
+- 摄像头扫码每次进入前读取 `mobile_scanner 7.1.3` 的原生授权状态；未授权时才发起系统请求，
+  拒绝或通道不可用时不进入扫码页，并保留图片导入入口。扫码控制器启动时仍执行插件自身的二次
+  权限检查，避免授权在页面切换期间被撤销。
+- 发送文件、接收目录、默认目录和二维码图片导入每次打开前经过统一权限策略。Android SAF、iOS
+  文档选择器和 Windows 文件对话框由系统选择器授予范围访问，不申请 `MANAGE_EXTERNAL_STORAGE`
+  或不必要的媒体库权限。
+- Android `ACTION_OPEN_DOCUMENT` 增加读取和持久授权标志，只接受系统实际授予且能够持久化的
+  URI；文件探测和每次分块读取前重新检查持久授权，撤权后以权限失败结束，不继续读取。
+- 2026-09-24 使用 FVM Flutter 3.47.5 验证：229 个 Dart 文件格式检查通过，静态分析无问题，
+  权限定向测试通过，完整回归 1380 项通过，Android debug APK 与 iOS device no-codesign 构建成功。
+- 2026-09-24 在 Xiaomi M2104K10AC、Android 13（API 33）、MIUI 14 真机验证独立测试包：首次
+  扫码显示系统摄像头授权弹窗；拒绝后不进入扫码页并显示权限说明；允许后摄像头 AppOps 为前台
+  使用且扫码预览正常；第二次扫码重新进入预览且不重复弹窗。
+- 同一真机验证 Android 系统目录选择器：应用未请求 `READ_EXTERNAL_STORAGE`、
+  `WRITE_EXTERNAL_STORAGE` 或 `MANAGE_EXTERNAL_STORAGE`；选择 Download 下的测试子目录后，
+  系统记录读写 `persisted=0x3` 的 tree URI，应用进程重启后设置页仍显示访问权限有效。
+  SAF 撤权后的阻断、真实文件读写、iOS 真机和 Windows 交互仍需验证。
+
+## 雷达对端信息修复记录
+
+- mDNS 发布并严格解析最多 64 UTF-8 字节的设备展示名和规范平台标识；BLE 在平台支持时发布最多
+  20 UTF-8 字节的标准本地名称，并只展示系统实际返回的名称，否则明确显示“未命名蓝牙设备”。
+- 点击雷达设备时将所选 `RadarDevice` 传入连接页，标题与信息卡显示对方设备名、平台、发现方式、
+  状态和候选地址，不再误显示本机连接信息。上述字段继续标记为未验证，后续 TLS pin 与实时身份
+  验证要求不变。
+- 2026-09-24 使用 FVM Flutter 3.47.5 验证：雷达/mDNS/节点/路由定向测试 25 项通过，完整回归
+  1382 项通过，静态分析无问题，Android debug APK 构建成功。后续已在 25102RKBEC / Android 17
+  安装包含该修复的调试包并成功冷启动；当前只有一台 Android 设备，仍未执行两台设备之间的真实
+  名称发现、双渠道分别展示和点击连接，因此不标记为完整实机通过。
+
+## Wi-Fi 与蓝牙入口拆分记录
+
+- 首页将统一雷达拆为“Wi-Fi 局域网连接”和“蓝牙连接”两个独立开关、状态及设备列表。mDNS 候选
+  只进入局域网列表，BLE 候选只进入蓝牙列表；同一短期实例在两个渠道出现时分别保留，已配对历史
+  独立展示，不冒充当前发现结果。
+- 两个入口分别串行化启停，互不停止对方资源；应用进入后台时分别撤销。点击任一列表项继续将完整
+  `RadarDevice` 传入安全连接页，展示所选对端名称与候选信息。首次 PAKE 尚未冻结，候选不能静默
+  变为可信连接，TLS pin、一次性令牌和实时身份验证要求不变。
+- 2026-09-24 使用 FVM Flutter 3.47.5 验证：拆分入口相关定向测试 26 项通过，完整回归 1386 项
+  通过，静态分析无问题，Android debug APK 构建成功。25102RKBEC / Android 17 上的旧包为不同
+  签名且 `versionCode 12`，不能原地覆盖；经用户明确确认可清除数据后卸载旧包，安装
+  `versionCode 13` / `versionName 0.1.0` 调试包并成功冷启动。首页实机显示独立的“Wi-Fi 局域网
+  连接”和“蓝牙连接”区域，无可见重叠或溢出，且未发现 Flutter/Android 致命异常。卸载操作删除了
+  旧设置、设备身份和任务数据。当前只有一台设备，双设备名称发现、候选点击连接、BLE 广播名称以及
+  两个开关互不影响的完整人工操作仍未执行。
 
 ## 人工重点复核
 

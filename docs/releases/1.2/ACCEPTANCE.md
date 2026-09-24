@@ -54,6 +54,10 @@
 | V12-10 静态分析 | 通过 | `fvm flutter analyze`，`No issues found` |
 | V12-10 应用流程回归 | 通过 | `test/app/app_test.dart` 6 项通过；发送、接收、节点失败和真实 TLS 文件流程保持可用 |
 | V12-10 全量回归 | 通过 | 修正首页主操作顺序和新增测试滚动后，`fvm flutter test --reporter compact` 1361 项通过；此前失败运行保留为修复过程 |
+| V12-10 雷达对端信息修复 | 自动化通过 | 当前 26 项定向测试覆盖 mDNS 名称/平台、BLE 名称、按渠道分列、IPv6 地址、窄屏 200% 字体和点击后仅显示所选对端；完整回归 1386 项通过，静态分析无问题 |
+| V12-10 雷达修复 Android 构建/安装 | 部分通过 | debug APK 构建成功；经用户明确确认可清除旧数据后，在 25102RKBEC / Android 17 上卸载不同签名旧包并安装 `versionCode 13`，冷启动成功且无 Flutter/Android 致命异常 |
+| V12-10 Wi-Fi/蓝牙入口拆分 | 自动化通过 | 两套独立 phase、开关、错误状态和设备列表通过 26 项定向测试；mDNS/BLE 候选按渠道展示，点击传递所选设备；完整回归 1386 项通过 |
+| V12-10 拆分入口 Android 构建/安装 | 部分通过 | 25102RKBEC / Android 17 实机已显示独立的“Wi-Fi 局域网连接”和“蓝牙连接”区域且无布局溢出；旧包因版本号和签名不同不能原地覆盖，授权卸载后安装成功，旧设置、身份和任务数据已清除；双设备名称发现、点击连接和两开关独立人工操作仍未执行 |
 | V12-10 BLE/mDNS 生产挑战 | 受阻 | 安全挑战实现尚未接入生产控制消息；PAKE 无合格跨平台实现，不能从未认证候选静默建立信任 |
 | V12-11 文件动作定向测试 | 通过 | 平台通道、引用边界、结构化错误、接收结果、任务详情、SQLite 最终句柄和双向导出句柄共 29 项通过 |
 | V12-11 生命周期测试 | 通过 | 应用进入 `paused` 后雷达返回关闭且 BLE 会话释放；扫码控制器改为显式页面生命周期所有权 |
@@ -70,6 +74,9 @@
 | V12-12 敏感信息扫描 | 通过 | 506 个跟踪文件未发现凭证材料 |
 | V12-12 CI 工作流约束 | 通过 | Action 固定 SHA、无 `continue-on-error`、只读权限、Flutter 版本一致 |
 | V12-12 S0 Python 探针 | 部分通过 | 协议/存储 21 项通过；Xcode Python 3.9/LibreSSL 2.8.3 不支持 TLS 1.3，TLS 测试类初始化受阻 |
+| 权限入口定向测试 | 通过 | 摄像头已授权/请求/拒绝、重复扫码复查、文件与目录选择前检查、图片导入拒权共覆盖；完整回归 1380 项通过 |
+| 权限入口平台构建 | 通过 | `fvm flutter build apk --debug` 与 `fvm flutter build ios --no-codesign` 成功；不替代 Android/iOS 真机权限弹窗及 SAF 撤权实测 |
+| Android 运行时权限真机 | 部分通过 | Xiaomi M2104K10AC / Android 13 / MIUI 14：摄像头首次请求、拒绝阻断、允许后预览、重复扫码复查通过；SAF 目录系统确认、读写持久授权和应用重启后恢复通过；撤权及真实文件读写未执行 |
 
 ## 实机矩阵
 
@@ -85,7 +92,7 @@
 | A08 蜂窝网络与无互联网热点并存 | 未执行 | 需要 Android 真机与路由检查 |
 | A09 重启与热点 IP 改变 | 未执行 | 稳定身份持久化与节点重启自动化已通过；热点 IP 改变后的双机连续性仍需实测 |
 | A10 同名设备或身份指纹变化 | 未执行 | 身份替换、签名篡改和同名不自动信任已有自动化负例；仍需双机实测 |
-| A11 默认目录重启持久化 | 未执行 | 设置页选择、权限验证、持久化和默认填充已有自动化；仍需 Android/Windows 真机重启并实际写入 |
+| A11 默认目录重启持久化 | Android 部分通过 | Android 13 真机选择测试子目录并授予读写 tree URI，应用进程重启后仍显示访问权限有效；尚未执行真实写入、设备重启和 Windows 验证 |
 | A12 单/多文件、同名、中文和长名称 | 未执行 | 单弹框多文件改名、中文改名、同名自动重命名和非法名阻断已有自动化；仍需 Android/Windows 实机组合验证 |
 | A13 目录授权撤销或目录删除 | 未执行 | 接收前撤权阻断和设置修复入口、输出失败持久化与保留暂存已有自动化；仍需真机撤权/删除目录验证 |
 | A14 拒绝、超时和撤销邀请 | 未执行 | 拒绝不创建内容/输出计划已有自动化；超时、撤销与真机资源清理仍待验证 |
@@ -148,6 +155,46 @@ fvm flutter test --reporter compact
 
 没有执行 Android/Windows 双机雷达、BLE 权限/适配器关闭、后台恢复和生产挑战交换。自动化中的
 模拟事件只验证状态边界，不构成无线发现、绿灯或可信配对的实机证据。
+
+2026-09-24 修复雷达设备名和点击路由后补充执行：
+
+```text
+ fvm flutter test test/app/application/radar_controller_test.dart \
+  test/platform/mdns_discovery_gateway_test.dart \
+  test/app/node_session_test.dart test/app/app_test.dart --reporter compact
+结果：25 tests passed
+
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test --reporter compact
+结果：1382 tests passed
+```
+
+测试验证所选页面没有“本机连接信息”，并覆盖 mDNS 设备名/平台、BLE 广告名、当时的同实例
+候选合并和 IPv6 候选地址。该合并行为已由后续双入口实现替代。
+
+2026-09-24 拆分 Wi-Fi 与蓝牙入口后补充执行：
+
+```text
+fvm flutter test test/app/application/radar_controller_test.dart \
+  test/features/home/home_page_test.dart \
+  test/app/presentation/app_shell_test.dart \
+  test/platform/ble_control_gateway_test.dart --reporter compact
+结果：26 tests passed
+
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test --reporter compact
+结果：1386 tests passed
+
+fvm flutter build apk --debug
+结果：成功
+```
+
+当前只连接一台 Android 17 设备。现有 `versionCode 12` 应用与本地 debug 包签名不同，覆盖安装被
+Android 拒绝；未卸载应用或清除数据。真实双设备名称发现、按渠道分列和点击连接仍未执行。
 
 ## V12-01 自动化证据
 

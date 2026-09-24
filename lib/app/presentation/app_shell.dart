@@ -22,7 +22,8 @@ class NearSendAppShell extends StatefulWidget {
     this.connectionLabel = '连接状态未知',
     this.connectionTone = NsStatusTone.warning,
     this.onContinueTask,
-    this.onRadarReadyChanged,
+    this.onWifiReadyChanged,
+    this.onBluetoothReadyChanged,
     this.onRadarDevicePressed,
   });
 
@@ -34,7 +35,8 @@ class NearSendAppShell extends StatefulWidget {
   final String connectionLabel;
   final NsStatusTone connectionTone;
   final VoidCallback? onContinueTask;
-  final ValueChanged<bool>? onRadarReadyChanged;
+  final ValueChanged<bool>? onWifiReadyChanged;
+  final ValueChanged<bool>? onBluetoothReadyChanged;
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
 
   @override
@@ -142,11 +144,15 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
           .where((TaskOverview task) => task.isRecoverable)
           .length,
       onContinue: widget.onContinueTask,
-      radarReady: widget.radar?.ready ?? false,
-      radarBusy: widget.radar?.isBusy ?? false,
-      radarFailureReason: widget.radar?.failureReason,
-      onRadarReadyChanged: widget.onRadarReadyChanged,
-      radarDevices: widget.radar?.devices ?? const <RadarDevice>[],
+      wifiPhase: widget.radar?.wifiPhase ?? RadarReadinessPhase.off,
+      wifiFailureReason: widget.radar?.wifiFailureReason,
+      onWifiReadyChanged: widget.onWifiReadyChanged,
+      wifiDevices: widget.radar?.wifiDevices ?? const <RadarDevice>[],
+      bluetoothPhase: widget.radar?.bluetoothPhase ?? RadarReadinessPhase.off,
+      bluetoothFailureReason: widget.radar?.bluetoothFailureReason,
+      onBluetoothReadyChanged: widget.onBluetoothReadyChanged,
+      bluetoothDevices: widget.radar?.bluetoothDevices ?? const <RadarDevice>[],
+      pairedDevices: widget.radar?.pairedDevices ?? const <RadarDevice>[],
       onRadarDevicePressed: widget.onRadarDevicePressed,
     ),
     1 => TaskOverviewPage(controller: widget.tasks),

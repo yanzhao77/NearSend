@@ -3,6 +3,7 @@ import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/presentation/file_selection_page.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 
 /// Turns picked SAF documents into a selection the screen can report on.
 ///
@@ -26,7 +27,11 @@ import 'package:nearsend/platform/android_file_gateway.dart';
 /// §5.2's and §5.3's digests. So the honest sequence is: pick, report what is known, and let planning
 /// supply the rest - which is why this class stops where it does rather than guessing.
 class FileSelectionController {
-  FileSelectionController({this.gateway, this.idFactory});
+  FileSelectionController({
+    this.gateway,
+    this.idFactory,
+    this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
+  });
 
   /// The platform's document picker, when it has one.
   ///
@@ -34,6 +39,7 @@ class FileSelectionController {
   /// the path it *does* have rather than a button that cannot work. [hasPicker] is what a screen
   /// asks.
   final AndroidFileGateway? gateway;
+  final PlatformPermissionGateway permissionGateway;
 
   /// Whether [pick] can do anything on this platform.
   bool get hasPicker => gateway != null;
@@ -55,6 +61,15 @@ class FileSelectionController {
     final AndroidFileGateway? platform = gateway;
     if (platform == null) {
       throw StateError('this platform has no document picker');
+    }
+    final PlatformPermissionState permission = await ensurePlatformPermission(
+      permissionGateway,
+      PlatformPermissionKind.files,
+    );
+    if (!permission.allowsUse) {
+      throw const PlatformFileFailure(
+        'system file access is unavailable or permission was denied',
+      );
     }
     final List<PickedDocument> documents = await platform.pickFiles();
     return report(documents);

@@ -4,6 +4,7 @@ import 'package:nearsend/features/transfer/application/file_selection_controller
 import 'package:nearsend/features/transfer/presentation/file_selection_page.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 
 /// The join between the SAF channel and the selection screen.
 ///
@@ -49,6 +50,39 @@ void main() {
     expect(report.files, isEmpty);
     expect(report.canSend, isFalse);
     expect(report.problems, contains('还没有选择任何文件'));
+  });
+
+  test('file access is checked before every system picker use', () async {
+    final _PermissionGateway permissions = _PermissionGateway(
+      checked: PlatformPermissionState.scopedSystemPicker,
+    );
+    final FileSelectionController subject = FileSelectionController(
+      gateway: InMemoryFileGateway()
+        ..nextPick = <PickedDocument>[document('a.bin', 10)],
+      permissionGateway: permissions,
+    );
+
+    await subject.pick();
+    await subject.pick();
+
+    expect(permissions.checks, 2);
+    expect(permissions.requests, 0);
+  });
+
+  test('a denied file permission does not open the picker', () async {
+    final _PermissionGateway permissions = _PermissionGateway(
+      checked: PlatformPermissionState.denied,
+      requested: PlatformPermissionState.denied,
+    );
+    final FileSelectionController subject = FileSelectionController(
+      gateway: InMemoryFileGateway()
+        ..nextPick = <PickedDocument>[document('a.bin', 10)],
+      permissionGateway: permissions,
+    );
+
+    await expectLater(subject.pick(), throwsA(isA<PlatformFileFailure>()));
+    expect(permissions.checks, 1);
+    expect(permissions.requests, 1);
   });
 
   test('a withheld size is left out and said so, never guessed', () {
@@ -181,4 +215,29 @@ void main() {
           'about hashing, which says nothing about the real problem',
     );
   });
+}
+
+class _PermissionGateway implements PlatformPermissionGateway {
+  _PermissionGateway({required this.checked, this.requested});
+
+  final PlatformPermissionState checked;
+  final PlatformPermissionState? requested;
+  int checks = 0;
+  int requests = 0;
+
+  @override
+  Future<PlatformPermissionState> check(
+    PlatformPermissionKind permission,
+  ) async {
+    checks++;
+    return checked;
+  }
+
+  @override
+  Future<PlatformPermissionState> request(
+    PlatformPermissionKind permission,
+  ) async {
+    requests++;
+    return requested ?? checked;
+  }
 }

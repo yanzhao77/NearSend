@@ -17,11 +17,15 @@ class HomePage extends StatelessWidget {
     this.hasRecoverableTasks = false,
     this.recoverableTaskCount = 0,
     this.onContinue,
-    this.radarReady = false,
-    this.radarBusy = false,
-    this.radarFailureReason,
-    this.onRadarReadyChanged,
-    this.radarDevices = const <RadarDevice>[],
+    this.wifiPhase = RadarReadinessPhase.off,
+    this.wifiFailureReason,
+    this.onWifiReadyChanged,
+    this.wifiDevices = const <RadarDevice>[],
+    this.bluetoothPhase = RadarReadinessPhase.off,
+    this.bluetoothFailureReason,
+    this.onBluetoothReadyChanged,
+    this.bluetoothDevices = const <RadarDevice>[],
+    this.pairedDevices = const <RadarDevice>[],
     this.onRadarDevicePressed,
   });
 
@@ -31,11 +35,15 @@ class HomePage extends StatelessWidget {
   final bool hasRecoverableTasks;
   final int recoverableTaskCount;
   final VoidCallback? onContinue;
-  final bool radarReady;
-  final bool radarBusy;
-  final String? radarFailureReason;
-  final ValueChanged<bool>? onRadarReadyChanged;
-  final List<RadarDevice> radarDevices;
+  final RadarReadinessPhase wifiPhase;
+  final String? wifiFailureReason;
+  final ValueChanged<bool>? onWifiReadyChanged;
+  final List<RadarDevice> wifiDevices;
+  final RadarReadinessPhase bluetoothPhase;
+  final String? bluetoothFailureReason;
+  final ValueChanged<bool>? onBluetoothReadyChanged;
+  final List<RadarDevice> bluetoothDevices;
+  final List<RadarDevice> pairedDevices;
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
 
   static const String connectRoute = '/connect';
@@ -114,14 +122,48 @@ class HomePage extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: NearSendSpacing.lg),
-                _RadarSection(
-                  ready: radarReady,
-                  busy: radarBusy,
-                  failureReason: radarFailureReason,
-                  devices: radarDevices,
-                  onReadyChanged: onRadarReadyChanged,
+                _DiscoverySection(
+                  switchKey: const ValueKey<String>('wifi-discovery-switch'),
+                  title: 'Wi-Fi 局域网连接',
+                  enabledMessage: '正在当前局域网发现设备，本机也可被发现',
+                  disabledMessage: '已关闭 Wi-Fi 局域网发现',
+                  startingMessage: '正在启动 Wi-Fi 局域网发现...',
+                  stoppingMessage: '正在关闭 Wi-Fi 局域网发现...',
+                  listTitle: '局域网设备',
+                  emptyMessage: '暂未在当前局域网发现其他设备',
+                  icon: Icons.wifi_outlined,
+                  phase: wifiPhase,
+                  failureReason: wifiFailureReason,
+                  devices: wifiDevices,
+                  onReadyChanged: onWifiReadyChanged,
                   onDevicePressed: onRadarDevicePressed,
                 ),
+                const SizedBox(height: NearSendSpacing.lg),
+                _DiscoverySection(
+                  switchKey: const ValueKey<String>(
+                    'bluetooth-discovery-switch',
+                  ),
+                  title: '蓝牙连接',
+                  enabledMessage: '正在通过蓝牙发现附近设备，本机也可被发现',
+                  disabledMessage: '已关闭蓝牙发现',
+                  startingMessage: '正在启动蓝牙发现...',
+                  stoppingMessage: '正在关闭蓝牙发现...',
+                  listTitle: '蓝牙设备',
+                  emptyMessage: '暂未发现其他蓝牙设备',
+                  icon: Icons.bluetooth,
+                  phase: bluetoothPhase,
+                  failureReason: bluetoothFailureReason,
+                  devices: bluetoothDevices,
+                  onReadyChanged: onBluetoothReadyChanged,
+                  onDevicePressed: onRadarDevicePressed,
+                ),
+                if (pairedDevices.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: NearSendSpacing.lg),
+                  _PairedDevicesSection(
+                    devices: pairedDevices,
+                    onDevicePressed: onRadarDevicePressed,
+                  ),
+                ],
                 if (hasRecoverableTasks) ...<Widget>[
                   const SizedBox(height: NearSendSpacing.xl),
                   NsTaskCard(
@@ -141,18 +183,34 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class _RadarSection extends StatelessWidget {
-  const _RadarSection({
-    required this.ready,
-    required this.busy,
+class _DiscoverySection extends StatelessWidget {
+  const _DiscoverySection({
+    required this.switchKey,
+    required this.title,
+    required this.enabledMessage,
+    required this.disabledMessage,
+    required this.startingMessage,
+    required this.stoppingMessage,
+    required this.listTitle,
+    required this.emptyMessage,
+    required this.icon,
+    required this.phase,
     required this.failureReason,
     required this.devices,
     required this.onReadyChanged,
     required this.onDevicePressed,
   });
 
-  final bool ready;
-  final bool busy;
+  final Key switchKey;
+  final String title;
+  final String enabledMessage;
+  final String disabledMessage;
+  final String startingMessage;
+  final String stoppingMessage;
+  final String listTitle;
+  final String emptyMessage;
+  final IconData icon;
+  final RadarReadinessPhase phase;
   final String? failureReason;
   final List<RadarDevice> devices;
   final ValueChanged<bool>? onReadyChanged;
@@ -160,13 +218,19 @@ class _RadarSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool ready = phase == RadarReadinessPhase.ready;
+    final bool busy =
+        phase == RadarReadinessPhase.starting ||
+        phase == RadarReadinessPhase.stopping;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SwitchListTile(
+          key: switchKey,
           contentPadding: EdgeInsets.zero,
-          title: const Text('附近设备雷达'),
-          subtitle: Text(ready ? '本机可被发现并接受连接' : '已关闭发现和就绪状态'),
+          secondary: Icon(icon),
+          title: Text(title),
+          subtitle: Text(ready ? enabledMessage : disabledMessage),
           value: ready,
           onChanged: busy ? null : onReadyChanged,
         ),
@@ -175,7 +239,9 @@ class _RadarSection extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
             child: Text(
               busy
-                  ? (ready ? '正在关闭附近设备雷达...' : '正在启动附近设备雷达...')
+                  ? (phase == RadarReadinessPhase.stopping
+                        ? stoppingMessage
+                        : startingMessage)
                   : failureReason!,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: failureReason == null
@@ -186,47 +252,86 @@ class _RadarSection extends StatelessWidget {
           ),
         if (devices.isNotEmpty) ...<Widget>[
           const SizedBox(height: NearSendSpacing.sm),
-          Text('附近与历史设备', style: Theme.of(context).textTheme.titleMedium),
+          Text(listTitle, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: NearSendSpacing.xs),
-          for (final RadarDevice device in devices)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: SizedBox.square(
-                dimension: 24,
-                child: device.isReady
-                    ? Center(
-                        child: Semantics(
-                          label: '已实时验证并就绪',
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF16835D),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      )
-                    : const Icon(Icons.devices_outlined, size: 20),
-              ),
-              title: Text(
-                device.name,
-                semanticsLabel: device.isReady
-                    ? '${device.name}，已实时验证并就绪'
-                    : device.name,
-              ),
-              subtitle: Text(
-                device.isRevoked ? '已撤销 · ${device.detail}' : device.detail,
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: onDevicePressed == null
-                  ? null
-                  : () => onDevicePressed!(device),
-            ),
+          _DeviceList(devices: devices, onDevicePressed: onDevicePressed),
+        ] else if (ready) ...<Widget>[
+          const SizedBox(height: NearSendSpacing.xs),
+          Text(emptyMessage, style: Theme.of(context).textTheme.bodySmall),
         ],
       ],
     );
   }
+}
+
+class _PairedDevicesSection extends StatelessWidget {
+  const _PairedDevicesSection({
+    required this.devices,
+    required this.onDevicePressed,
+  });
+
+  final List<RadarDevice> devices;
+  final ValueChanged<RadarDevice>? onDevicePressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text('已配对设备', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: NearSendSpacing.xs),
+      _DeviceList(devices: devices, onDevicePressed: onDevicePressed),
+    ],
+  );
+}
+
+class _DeviceList extends StatelessWidget {
+  const _DeviceList({required this.devices, required this.onDevicePressed});
+
+  final List<RadarDevice> devices;
+  final ValueChanged<RadarDevice>? onDevicePressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: <Widget>[
+      for (final RadarDevice device in devices)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: SizedBox.square(
+            dimension: 24,
+            child: device.isReady
+                ? Center(
+                    child: Semantics(
+                      label: '已实时验证并就绪',
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF16835D),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.devices_outlined, size: 20),
+          ),
+          title: Text(
+            device.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            semanticsLabel: device.isReady
+                ? '${device.name}，已实时验证并就绪'
+                : device.name,
+          ),
+          subtitle: Text(
+            device.isRevoked ? '已撤销 · ${device.detail}' : device.detail,
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onDevicePressed == null
+              ? null
+              : () => onDevicePressed!(device),
+        ),
+    ],
+  );
 }
 
 class _DeviceStatus extends StatelessWidget {

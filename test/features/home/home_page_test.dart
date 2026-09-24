@@ -65,20 +65,36 @@ void main() {
     },
   );
 
-  testWidgets('radar defaults off and forwards an explicit enable request', (
+  testWidgets('Wi-Fi and Bluetooth forward independent enable requests', (
     tester,
   ) async {
-    bool? requested;
+    bool? wifiRequested;
+    bool? bluetoothRequested;
     await tester.pumpWidget(
       MaterialApp(
-        home: HomePage(onRadarReadyChanged: (bool value) => requested = value),
+        home: HomePage(
+          onWifiReadyChanged: (bool value) => wifiRequested = value,
+          onBluetoothReadyChanged: (bool value) => bluetoothRequested = value,
+        ),
       ),
     );
 
-    await tester.scrollUntilVisible(find.text('附近设备雷达'), 300);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-    await tester.tap(find.byType(Switch));
-    expect(requested, isTrue);
+    final Finder wifiSwitch = find.byKey(
+      const ValueKey<String>('wifi-discovery-switch'),
+    );
+    final Finder bluetoothSwitch = find.byKey(
+      const ValueKey<String>('bluetooth-discovery-switch'),
+    );
+    await tester.scrollUntilVisible(wifiSwitch, 300);
+    expect(tester.widget<SwitchListTile>(wifiSwitch).value, isFalse);
+    await tester.tap(wifiSwitch);
+    expect(wifiRequested, isTrue);
+    expect(bluetoothRequested, isNull);
+
+    await tester.scrollUntilVisible(bluetoothSwitch, 300);
+    expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isFalse);
+    await tester.tap(bluetoothSwitch);
+    expect(bluetoothRequested, isTrue);
   });
 
   testWidgets('only verified ready devices render a green status semantic', (
@@ -87,8 +103,8 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(
         home: HomePage(
-          radarReady: true,
-          radarDevices: <RadarDevice>[
+          bluetoothPhase: RadarReadinessPhase.ready,
+          bluetoothDevices: <RadarDevice>[
             RadarDevice(
               id: 'candidate',
               name: '未经验证的候选设备',
@@ -97,6 +113,8 @@ void main() {
               isReady: false,
               isRevoked: false,
             ),
+          ],
+          pairedDevices: <RadarDevice>[
             RadarDevice(
               id: 'verified',
               name: '已验证设备',
@@ -125,7 +143,8 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(
         home: HomePage(
-          radarDevices: <RadarDevice>[
+          wifiPhase: RadarReadinessPhase.ready,
+          wifiDevices: <RadarDevice>[
             RadarDevice(
               id: 'long',
               name: '这是一台名称非常非常长但仍然必须在窄屏中安全换行显示的 Windows 设备',
@@ -140,6 +159,94 @@ void main() {
     );
 
     await tester.scrollUntilVisible(find.textContaining('这是一台名称'), 300);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Wi-Fi and Bluetooth lists show names and forward the device', (
+    tester,
+  ) async {
+    RadarDevice? selected;
+    const RadarDevice wifi = RadarDevice(
+      id: 'wifi-peer',
+      name: '书房电脑',
+      detail: 'windows · 局域网候选 · 1 个地址',
+      isKnown: false,
+      isReady: false,
+      isRevoked: false,
+    );
+    const RadarDevice bluetooth = RadarDevice(
+      id: 'ble-peer',
+      name: '客厅手机',
+      detail: '蓝牙候选',
+      isKnown: false,
+      isReady: false,
+      isRevoked: false,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(
+          wifiPhase: RadarReadinessPhase.ready,
+          wifiDevices: <RadarDevice>[wifi],
+          bluetoothPhase: RadarReadinessPhase.ready,
+          bluetoothDevices: <RadarDevice>[bluetooth],
+          onRadarDevicePressed: (RadarDevice device) => selected = device,
+        ),
+      ),
+    );
+
+    await tester.scrollUntilVisible(find.text('书房电脑'), 300);
+    await tester.tap(find.text('书房电脑'));
+    expect(selected, same(wifi));
+
+    await tester.scrollUntilVisible(find.text('客厅手机'), 300);
+    await tester.ensureVisible(find.text('客厅手机'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('客厅手机'));
+    expect(selected, same(bluetooth));
+  });
+
+  testWidgets('split discovery sections fit narrow 200 percent text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: HomePage(
+            wifiPhase: RadarReadinessPhase.ready,
+            wifiDevices: <RadarDevice>[
+              RadarDevice(
+                id: 'wifi-peer',
+                name: '名称很长的局域网 Windows 设备',
+                detail: 'windows · 局域网候选 · 2 个地址',
+                isKnown: false,
+                isReady: false,
+                isRevoked: false,
+              ),
+            ],
+            bluetoothPhase: RadarReadinessPhase.ready,
+            bluetoothDevices: <RadarDevice>[
+              RadarDevice(
+                id: 'ble-peer',
+                name: '名称很长的蓝牙 Android 设备',
+                detail: '蓝牙候选',
+                isKnown: false,
+                isReady: false,
+                isRevoked: false,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.scrollUntilVisible(find.text('蓝牙设备'), 300);
+    expect(find.text('Wi-Fi 局域网连接'), findsOneWidget);
+    expect(find.text('蓝牙连接'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

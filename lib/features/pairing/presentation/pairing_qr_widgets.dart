@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 import 'package:nearsend/platform/qr_image_gateway.dart';
 
 class PairingQrView extends StatelessWidget {
@@ -98,10 +99,12 @@ class PairingImageImportButton extends StatefulWidget {
     super.key,
     required this.gateway,
     required this.onDecoded,
+    this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
   });
 
   final QrImageGateway gateway;
   final ValueChanged<String> onDecoded;
+  final PlatformPermissionGateway permissionGateway;
 
   @override
   State<PairingImageImportButton> createState() =>
@@ -119,6 +122,16 @@ class _PairingImageImportButtonState extends State<PairingImageImportButton> {
       _error = null;
     });
     try {
+      final PlatformPermissionState permission = await ensurePlatformPermission(
+        widget.permissionGateway,
+        PlatformPermissionKind.files,
+      );
+      if (!permission.allowsUse) {
+        if (mounted) {
+          setState(() => _error = '无法访问系统文件选择器，请检查系统权限后重试。');
+        }
+        return;
+      }
       final bytes = await widget.gateway.pickImage();
       if (bytes == null) return;
       final String value = await decodeQrImage(bytes);

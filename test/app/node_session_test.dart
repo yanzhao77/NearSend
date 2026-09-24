@@ -225,11 +225,17 @@ void main() {
       await session.start();
 
       expect(adapter.publication, isNull);
-      await session.setDiscoveryEnabled(true);
+      await session.setDiscoveryEnabled(
+        true,
+        deviceName: '测试电脑',
+        platform: 'windows',
+      );
 
       expect(adapter.publication, isNotNull);
       expect(adapter.publication!.port, session.node!.server.boundPort);
       expect(adapter.publication!.instanceId, session.payload!.sessionId);
+      expect(adapter.publication!.displayName, '测试电脑');
+      expect(adapter.publication!.platform, 'windows');
       expect(session.discoveryFailureReason, isNull);
 
       await session.stop();

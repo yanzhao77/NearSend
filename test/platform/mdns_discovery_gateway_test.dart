@@ -12,12 +12,23 @@ void main() {
     final MdnsPublication publication = MdnsPublication(
       instanceId: localId,
       port: 8443,
+      deviceName: '书房电脑',
+      platform: 'windows',
     );
 
     expect(publication.serviceName, 'NearSend-11111111');
-    expect(publication.attributes.keys, <String>{'maj', 'min', 'iid', 'caps'});
+    expect(publication.attributes.keys, <String>{
+      'maj',
+      'min',
+      'iid',
+      'caps',
+      'dn',
+      'pf',
+    });
     expect(publication.attributes['iid'], localId);
     expect(publication.attributes['caps'], mdnsDiscoveryCapability);
+    expect(publication.attributes['dn'], '书房电脑');
+    expect(publication.attributes['pf'], 'windows');
     expect(publication.attributes.toString(), isNot(contains('token')));
     expect(publication.attributes.toString(), isNot(contains('fingerprint')));
   });
@@ -40,6 +51,8 @@ void main() {
           'min': '0',
           'iid': remoteId,
           'caps': 'discovery.mdns.v1,transfer.https.v1',
+          'dn': '客厅手机',
+          'pf': 'android',
         },
       ),
     );
@@ -47,6 +60,8 @@ void main() {
     expect(peer, isNotNull);
     expect(peer!.addresses, <String>['192.168.1.4', 'fe80::1234%en0']);
     expect(peer.capabilities, contains(mdnsDiscoveryCapability));
+    expect(peer.displayName, '客厅手机');
+    expect(peer.platform, 'android');
     expect(peer.isProtocolCompatible, isTrue);
   });
 
@@ -67,6 +82,19 @@ void main() {
             'maj': '01',
             'min': '0',
             'iid': remoteId,
+          }),
+        ),
+        isNull,
+      );
+      expect(
+        MdnsDiscoveredPeer.tryParse(
+          service(const <String, String>{
+            'maj': '1',
+            'min': '0',
+            'iid': remoteId,
+            'caps': mdnsDiscoveryCapability,
+            'dn': 'bad\nname',
+            'pf': 'android',
           }),
         ),
         isNull,

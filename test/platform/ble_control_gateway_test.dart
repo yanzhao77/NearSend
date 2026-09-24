@@ -10,7 +10,10 @@ void main() {
   const String localId = '11111111-1111-4111-8111-111111111111';
 
   test('advertisement is fixed-size, non-secret and strictly decoded', () {
-    final BlePublication publication = BlePublication.fromInstanceId(localId);
+    final BlePublication publication = BlePublication.fromInstanceId(
+      localId,
+      deviceName: '书房电脑',
+    );
     final Uint8List encoded = publication.advertisement.encode();
     final BleAdvertisement? decoded = BleAdvertisement.tryDecode(encoded);
 
@@ -19,6 +22,7 @@ void main() {
     expect(decoded!.protocolMajor, 1);
     expect(decoded.isProtocolCompatible, isTrue);
     expect(decoded.instanceTag, publication.instanceTag);
+    expect(publication.displayName, '书房电脑');
     expect(encoded.toString(), isNot(contains('token')));
     expect(
       BleAdvertisement.tryDecode(Uint8List.fromList(<int>[...encoded, 0])),
@@ -26,6 +30,16 @@ void main() {
     );
     final Uint8List badFlags = Uint8List.fromList(encoded)..[3] = 1;
     expect(BleAdvertisement.tryDecode(badFlags), isNull);
+  });
+
+  test('published Bluetooth name is bounded without splitting Unicode', () {
+    final BlePublication publication = BlePublication.fromInstanceId(
+      localId,
+      deviceName: '这是一台名称很长的手机设备',
+    );
+
+    expect(publication.displayName, '这是一台名称');
+    expect(publication.displayName.runes.last, isNot(0xfffd));
   });
 
   test(

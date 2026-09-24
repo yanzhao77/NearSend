@@ -17,6 +17,9 @@ class RadarDevice {
     required this.isKnown,
     required this.isReady,
     required this.isRevoked,
+    this.platform = '平台未知',
+    this.discoveryMethod = '发现方式未知',
+    this.connectionDetail,
   });
 
   final String id;
@@ -25,6 +28,9 @@ class RadarDevice {
   final bool isKnown;
   final bool isReady;
   final bool isRevoked;
+  final String platform;
+  final String discoveryMethod;
+  final String? connectionDetail;
 }
 
 class RadarController extends ChangeNotifier {
@@ -37,55 +43,106 @@ class RadarController extends ChangeNotifier {
   final Map<String, VerifiedPeerSession> _verified =
       <String, VerifiedPeerSession>{};
   PeerRepository? _peers;
-  RadarReadinessPhase _phase = RadarReadinessPhase.off;
-  String? _failureReason;
+  RadarReadinessPhase _wifiPhase = RadarReadinessPhase.off;
+  RadarReadinessPhase _bluetoothPhase = RadarReadinessPhase.off;
+  String? _wifiFailureReason;
+  String? _bluetoothFailureReason;
   Timer? _expiryTimer;
 
-  RadarReadinessPhase get phase => _phase;
+  RadarReadinessPhase get wifiPhase => _wifiPhase;
 
-  bool get ready => _phase == RadarReadinessPhase.ready;
+  RadarReadinessPhase get bluetoothPhase => _bluetoothPhase;
 
-  bool get isBusy =>
-      _phase == RadarReadinessPhase.starting ||
-      _phase == RadarReadinessPhase.stopping;
+  bool get wifiReady => _wifiPhase == RadarReadinessPhase.ready;
 
-  String? get failureReason => _failureReason;
+  bool get bluetoothReady => _bluetoothPhase == RadarReadinessPhase.ready;
+
+  bool get ready => wifiReady || bluetoothReady;
+
+  bool get wifiBusy => _isBusy(_wifiPhase);
+
+  bool get bluetoothBusy => _isBusy(_bluetoothPhase);
+
+  String? get wifiFailureReason => _wifiFailureReason;
+
+  String? get bluetoothFailureReason => _bluetoothFailureReason;
 
   void attach(PeerRepository peers) {
     _peers = peers;
     notifyListeners();
   }
 
-  void markStarting() => _setPhase(RadarReadinessPhase.starting);
+  void markWifiStarting() => _setWifiPhase(RadarReadinessPhase.starting);
 
-  void markReady() => _setPhase(RadarReadinessPhase.ready);
+  void markWifiReady() => _setWifiPhase(RadarReadinessPhase.ready);
 
-  void markStopping() => _setPhase(RadarReadinessPhase.stopping);
+  void markWifiStopping() => _setWifiPhase(RadarReadinessPhase.stopping);
 
-  void markError(String reason) {
-    _failureReason = reason;
-    _setPhase(RadarReadinessPhase.error, clearFailure: false);
+  void markWifiError(String reason) {
+    _wifiFailureReason = reason;
+    _setWifiPhase(RadarReadinessPhase.error, clearFailure: false);
   }
 
-  void markOff() {
+  void markWifiOff() {
     _mdns.clear();
-    _ble.clear();
-    _verified.clear();
-    _expiryTimer?.cancel();
-    _expiryTimer = null;
-    _setPhase(RadarReadinessPhase.off);
+    if (_bluetoothPhase == RadarReadinessPhase.off) {
+      _clearProofs();
+    }
+    _setWifiPhase(RadarReadinessPhase.off);
   }
 
-  void _setPhase(RadarReadinessPhase value, {bool clearFailure = true}) {
-    if (_phase == value && (!clearFailure || _failureReason == null)) return;
-    _phase = value;
-    if (clearFailure) _failureReason = null;
+  void markBluetoothStarting() =>
+      _setBluetoothPhase(RadarReadinessPhase.starting);
+
+  void markBluetoothReady() => _setBluetoothPhase(RadarReadinessPhase.ready);
+
+  void markBluetoothStopping() =>
+      _setBluetoothPhase(RadarReadinessPhase.stopping);
+
+  void markBluetoothError(String reason) {
+    _bluetoothFailureReason = reason;
+    _setBluetoothPhase(RadarReadinessPhase.error, clearFailure: false);
+  }
+
+  void markBluetoothOff() {
+    _ble.clear();
+    if (_wifiPhase == RadarReadinessPhase.off) {
+      _clearProofs();
+    }
+    _setBluetoothPhase(RadarReadinessPhase.off);
+  }
+
+  void _setWifiPhase(RadarReadinessPhase value, {bool clearFailure = true}) {
+    if (_wifiPhase == value && (!clearFailure || _wifiFailureReason == null)) {
+      return;
+    }
+    _wifiPhase = value;
+    if (clearFailure) _wifiFailureReason = null;
     notifyListeners();
   }
 
+  void _setBluetoothPhase(
+    RadarReadinessPhase value, {
+    bool clearFailure = true,
+  }) {
+    if (_bluetoothPhase == value &&
+        (!clearFailure || _bluetoothFailureReason == null)) {
+      return;
+    }
+    _bluetoothPhase = value;
+    if (clearFailure) _bluetoothFailureReason = null;
+    notifyListeners();
+  }
+
+  void _clearProofs() {
+    _verified.clear();
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+  }
+
   void handleMdns(MdnsDiscoveryEvent event) {
-    if (_phase == RadarReadinessPhase.off ||
-        _phase == RadarReadinessPhase.stopping) {
+    if (_wifiPhase == RadarReadinessPhase.off ||
+        _wifiPhase == RadarReadinessPhase.stopping) {
       return;
     }
     switch (event) {
@@ -100,8 +157,8 @@ class RadarController extends ChangeNotifier {
   }
 
   void handleBle(BleControlEvent event) {
-    if (_phase == RadarReadinessPhase.off ||
-        _phase == RadarReadinessPhase.stopping) {
+    if (_bluetoothPhase == RadarReadinessPhase.off ||
+        _bluetoothPhase == RadarReadinessPhase.stopping) {
       return;
     }
     switch (event) {
@@ -109,6 +166,7 @@ class RadarController extends ChangeNotifier {
         _ble[event.peerId] = _BleCandidate(
           advertisement: event.advertisement,
           seenAtMillis: _clock(),
+          displayName: event.displayName,
         );
         _scheduleExpiry();
       case BlePeerDisconnected():
@@ -134,7 +192,7 @@ class RadarController extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<RadarDevice> get devices {
+  List<RadarDevice> get pairedDevices {
     final int now = _clock();
     final List<RadarDevice> out = <RadarDevice>[];
     for (final PeerRecord peer in _peers?.history() ?? const <PeerRecord>[]) {
@@ -151,37 +209,63 @@ class RadarController extends ChangeNotifier {
               verified != null &&
               verified.isFreshAt(now),
           isRevoked: peer.trust == PeerTrust.revoked,
-        ),
-      );
-    }
-    for (final MapEntry<String, _BleCandidate> entry in _ble.entries) {
-      if (entry.value.isFreshAt(now)) {
-        out.add(
-          RadarDevice(
-            id: entry.key,
-            name: '附近设备',
-            detail: '蓝牙候选',
-            isKnown: false,
-            isReady: false,
-            isRevoked: false,
-          ),
-        );
-      }
-    }
-    for (final MdnsDiscoveredPeer peer in _mdns.values) {
-      out.add(
-        RadarDevice(
-          id: peer.instanceId,
-          name: '附近设备',
-          detail: '局域网候选 · ${peer.addresses.length} 个地址',
-          isKnown: false,
-          isReady: false,
-          isRevoked: false,
+          platform: peer.platform ?? '平台未知',
+          discoveryMethod: '配对历史',
         ),
       );
     }
     return List<RadarDevice>.unmodifiable(out);
   }
+
+  List<RadarDevice> get bluetoothDevices {
+    final int now = _clock();
+    final List<RadarDevice> out = <RadarDevice>[];
+    for (final MapEntry<String, _BleCandidate> entry in _ble.entries) {
+      if (entry.value.isFreshAt(now)) {
+        out.add(
+          RadarDevice(
+            id: entry.key,
+            name: entry.value.displayName ?? '未命名蓝牙设备',
+            detail: '蓝牙候选',
+            isKnown: false,
+            isReady: false,
+            isRevoked: false,
+            discoveryMethod: '蓝牙发现',
+          ),
+        );
+      }
+    }
+    return List<RadarDevice>.unmodifiable(out);
+  }
+
+  List<RadarDevice> get wifiDevices {
+    final List<RadarDevice> out = <RadarDevice>[];
+    for (final MdnsDiscoveredPeer peer in _mdns.values) {
+      out.add(
+        RadarDevice(
+          id: peer.instanceId,
+          name: peer.displayName ?? '未命名设备',
+          detail:
+              '${peer.platform ?? '平台未知'} · 局域网候选 · ${peer.addresses.length} 个地址',
+          isKnown: false,
+          isReady: false,
+          isRevoked: false,
+          platform: peer.platform ?? '平台未知',
+          discoveryMethod: '局域网发现',
+          connectionDetail: peer.addresses
+              .map((String address) => _formatEndpoint(address, peer.port))
+              .join('、'),
+        ),
+      );
+    }
+    return List<RadarDevice>.unmodifiable(out);
+  }
+
+  List<RadarDevice> get devices => List<RadarDevice>.unmodifiable(<RadarDevice>[
+    ...pairedDevices,
+    ...wifiDevices,
+    ...bluetoothDevices,
+  ]);
 
   void _scheduleExpiry() {
     _expiryTimer?.cancel();
@@ -205,14 +289,23 @@ class RadarController extends ChangeNotifier {
   }
 }
 
+bool _isBusy(RadarReadinessPhase phase) =>
+    phase == RadarReadinessPhase.starting ||
+    phase == RadarReadinessPhase.stopping;
+
+String _formatEndpoint(String address, int port) =>
+    address.contains(':') ? '[$address]:$port' : '$address:$port';
+
 class _BleCandidate {
   const _BleCandidate({
     required this.advertisement,
     required this.seenAtMillis,
+    this.displayName,
   });
 
   final BleAdvertisement advertisement;
   final int seenAtMillis;
+  final String? displayName;
 
   bool isFreshAt(int nowMillis) => nowMillis - seenAtMillis < 30000;
 }
