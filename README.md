@@ -102,7 +102,7 @@ NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协
 - NearSend 1.2 升级已按 [开发计划](docs/releases/1.2/PLAN.md) 推进至 V12-12 当前环境验收；
   [状态](docs/releases/1.2/STATUS.md) 和 [验收记录](docs/releases/1.2/ACCEPTANCE.md) 分别记录已实现能力与
   未完成的 PAKE、指定网络绑定、Windows 自动入网和真实双机矩阵，不把自动化结果写成实机结论。
-- Android、Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器仍需目标设备证据；Windows/iOS UI 构建、截图、键盘/生命周期和屏幕阅读器验证也仍受环境限制，当前不能宣称跨平台产品闭环已验收。
+- Android、Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器仍需目标设备证据；Windows release 已由 PR CI 构建，但 Windows 截图/键盘/系统交互和 iOS 真机构建/生命周期/屏幕阅读器验证仍受环境限制，当前不能宣称跨平台产品闭环已验收。
 - Android 当前使用 debug signing；macOS 未签名、未 notarization；Linux 仅构建 amd64。正式签名材料必须通过受保护的 GitHub Environment 注入，不能提交到仓库。
 
 查看 [项目现状与进度台账](docs/PROJECT_LEDGER.md)、[T12 UI 最终验收证据](docs/testing/evidence/2026-09-22/t12-ui/t12-10-final-acceptance.md)、[MVP 验证证据](docs/testing/evidence/2026-09-22/t11-mvp-bidirectional/summary.md)、[S0 验证报告](docs/testing/S0-report.md) 和 [GitHub Actions 自动发版说明](docs/releases/GITHUB_ACTION_RELEASES.md)。

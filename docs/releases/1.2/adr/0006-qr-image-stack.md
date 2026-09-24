@@ -26,5 +26,5 @@ Play Services 首次下载的 unbundled 模型。相机拒权保留图片/文本
 ## 验证边界
 
 Flutter QR PNG 往返解码测试通过；iOS Simulator 构建通过。Android 构建连续两次在 Maven 下载
-插件 Kotlin 1.8 工件时 TLS 握手中断，未进入插件源码编译。Windows C++ 通道未在 Windows 编译；
-摄像头、系统文件选择和实际屏幕扫码仍需目标设备验证。
+插件 Kotlin 1.8 工件时 TLS 握手中断；后续 Android CI 与 Windows CI release 构建均通过。摄像头、
+系统图片导入和实际屏幕扫码仍需目标设备验证。

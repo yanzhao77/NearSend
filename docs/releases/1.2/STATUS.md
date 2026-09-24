@@ -26,22 +26,22 @@
 | 任务 | 状态 | 当前结果 | 下一步 |
 |---|---|---|---|
 | V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v7、协议草案和平台边界；mDNS 与 BLE 已完成依赖/许可/API、边界测试和当前环境代码级验证 | 继续验证 BLE 真机互操作、PAKE、热点和网络绑定候选 |
-| V12-01 系统位置与迁移 | 进行中 | 已实现严格版本化 `StorageLocationRef`、旧字符串值迁移、畸形值保留修复状态、Android 系统目录树选择/持久授权复查/有界 SAF 导出，以及 Windows `IFileDialog`/Known Folder/空间查询；28 项定向测试、1267 项全量测试与 Android Kotlin 编译通过 | Android 真机验证重启后写入/撤权；在 Windows CI/主机编译并实测目录选择与写入 |
+| V12-01 系统位置与迁移 | 进行中 | 已实现严格版本化 `StorageLocationRef`、旧字符串值迁移、畸形值保留修复状态、Android 系统目录树选择/持久授权复查/有界 SAF 导出，以及 Windows `IFileDialog`/Known Folder/空间查询；28 项定向测试、1267 项全量测试、Android Kotlin 编译和 Windows CI release 构建通过 | Android 真机验证重启后写入/撤权；Windows 主机实测目录选择与写入 |
 | V12-02 接收输出计划 | 当前环境完成 | schema v8 持久化冻结原名、本地改名、目标引用、冲突策略和导出状态；两个真实 TLS 方向均在接受前建计划，改名不改变清单/哈希，1275 项全量测试通过 | Android/Windows 实机验证权限失效、崩溃重试、同名冲突和平台句柄重开 |
 | V12-03 设置与确认 UI | 当前环境完成 | 默认目录选择先复查权限再持久化；单/多文件在一次弹框中确认位置与本地名称；取消、非法名、撤权和空间不足均不会接受；两个真实 TLS 方向已从确认 UI 保存并校验文件 | Android/Windows 实机验证系统选择器、重启授权、撤权修复与多文件保存 |
-| V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据；已知设备挑战已将身份、就绪状态和 TLS pin 绑定并可更新最近实时验证 | Windows 编译及 Android/Windows 重启、双向挑战实测 |
+| V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据；已知设备挑战已将身份、就绪状态和 TLS pin 绑定并可更新最近实时验证；Windows CI release 构建通过 | Android/Windows 重启、DPAPI 持久化和双向挑战实测 |
 | V12-05 mDNS 发现 | 进行中 | 固定 `bonsoir 7.1.5`；实现最小 TXT、严格候选解析、发布/浏览/更新/丢失/停止生命周期；Android Kotlin 与 iOS Simulator 构建通过 | Android/Windows 同网双机发现并完成身份认证；验证隔离网络与网络切换清理 |
-| V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现无设备名广告、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；14 项定向测试、1322 项全量测试通过 | Android/Windows 双机验证不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期；Windows 编译 |
+| V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现无设备名广告、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；14 项定向测试、1322 项全量测试及 Windows CI release 构建通过 | Android/Windows 双机验证不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期 |
 | V12-07 统一安全配对 | 部分完成，PAKE 受阻 | 已实现已授权设备 P-256 新鲜挑战、角色/版本/ready/TLS pin 绑定、30 秒有效期、重放/撤销/身份替换失败关闭；现有 QR 指纹与一次性令牌路径保留 | 选择满足审计、向量和 Android/Windows/iOS 支持的成熟 PAKE；双机验证双向挑战 |
 | V12-08 热点与数据通道 | 部分完成，路由绑定受阻 | 已实现认证端点优先的有界网络选择、Android LocalOnlyHotspot/系统确认入网 lease 与资源释放、Windows 系统设置回退；凭据不持久化/不输出 | Android 真机验证热点与指定 Network socket；Windows 主机验证 Native Wi-Fi 事件/profile/恢复后再开放自动加入 |
-| V12-09 二维码入口 | 进行中 | 严格 `nearsend-bootstrap` v1、旧码兼容、真实会话二维码、移动离线摄像头、Windows 有界图片导入及扫码后系统入网→TLS pin 配对协调已实现 | 补 Android/Windows 构建和摄像头/导图/热点二维码实测；向用户呈现平台入网错误 |
+| V12-09 二维码入口 | 进行中 | 严格 `nearsend-bootstrap` v1、旧码兼容、真实会话二维码、移动离线摄像头、Windows 有界图片导入及扫码后系统入网→TLS pin 配对协调已实现；Android 与 Windows CI 构建通过 | 摄像头/导图/热点二维码实测；向用户呈现平台入网错误 |
 | V12-10 首页雷达与在线历史 | 部分完成 | 默认关闭的就绪状态机已真实启停 mDNS/BLE；首页合并历史、mDNS、BLE 候选，只有新鲜已授权证明显示绿色状态 | 将已知设备挑战接入生产 BLE/mDNS 控制链路；完成首次 PAKE、候选点击配对和双机实测 |
-| V12-11 系统打开与异常收尾 | 代码与当前环境自动化完成，平台验证受阻 | 保存结果和任务详情只在真实最终句柄存在时提供系统打开/定位；Android 使用 SAF/FileProvider，Windows 使用 Shell API；后台关闭雷达，扫码、BLE、mDNS、热点/入网 lease 均有收尾路径；1369 项全量测试及 Android APK 构建通过 | Android 真机验证 SAF/FileProvider；Windows 编译和 Shell 实测；补后台切换、权限撤销和热点清理实机证据 |
-| V12-12 回归与发布准备 | 当前环境完成，目标设备验收受阻 | 格式、分析、1369 项测试、Android debug APK、iOS Simulator、文档链接、敏感信息和 CI 工作流检查通过；README、状态、验收和台账已收口 | Windows CI/主机及 Android/Windows 双机执行剩余矩阵；补 PAKE、指定网络绑定、热点和大文件证据后才能发布 |
+| V12-11 系统打开与异常收尾 | 代码与当前环境自动化完成，平台交互验证受阻 | 保存结果和任务详情只在真实最终句柄存在时提供系统打开/定位；Android 使用 SAF/FileProvider，Windows 使用 Shell API；后台关闭雷达，扫码、BLE、mDNS、热点/入网 lease 均有收尾路径；1369 项全量测试及 Android/Windows CI 构建通过 | Android 真机验证 SAF/FileProvider；Windows 主机实测 Shell 动作；补后台切换、权限撤销和热点清理实机证据 |
+| V12-12 回归与发布准备 | 当前环境完成，目标设备验收受阻 | 格式、分析、1369 项测试、Android debug/release、Windows release、iOS Simulator、文档链接、敏感信息和 CI 工作流检查通过；README、状态、验收和台账已收口 | Android/Windows 双机执行剩余矩阵；补 PAKE、指定网络绑定、热点和大文件证据后才能发布 |
 
 ## 当前环境限制
 
-- 当前主机为 macOS；不能在本机生成 Windows 构建或代替 Windows 10/11 BLE、WLAN 和 Shell 实测。
+- 当前主机为 macOS；Windows release 已由 GitHub Actions 编译，但 CI 不能代替 Windows 10/11 BLE、WLAN、选择器和 Shell 交互实测。
 - 尚未取得本轮 Android 与 Windows 双机、不同 Wi-Fi、无路由器或热点传输证据。
 - iOS、Windows 的新增平台能力不能在当前环境标记通过。
 - Android debug APK 本轮首次 Maven 下载握手中断，Flutter 自动重试后构建成功；这只证明可构建，
@@ -57,7 +57,7 @@
 - SAF 导出从应用私有暂存块按序以 256 KiB 有界缓冲写入。完成后才结束写入；失败只清理该次
   创建且尚未提交的文档，已保存文件没有删除入口。文档提供方导出明确报告为非原子。
 - Android 真机上的提供方差异、应用重启后的授权延续、用户撤权、云提供方离线状态和系统自动改名
-  仍需人工验证。Windows 原生适配已实现但尚未在 Windows 环境编译或实测，因此 V12-01 不标记完成。
+  仍需人工验证。Windows 原生适配已通过 CI release 编译，但尚未实测，因此 V12-01 不标记完成。
 
 ## V12-02 阶段记录
 
@@ -96,7 +96,7 @@
 - `peers` 保留原有指纹变化阻断与撤销记录，并增加公钥、平台、信任状态、配对时间和最近实时验证
   时间。只有已授权且指纹匹配的挑战结果能更新 `last_verified_at`，广告或同名匹配不能调用成功。
 - Android Kotlin 编译通过；身份、迁移、旧数据库升级、仓储、节点生命周期和 MethodChannel
-  定向测试通过；全量 1301 项测试通过，静态分析无问题。Windows 原生代码尚未在 Windows 编译；
+  定向测试通过；全量 1301 项测试通过，静态分析无问题。Windows 原生代码已通过 CI release 编译；
   长期身份尚未绑定到双向认证，故 V12-04
   保持进行中，不能据此点亮在线状态或自动信任历史设备。
 
@@ -110,7 +110,7 @@
   zone。HTTPS 节点监听并生成配对会话后才发布；停止时先撤销浏览和广播。
 - 12 项 mDNS/节点生命周期定向测试及 1308 项全量测试通过；Android 主应用和插件 Kotlin 编译通过；iOS Simulator
   构建通过。iOS 设备无签名构建仍被 Development Team/Provisioning 配置阻断；Android APK 仍被
-  sqlite3 原生库下载 TLS 握手中断阻塞。Windows 构建和 Android/Windows 同网双机发现尚未执行。
+  sqlite3 原生库下载 TLS 握手中断阻塞；后续 Android 与 Windows CI 构建均通过。Android/Windows 同网双机发现尚未执行。
 
 ## V12-06 BLE 控制通道阶段记录
 
@@ -125,8 +125,8 @@
   service 和订阅。V12-07 认证完成前，任何 BLE 消息都不能点亮可信/就绪状态。
 - 格式检查、静态分析、14 项定向测试及 1322 项全量测试通过。Android Gradle 首次尝试因 Maven
   TLS 中断失败，重试后主应用和 BLE 插件 Kotlin 编译通过；iOS Simulator 构建通过。插件报告旧
-  Android GATT API 和 Kotlin Gradle Plugin 弃用警告。Windows 编译、Android/Windows 双机控制
-  消息、权限、MTU、适配器关闭、后台和断线恢复尚未执行，因此 V12-06 保持进行中。
+  Android GATT API 和 Kotlin Gradle Plugin 弃用警告。Windows 插件已通过 CI release 编译；
+  Android/Windows 双机控制消息、权限、MTU、适配器关闭、后台和断线恢复尚未执行，因此 V12-06 保持进行中。
 
 ## V12-07 已知设备认证阶段记录
 
@@ -171,8 +171,8 @@
   和测试用 `qr 3.0.2`。二维码显示已接入真实 `lft-pair` 会话；移动扫码只接受单个严格合法值；
   Windows 系统图片导入限制 16 MiB，解码限制 1600 万像素并在 isolate 执行。
 - QR PNG 往返与异常输入 2 项、连接页 24 项及全量 1353 项测试通过；iOS Simulator 构建通过。Android 编译连续
-  两次因 Maven TLS 下载 Kotlin 1.8 工件失败，Windows 通道未编译，扫码结果到热点入网/配对的
-  平台纵向流程仍未实测，因此平台入口不标记完成。
+  两次因 Maven TLS 下载 Kotlin 1.8 工件失败；后续 Android 与 Windows CI 构建均通过。扫码结果到
+  热点入网/配对的平台纵向流程仍未实测，因此平台入口不标记完成。
 - 粘贴、摄像头和图片导入共用 `ScannedPairingPayload`。热点码先调用系统 Wi-Fi 入网并保留 lease，
   再把嵌套原始载荷交给既有 `PeerSession` 执行 TLS pin 和一次性令牌握手；失败或应用销毁释放 lease。
   连接页 25 项测试覆盖 bootstrap 不误走旧回调。平台入网错误的用户可见分类仍需完善。
@@ -202,16 +202,16 @@
   非导出的 `FileProvider` 暴露 `files/received/` 子目录，不暴露整个 `filesDir`，也不生成
   `file://` URI。SAF 文档尝试交给系统显示目录；应用私有文件无法定位时诚实报告不支持。
 - Windows 只接受实际存在的普通文件，使用 `ShellExecuteW` 打开，并使用
-  `SHParseDisplayName`/`SHOpenFolderAndSelectItems` 定位；不拼接 shell 命令。当前 macOS 不能编译或
-  实测该 C++ 路径。
+  `SHParseDisplayName`/`SHOpenFolderAndSelectItems` 定位；不拼接 shell 命令。该 C++ 路径已通过
+  Windows CI release 编译，但尚未交互实测。
 - 应用进入非前台状态时撤销雷达期望并停止 mDNS/BLE；异步停止失败不阻断另一资源的清理，也不会
   让切换队列永久失败。移动扫码控制器改为页面生命周期内单例并在销毁时释放。Activity 销毁继续
   关闭热点 reservation、入网 callback 和待处理权限请求；应用销毁继续释放入网 lease。
 - `fvm dart format --output=none --set-exit-if-changed .`、`fvm flutter analyze` 通过；文件动作、
   接收结果、任务详情、SQLite 最终句柄、双向接收流程和后台雷达定向测试通过；完整回归 1369 项通过。
 - Android Kotlin 首次重试在 `mobile_scanner` 的 Maven 依赖下载阶段因 TLS 握手中断；V12-12 的
-  `flutter build apk --debug` 自动重试后成功并产出 APK。Windows 构建与 Android/Windows 系统
-  动作、撤权和后台切换实测均未执行，因此 V12-11 不标记为平台验收完成。
+  `flutter build apk --debug` 自动重试后成功并产出 APK。Windows Shell 代码已通过 CI release 编译；
+  Android/Windows 系统动作、撤权和后台切换实测均未执行，因此 V12-11 不标记为平台验收完成。
 
 ## V12-12 回归与发布准备阶段记录
 
@@ -219,8 +219,8 @@
   无格式差异，静态分析无问题，1369 项测试通过。Android debug APK 在首次 Maven TLS 下载失败后
   由 Flutter 自动重试成功，iOS Simulator 构建成功。
 - macOS desktop 未在仓库配置；SDK 下载重试成功后 Flutter 明确报告 `No macOS desktop project
-  configured`，因此不将其记为应用构建失败或通过。Windows 代码在当前 macOS 主机无法编译，必须
-  由 Windows CI/主机验证。
+  configured`，因此不将其记为应用构建失败或通过。Windows release 由 PR #68 的 CI run
+  `35961651508` 编译成功；该证据只覆盖编译和链接，不覆盖平台交互。
 - Markdown 严格链接检查覆盖 104 个跟踪文件和 548 个链接；敏感信息扫描覆盖 506 个跟踪文件；
   CI 工作流检查确认 Action SHA 固定、无 `continue-on-error`、只读权限和 Flutter 版本一致。
 - S0 Python 协议/存储 21 项通过；TLS 测试类因 Xcode Python 3.9 链接 LibreSSL 2.8.3 且不支持

@@ -23,7 +23,7 @@
 | V12-04 身份与迁移定向测试 | 通过 | 长期身份载荷、schema v8→v9、公开元数据、peer 历史、节点重启和 MethodChannel 测试通过 |
 | V12-04 全量测试 | 通过 | `fvm flutter test --reporter compact`，1301 项全部通过；覆盖旧数据库首次建立身份与已绑定身份丢失后的失败关闭 |
 | V12-04 Android Kotlin 编译 | 通过 | `:app:compileDebugKotlin` 成功，含 Keystore AES-GCM 身份存储 |
-| V12-04 Windows DPAPI 编译 | 受阻 | 当前主机不是 Windows；必须由 Windows CI/主机验证 C++ 编译和当前用户作用域持久化 |
+| V12-04 Windows DPAPI 编译 | 通过 | PR #68 CI run `35961651508` 的 Windows release 构建成功；当前用户作用域持久化仍需 Windows 主机实测 |
 | V12-05 mDNS 定向测试 | 通过 | TXT 最小化、严格解析、地址过滤、自发现抑制、并发启动、资源撤销及节点生命周期共 12 项通过 |
 | V12-05 全量测试 | 通过 | `fvm flutter test --reporter compact`，1308 项全部通过 |
 | V12-05 Android Kotlin 编译 | 通过 | 主应用及 `bonsoir_android 7.1.3` 编译成功；插件有旧 NSD API 弃用警告 |
@@ -33,7 +33,7 @@
 | V12-06 全量测试 | 通过 | `fvm flutter test --reporter compact`，1322 项全部通过；`flutter analyze` 无问题 |
 | V12-06 Android Kotlin/插件编译 | 通过 | 首次 Maven TLS 握手中断；重试后主应用和 `bluetooth_low_energy_android 6.2.1` 均编译成功，插件报告旧 GATT API/Kotlin Gradle Plugin 弃用警告 |
 | V12-06 iOS Simulator 构建 | 通过 | `fvm flutter build ios --simulator` 成功，生成 `Runner.app`；只证明依赖链接和用途说明有效，默认 BLE 适配仍未开放 iOS 路径 |
-| V12-06 Windows 插件编译 | 受阻 | 当前主机不是 Windows；必须由 Windows CI/主机验证 WinRT central/peripheral 构建 |
+| V12-06 Windows 插件编译 | 通过 | 首轮 CI 在 VS 2026 因上游 `/await` 的 STL1011 失败；提交 `d9e02e0` 限定兼容宏后，run `35961651508` 构建成功 |
 | V12-06 Android/Windows BLE 双机 | 未执行 | 缺少本轮 Android/Windows BLE 目标设备；不得用模拟事件代替广告、GATT、MTU、权限和生命周期实测 |
 | V12-07 已知设备认证定向测试 | 通过 | 42 项通过；覆盖签名、TLS pin/ready 绑定、重放、过期、撤销、身份替换、角色反射、容量和严格 wire 解析 |
 | V12-07 首次短码 PAKE | 受阻 | `spake2plus 1.0.2` 缺目标平台，`dsrp 0.5.5` 未达到审计/测试门槛；未接入不合格实现 |
@@ -46,8 +46,8 @@
 | V12-09 二维码图像与平台导入实机 | 未执行 | 依赖和代码级入口已实现，但文本/组件测试不能替代摄像头和 Windows 图片导入实测 |
 | V12-09 QR 图像定向测试 | 通过 | 真实 QR PNG 生成/ZXing 往返、空/超限/非图片拒绝及连接页回归共 26 项通过 |
 | V12-09 iOS Simulator 构建 | 通过 | `mobile_scanner 7.1.3` Darwin 插件链接并生成 Runner.app；不替代真机摄像头 |
-| V12-09 Android 扫码构建 | 受阻 | 两次均在 Maven 下载 Kotlin 1.8 工件时 TLS 握手中断，未进入插件源码编译 |
-| V12-09 Windows 图片导入编译 | 受阻 | 当前主机非 Windows；IFileOpenDialog/有界读取通道需 Windows CI/主机编译 |
+| V12-09 Android 扫码构建 | 通过 | 本机后续 debug APK 与 CI run `35961072170` 的 debug/release APK 构建成功；不替代真机摄像头验证 |
+| V12-09 Windows 图片导入编译 | 通过 | PR #68 CI run `35961651508` 的 Windows release 构建成功；IFileOpenDialog 交互仍需 Windows 主机实测 |
 | V12-09 全量测试 | 通过 | `fvm flutter test --reporter compact`，1353 项全部通过 |
 | V12-09 统一入口定向测试 | 通过 | 连接页 25 项通过；bootstrap 扫描值进入网络感知回调，旧 `lft-pair` 保持原路径 |
 | V12-10 雷达定向测试 | 通过 | 22 项通过；覆盖默认关闭、显式 mDNS 启停、BLE/mDNS 候选无灯、新鲜授权证明绿灯、过期/撤销熄灯、窄屏长名称和响应式壳 |
@@ -60,11 +60,11 @@
 | V12-11 静态分析 | 通过 | `fvm flutter analyze`，`No issues found` |
 | V12-11 全量回归 | 通过 | `fvm flutter test --reporter compact`，1369 项全部通过 |
 | V12-11 Android Kotlin/APK 编译 | 通过 | 首次 Maven TLS 下载失败；`fvm flutter build apk --debug` 自动重试后成功，新增 SAF/FileProvider 代码完成编译，产出 `app-debug.apk` |
-| V12-11 Windows Shell 编译 | 受阻 | 当前主机不是 Windows；`ShellExecuteW` 与 `SHOpenFolderAndSelectItems` 需 Windows CI/主机编译和实测 |
+| V12-11 Windows Shell 编译 | 通过 | PR #68 CI run `35961651508` 的 Windows release 构建成功；`ShellExecuteW` 与 `SHOpenFolderAndSelectItems` 仍需交互实测 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 通过 | `fvm flutter build apk --debug` 首次 Maven TLS 下载失败后自动重试成功，产出 `build/app/outputs/flutter-apk/app-debug.apk` |
 | macOS 构建 | 不适用 | 仓库没有 macOS desktop target；SDK 下载重试后 Flutter 明确报告未配置，未伪报构建通过 |
-| Windows 构建 | 受阻 | 当前主机不是 Windows；由 GitHub Actions 或 Windows 主机执行 |
+| Windows 构建 | 通过 | PR #68 CI run `35961651508`：Windows release 构建成功；不等同于 BLE/WLAN/Shell 实测 |
 | iOS 构建 | 部分通过 | Simulator 构建通过；设备无签名构建受 Development Team/Provisioning 阻断，不能替代真机 |
 | V12-12 Markdown 链接 | 通过 | 严格检查 104 个跟踪 Markdown 文件、548 个相对链接，无断链 |
 | V12-12 敏感信息扫描 | 通过 | 506 个跟踪文件未发现凭证材料 |
@@ -83,8 +83,8 @@
 | A06 Windows 无摄像头导入二维码图片 | 未执行 | 需要 Windows 主机 |
 | A07 Windows 无 BLE 外设能力 | 未执行 | 需要对应蓝牙适配器 |
 | A08 蜂窝网络与无互联网热点并存 | 未执行 | 需要 Android 真机与路由检查 |
-| A09 重启与热点 IP 改变 | 未执行 | 稳定身份尚未实现 |
-| A10 同名设备或身份指纹变化 | 未执行 | 自动化负例与双机实测均待完成 |
+| A09 重启与热点 IP 改变 | 未执行 | 稳定身份持久化与节点重启自动化已通过；热点 IP 改变后的双机连续性仍需实测 |
+| A10 同名设备或身份指纹变化 | 未执行 | 身份替换、签名篡改和同名不自动信任已有自动化负例；仍需双机实测 |
 | A11 默认目录重启持久化 | 未执行 | 设置页选择、权限验证、持久化和默认填充已有自动化；仍需 Android/Windows 真机重启并实际写入 |
 | A12 单/多文件、同名、中文和长名称 | 未执行 | 单弹框多文件改名、中文改名、同名自动重命名和非法名阻断已有自动化；仍需 Android/Windows 实机组合验证 |
 | A13 目录授权撤销或目录删除 | 未执行 | 接收前撤权阻断和设置修复入口、输出失败持久化与保留暂存已有自动化；仍需真机撤权/删除目录验证 |
@@ -92,8 +92,8 @@
 | A15 关闭就绪、后台和断网 | 自动化部分通过 | 默认关闭、显式关闭、证明过期熄灯和进入后台停止 BLE 雷达已有自动化；真实 BLE/mDNS、网络切换及系统后台限制仍需目标设备 |
 | A16 大文件和大量小文件 | 未执行 | 集成后执行，需含超过 4 GiB 样本 |
 | A17 Android ↔ Android，不同网络 | 未执行 | 需要两台 Android 设备 |
-| A18 历史设备离线后熄灯 | 未执行 | V12-10 尚未实现 |
-| A19 QR 过期、复用和篡改 | 未执行 | V12-09 尚未实现 |
+| A18 历史设备离线后熄灯 | 自动化部分通过 | 证明过期、撤销和关闭就绪后熄灯已有状态机测试；真实掉线与发现来源消失仍需双机实测 |
+| A19 QR 过期、复用和篡改 | 自动化部分通过 | 过期、身份替换、重复/额外字段和一次性令牌路径已有负例；摄像头/导图后的真实复用与篡改仍需目标设备 |
 | A20 热点会话结束或取消后的清理 | 自动化部分通过 | Dart lease 失败/销毁释放及 Android Activity `close()` 路径已有代码与网关测试；真实热点 reservation、系统确认取消和原网络恢复仍需双机实测 |
 
 ## V12-11 系统动作与生命周期证据
@@ -115,8 +115,9 @@ cd android
 结果：失败；Maven Central TLS 握手中断，未进入本次 Kotlin 源码编译
 ```
 
-未执行 Windows C++ 编译、Android/Windows 系统打开与定位、Android SAF 撤权、真实后台切换和热点
-资源回收实测。macOS 自动化只验证 Dart 契约、状态机和真实本地文件导出，不构成平台 Shell/Intent 证据。
+Windows C++ 已由后续 PR CI 编译；未执行 Android/Windows 系统打开与定位、Android SAF 撤权、真实
+后台切换和热点资源回收实测。macOS 自动化只验证 Dart 契约、状态机和真实本地文件导出，不构成
+平台 Shell/Intent 交互证据。
 
 后续 V12-12 重试中 `fvm flutter build apk --debug` 自动重试 Maven 下载后成功，因此上表将 Android
 编译更新为通过；这不改变系统动作和权限生命周期仍缺真机证据的结论。
@@ -298,8 +299,8 @@ cd android && ./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
 结果：BUILD SUCCESSFUL；LocalOnlyHotspot/WifiNetworkSpecifier 代码编译通过
 ```
 
-Windows C++ 未在本机编译；Android 热点、入网系统确认、无互联网路由、指定 Network 的 HTTPS
-socket 和资源释放未在真机执行，不能视为热点传输验收。
+Windows C++ 未在本机编译，后续 PR CI release 构建已通过；Android 热点、入网系统确认、无互联网
+路由、指定 Network 的 HTTPS socket 和资源释放未在真机执行，不能视为热点传输验收。
 
 ## V12-06 BLE 控制通道自动化证据
 
@@ -327,8 +328,8 @@ fvm flutter build ios --simulator
 结果：成功，生成 build/ios/iphonesimulator/Runner.app
 ```
 
-未执行 Android/Windows 双机 BLE、Windows 构建、真实 MTU、权限拒绝/恢复、适配器关闭、后台切换和
-断线重连。模拟网关只验证应用边界与生命周期，不能作为无线互操作证据。
+未执行 Android/Windows 双机 BLE、真实 MTU、权限拒绝/恢复、适配器关闭、后台切换和断线重连。
+Windows 插件已由后续 PR CI 编译；模拟网关只验证应用边界与生命周期，不能作为无线互操作证据。
 
 ## 证据规则
 

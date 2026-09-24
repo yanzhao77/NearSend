@@ -1142,7 +1142,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 已绑定的安全身份缺失、损坏或与数据库公开元数据不匹配时拒绝启动，不静默重建或覆盖旧身份；
   pre-v9 数据库没有身份元数据，可在升级时建立首个稳定身份。Android/Windows 生产启动使用持久
   提供器；其他未适配平台保持临时身份并继续显示跨重启限制。
-- Android Kotlin 编译、Dart 定向测试及 1301 项全量测试通过，Windows C++ 尚待 Windows 环境编译。长期身份还没有
+- Android Kotlin 编译、Dart 定向测试及 1301 项全量测试通过；Windows C++ 后续由 PR #68 CI release
+  构建验证。长期身份还没有
   绑定到 V12-07 双向认证，因此本阶段是安全基础，不代表可信配对或历史在线状态已经完成。
 
 ### 6.10 NearSend 1.2 mDNS 发现（V12-05，2026-09-24）
@@ -1169,8 +1170,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   BLE 消息更新可信或在线状态。
 - 格式、静态分析、14 项定向测试和 1322 项全量测试通过。Android 首次 Maven TLS 中断，重试后
   主应用和 BLE 插件 Kotlin 编译通过；iOS Simulator 构建通过。插件存在旧 GATT API/Kotlin Gradle
-  Plugin 弃用警告。Windows 编译及 Android/Windows 双机、权限、MTU、后台和断线实测均待目标
-  环境，因而本任务保持进行中。
+  Plugin 弃用警告。Windows 插件后续由 PR #68 CI release 构建验证；Android/Windows 双机、权限、
+  MTU、后台和断线实测仍待目标环境，因而本任务保持进行中。
 
 ### 6.12 NearSend 1.2 已知设备挑战认证（V12-07 部分，2026-09-24）
 
@@ -1217,7 +1218,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   IFileOpenDialog，压缩输入上限 16 MiB，解码像素上限 1600 万，解码在 isolate 执行，不记录路径、
   图像或载荷。
 - QR PNG 往返/异常测试 2 项、连接页 24 项与全量 1353 项通过，静态分析无问题，iOS Simulator 构建成功。Android
-  构建连续两次受 Maven TLS 下载故障阻塞；Windows C++ 未在 Windows 编译，真机摄像头/导图未验。
+  构建连续两次受 Maven TLS 下载故障阻塞；后续 Android CI 与 Windows CI release 构建通过，真机
+  摄像头/导图未验。
 - 扫码结果尚未接入热点入网与统一配对协调器，所以 V12-09 仍进行中，不宣称关闭 BLE 后已可完成
   不同网络配对。
 
@@ -1228,7 +1230,7 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - `networkBootstrap` 先用系统网络网关请求加入二维码中的受保护 Wi-Fi，保留真实 lease 后再把嵌套
   `PairingPayload` 交给现有 TLS pin/一次性令牌握手。入网、TLS 配对失败或应用销毁会尽力释放 lease。
 - 连接页 25 项定向测试与静态分析通过。前一阶段台账中的“协调器尚未接入”由本阶段代码解决，但
-  Android Maven 下载、Windows 编译和真实热点二维码纵向流程仍无证据；平台错误的可见分类待完善。
+  后续 Android/Windows CI 构建通过；真实热点二维码纵向流程仍无证据，平台错误的可见分类待完善。
 
 ### 6.17 NearSend 1.2 首页雷达与在线历史（V12-10 部分，2026-09-24）
 
@@ -1246,8 +1248,8 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 接收结果与任务详情从真实导出结果和 `receive_output_plans.final_target_ref` 读取系统句柄；无句柄
   不显示动作。Android SAF/FileProvider 和 Windows Shell API 均返回结构化状态，不泄露目标引用。
 - Android `FileProvider` 仅暴露应用私有 `received/` 子目录；Windows 只对存在的普通文件调用系统
-  打开/定位 API，不生成 shell 命令。当前主机无法编译 Windows 路径，Android 编译被 Maven TLS
-  依赖下载阻断，二者均未伪报通过。
+  打开/定位 API，不生成 shell 命令。后续 Android 与 Windows CI 构建均通过；系统动作仍未在目标
+  设备交互验证。
 - 应用进入后台时关闭雷达；停止失败不会阻塞其他资源清理或后续切换。移动扫码控制器、mDNS/BLE、
   热点 reservation 和入网 lease 均有明确所有者与销毁路径。
 - 格式、静态分析及 1369 项全量测试通过。Android/Windows 系统动作、撤权、后台与热点资源清理
@@ -1256,10 +1258,14 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 ### 6.19 NearSend 1.2 当前环境回归与交付收口（V12-12，2026-09-24）
 
 - FVM 格式检查、静态分析及 1369 项 Flutter 测试通过；Android debug APK 在 Maven TLS 首次失败后
-  自动重试构建成功，iOS Simulator 构建成功。仓库未配置 macOS desktop，Windows 需对应主机。
+  自动重试构建成功，iOS Simulator 构建成功。PR #68 CI 构建 Android debug/release APK 与 Windows
+  release；仓库未配置 macOS desktop。
 - 104 个 Markdown 文件/548 个链接、506 个跟踪文件敏感信息、CI Action 固定与权限边界检查通过。
   S0 Python 协议/存储 21 项通过，TLS 类受当前 LibreSSL 无 TLS 1.3 支持阻塞，未降低安全门槛。
 - README、1.2 状态/验收和本台账已同步；详细命令与阻塞见
   [V12-12 验收摘要](testing/evidence/2026-09-24/v1.2-upgrade/summary.md)。
 - 本阶段不等于产品验收：PAKE、Android 指定 Network、Windows 自动入网、真实 BLE/mDNS、热点、
   系统文件动作、大文件恢复及 Android/Windows 双向传输均缺目标设备证据。本分支不得直接发布。
+- 首轮 Windows CI run `35961072170` 在 VS 2026 上因 `bluetooth_low_energy_windows 6.2.1` 使用旧
+  `/await` 触发 STL1011；提交 `d9e02e0` 仅对该插件目标启用 MSVC 指定的兼容宏，run
+  `35961651508` 随后编译和链接成功。此结果不替代 Windows BLE/WLAN/Shell 实测。
