@@ -18,7 +18,7 @@
 | 10 | [项目台账](PROJECT_LEDGER.md) | 当前事实、阻塞、任务状态与证据入口 | 全员 |
 | 11 | [GitHub Actions 自动发版](releases/GITHUB_ACTION_RELEASES.md) | 安装包、版本递增、Release 说明与签名限制 | 发布、维护者 |
 
-当前预览版本：[NearSend v0.1.1](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1)。
+截至 2026-09-24 的预览发布基线：[NearSend v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)。
 README 负责面向使用者的快速入口；本台账负责项目事实和阻塞状态；发布文档负责
 GitHub Actions 的构建、版本和签名边界。三者必须同时更新，不能只修改聊天记录。
 

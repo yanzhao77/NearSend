@@ -18,15 +18,15 @@
 
 ## 现在就下载
 
-当前已验证的 GitHub Release 基线是 **[v0.1.1](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1)**。它由 GitHub Actions 在提交 `16981244` 上构建，适合内部体验和验证；[Release 页面](https://github.com/yanzhao77/NearSend/releases) 会展示后续版本，向 `master` 的成功推送会自动递增 patch 版本并创建新的 Release。
+截至 2026-09-24，已验证的 GitHub Release 基线是 **[v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)**。它由 GitHub Actions 在提交 `ae4a2db` 上构建，适合内部体验和验证；[Release 页面](https://github.com/yanzhao77/NearSend/releases) 会展示后续版本，向 `master` 的成功推送会自动递增 patch 版本并创建新的 Release。
 
 | 平台 | 安装包 | 说明 |
 | --- | --- | --- |
-| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-android.apk) | 当前使用 debug signing，仅供内部测试 |
-| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-windows-x64.zip) | 解压后运行桌面程序 |
-| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-macos.zip) | 未签名、未 notarization |
-| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/NearSend-0.1.1-linux-x64.tar.gz) | 当前只构建 amd64 |
-| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.1/SHA256SUMS.txt) | 发布流水线自动生成 |
+| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.3/NearSend-0.1.3-android.apk) | 当前使用 debug signing，仅供内部测试 |
+| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.3/NearSend-0.1.3-windows-x64.zip) | 解压后运行桌面程序 |
+| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.3/NearSend-0.1.3-macos.zip) | 未签名、未 notarization |
+| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.3/NearSend-0.1.3-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.3/NearSend-0.1.3-linux-x64.tar.gz) | 当前只构建 amd64 |
+| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.3/SHA256SUMS.txt) | 发布流水线自动生成 |
 
 > **预览版本边界**：构建产物和代码级双节点测试已经由 CI 验证，但 Android ↔ Windows 的真实设备双向大文件传输、断点恢复和正式签名发布仍未完成。不要把当前 APK、ZIP 或 DEB 当作稳定版或商店发行包。
 
@@ -93,9 +93,9 @@ flowchart TB
 
 NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协议、配对、存储、分块、终检、UI 装配和 GitHub 发布流水线的可审阅实现；但这些实现必须和对应证据一起阅读，不能把“代码存在”“单元测试通过”或“CI 构建成功”当作完整产品验收。
 
-截至 **2026-09-23**：
+截至 **2026-09-24**：
 
-- `v0.1.1` 已由 GitHub Actions 成功发布，包含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 `SHA256SUMS.txt`。
+- `v0.1.3` 已由 GitHub Actions 成功发布，包含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 `SHA256SUMS.txt`；[CI](https://github.com/yanzhao77/NearSend/actions/runs/35848077863) 与 [Release](https://github.com/yanzhao77/NearSend/actions/runs/35848571953) 均成功。
 - T12 UI 全平台改造已通过 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) squash 合并到 `master`，合并提交为 `880dfb8`；共享主题、组件、响应式应用壳、真实任务/空间/设置读模型、配对/发送/接收/任务页面和平台适配代码已进入主干。
 - UI 代码级验收已归档，覆盖 Light/Dark、动态字体 200%、窄屏、长文案、空间 `sufficient`/`insufficient`/`unknown`、五阶段传输状态和真实数据库读模型；这些结果不替代目标设备验收。
 - 控制面、数据面和界面已有“真实两个节点 + 真实 TLS”的代码级测试，覆盖清单、授权、分块、校验和导出路径。

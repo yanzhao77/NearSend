@@ -54,7 +54,7 @@ T12 UI 全平台改造已通过 [PR #61](https://github.com/yanzhao77/NearSend/p
 | [T12-08](T12-08.md) | 任务详情、传输详情与结果 | 待验证 | `feat/ui-baseline` → [#61](https://github.com/yanzhao77/NearSend/pull/61)（已合并） |
 | [T12-09](T12-09.md) | Android、Windows、iOS 平台适配 | 阻塞（Windows/iOS环境缺失） | `feat/ui-baseline` → [#61](https://github.com/yanzhao77/NearSend/pull/61)（已合并） |
 | [T12-10](T12-10.md) | UI 最终验收与证据 | 阻塞（Flutter SDK、Windows/iOS环境缺失） | `feat/ui-baseline` → [#61](https://github.com/yanzhao77/NearSend/pull/61)（已合并） |
-| T10 | 安装升级与发布 | 进行中（GitHub Actions 自动发版已完成；签名、升级和正式分发待完成） | [发布说明](../releases/GITHUB_ACTION_RELEASES.md) |
+| T10 | 安装升级与发布 | 进行中（GitHub Actions 已发布 `v0.1.3`；签名、升级和正式分发待完成） | [发布说明](../releases/GITHUB_ACTION_RELEASES.md) |
 
 各任务的完成依据见对应运行汇总：T01-01 [证据](../testing/evidence/2026-09-20/t01-01-01/summary.md)、
 T01-02 [证据](../testing/evidence/2026-09-20/t01-02-01/summary.md)、

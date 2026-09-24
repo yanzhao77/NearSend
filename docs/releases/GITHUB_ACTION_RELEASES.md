@@ -1,7 +1,7 @@
 # GitHub Actions 自动发版
 
-当前发布基线：**[v0.1.1](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1)**。
-该版本由提交 `16981244cf4a756aa5b73035cfd830acc58cabfc` 触发并成功发布。
+截至 2026-09-24 的发布基线：**[v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)**。
+该版本由提交 `ae4a2db3c86963e07376d9521d606de0090859eb` 触发并成功发布。
 
 ## 行为
 
@@ -21,7 +21,7 @@ GitHub Actions run number。
 每个 Release 附带 `SHA256SUMS.txt`。发布说明由 GitHub 的自动生成 release notes
 接口生成，再追加构建 commit、Flutter 版本、Linux 架构和 Android 当前签名限制。
 
-## 已验证的首次发布
+## 已验证的发布
 
 `v0.1.1` 已在 GitHub 上完成完整流水线：
 
@@ -37,6 +37,16 @@ GitHub Actions run number。
 - `NearSend-0.1.1-linux-amd64.deb`
 - `NearSend-0.1.1-linux-x64.tar.gz`
 - `SHA256SUMS.txt`
+
+`v0.1.3` 于 2026-09-23 发布，记录了 macOS 构建故障修复后的完整流水线：
+
+- [PR #63](https://github.com/yanzhao77/NearSend/pull/63) 修复 CI/Release 门禁兼容性；[PR #64](https://github.com/yanzhao77/NearSend/pull/64) 加入 Flutter 3.47.5 macOS AOT windowing 临时补丁，但首次 Release [run 35846736222](https://github.com/yanzhao77/NearSend/actions/runs/35846736222) 因目标声明实际为 `final class` 而失败。
+- [PR #65](https://github.com/yanzhao77/NearSend/pull/65) 将补丁匹配改为 `final class`，合并提交为 `ae4a2db3c86963e07376d9521d606de0090859eb`；补丁仍限定在 CI 的 Flutter SDK 缓存中，并校验固定版本与五个目标声明。
+- 合并后 CI：[run 35848077863](https://github.com/yanzhao77/NearSend/actions/runs/35848077863)，仓库检查、格式/分析/测试、Android 与 Windows 构建均成功。
+- Release：[run 35848571953](https://github.com/yanzhao77/NearSend/actions/runs/35848571953)，Android、Windows、Linux、macOS 构建及发布 job 均成功；[macOS 构建日志](https://github.com/yanzhao77/NearSend/actions/runs/35848571953/job/107140604091) 确认补丁应用并构建 `nearsend.app`。
+- Release 页面：[NearSend v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)。实际资产为 `NearSend-0.1.3-android.apk`、`NearSend-0.1.3-windows-x64.zip`、`NearSend-0.1.3-macos.zip`、`NearSend-0.1.3-linux-amd64.deb`、`NearSend-0.1.3-linux-x64.tar.gz` 和 `SHA256SUMS.txt`。
+
+macOS 临时补丁仅经此次 Flutter 3.47.5 构建验证；升级 Flutter 后应重新核对上游修复与补丁适用性。构建成功不等于安装、签名、升级或目标设备传输验收完成。
 
 后续向 `master` 的提交会先触发 CI；只有 CI 成功，Release 工作流才会以最高版本 tag
 为基线递增 patch 并发布下一版。文档提交本身也会走这条路径，因此不能把 GitHub 上的
