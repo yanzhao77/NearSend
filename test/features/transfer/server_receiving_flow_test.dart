@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
+import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
@@ -149,8 +151,17 @@ void main() {
     await sending.addPaths(<String>[sourceFile().path]);
     expect(sending.phase, SendPhase.ready);
 
+    bool observedPreAcceptancePlan = false;
     final ServerReceivingFlow receiving = ServerReceivingFlow(
       engine: host.engine,
+      outputPlans: _ObservingOutputPlans(
+        host.database,
+        afterCreate: () {
+          observedPreAcceptancePlan = true;
+          expect(host.authorizations.read(transferId)?.isAccepted, isNot(true));
+          expect(host.tasks.committedBytesForTask(transferId), 0);
+        },
+      ),
       now: () => 1000,
       commitPollInterval: const Duration(milliseconds: 25),
     );
@@ -177,6 +188,7 @@ void main() {
       receiving.pending.single,
       context: context(),
       targetRef: saved.path,
+      outputNames: const <String, String>{fileId: '服务端副本.bin'},
     );
 
     expect(await pushed, isTrue);
@@ -191,12 +203,24 @@ void main() {
     expect(await received, isTrue);
     expect(receiving.phase, ServerReceivePhase.saved);
     expect(receiving.savedPaths, hasLength(1));
+    expect(receiving.savedFiles, hasLength(1));
+    expect(
+      receiving.savedFiles.single.displayName,
+      receiving.savedPaths.single,
+    );
+    expect(observedPreAcceptancePlan, isTrue);
+    expect(
+      host.authorizations.read(transferId)!.saveLocationRef,
+      saved.path,
+      reason: 'the accepted destination and the durable output plan must name the same target',
+    );
 
     final File written = saved
         .listSync(recursive: true)
         .whereType<File>()
         .where((File f) => !f.path.endsWith('.nearsend-part'))
         .single;
+    expect(receiving.savedFiles.single.targetRef, written.path);
     expect(
       sha256.convert(written.readAsBytesSync()).toString(),
       sha256.convert(payload).toString(),
@@ -204,6 +228,15 @@ void main() {
           'this is the claim the pushing direction exists for: a client that pasted this device\'s '
           'connection information can put a file on it, byte for byte',
     );
+    expect(written.uri.pathSegments.last, '服务端副本.bin');
+    final ReceiveOutputPlan output = receiving.outputPlans.read(
+      transferId,
+      fileId,
+    )!;
+    expect(output.originalPath, '推送接收.bin');
+    expect(output.selectedName, '服务端副本.bin');
+    expect(output.finalName, '服务端副本.bin');
+    expect(output.state, ReceiveOutputState.saved);
   });
 
   test('a proven shortfall is refused before anything is accepted', () async {
@@ -304,4 +337,27 @@ void main() {
           'would lose the result it is showing',
     );
   });
+}
+
+class _ObservingOutputPlans extends ReceiveOutputPlanRepository {
+  _ObservingOutputPlans(super.database, {this.afterCreate});
+
+  final void Function()? afterCreate;
+
+  @override
+  List<ReceiveOutputPlan> create({
+    required String transferId,
+    required List<ReceiveOutputChoice> choices,
+    required String targetRef,
+    NameConflictPolicy conflictPolicy = NameConflictPolicy.autoRename,
+  }) {
+    final List<ReceiveOutputPlan> plans = super.create(
+      transferId: transferId,
+      choices: choices,
+      targetRef: targetRef,
+      conflictPolicy: conflictPolicy,
+    );
+    afterCreate?.call();
+    return plans;
+  }
 }

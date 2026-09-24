@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 import 'package:nearsend/app/node_runtime.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
+import 'package:nearsend/core/security/installation_identity.dart';
 
 /// The application's node lifetime.
 ///
@@ -116,6 +118,77 @@ void main() {
   );
 
   test(
+    'a secure identity provider keeps the device and TLS pin across restart',
+    () async {
+      final _MemoryIdentityStore store = _MemoryIdentityStore();
+      final SecureInstallationIdentityProvider provider =
+          SecureInstallationIdentityProvider(store);
+      NodeRuntime persistentRuntime() => NodeRuntime(
+        directory: '${root.path}${Platform.pathSeparator}persistent-app',
+        candidateAddresses: const <String>['127.0.0.1'],
+        identityProvider: provider,
+      );
+
+      final NodeRuntime first = persistentRuntime();
+      final firstNode = await first.start();
+      final String firstDeviceId = first.identity!.device.deviceId;
+      final String firstPin = firstNode.pin;
+      await first.stop();
+
+      final NodeRuntime second = persistentRuntime();
+      final secondNode = await second.start();
+      expect(second.identity!.device.deviceId, firstDeviceId);
+      expect(secondNode.pin, firstPin);
+      expect(store.writes, 1);
+      await second.stop();
+    },
+  );
+
+  test(
+    'an existing pre-identity database can create its first identity',
+    () async {
+      final String directory =
+          '${root.path}${Platform.pathSeparator}upgrade-app';
+      Directory(directory).createSync(recursive: true);
+      final String databasePath =
+          '$directory${Platform.pathSeparator}nearsend.db';
+      sqlite3.open(databasePath).close();
+      final _MemoryIdentityStore store = _MemoryIdentityStore();
+      final NodeRuntime subject = NodeRuntime(
+        directory: directory,
+        candidateAddresses: const <String>['127.0.0.1'],
+        identityProvider: SecureInstallationIdentityProvider(store),
+      );
+
+      await subject.start();
+
+      expect(store.writes, 1);
+      await subject.stop();
+    },
+  );
+
+  test(
+    'missing secure identity after metadata is committed fails closed',
+    () async {
+      final _MemoryIdentityStore store = _MemoryIdentityStore();
+      NodeRuntime persistentRuntime() => NodeRuntime(
+        directory: '${root.path}${Platform.pathSeparator}recovery-app',
+        candidateAddresses: const <String>['127.0.0.1'],
+        identityProvider: SecureInstallationIdentityProvider(store),
+      );
+      final NodeRuntime first = persistentRuntime();
+      await first.start();
+      await first.stop();
+      store.value = null;
+
+      await expectLater(
+        persistentRuntime().start(),
+        throwsA(isA<IdentityRecoveryRequired>()),
+      );
+    },
+  );
+
+  test(
     'a runtime with no address refuses to start rather than publishing nothing',
     () async {
       final NodeRuntime subject = runtime(candidates: const <String>[]);
@@ -149,4 +222,18 @@ void main() {
     // An empty list is a legitimate answer on a machine with no network, so nothing is asserted
     // about its length; what is asserted is that whatever comes back is usable.
   });
+}
+
+class _MemoryIdentityStore implements SecureIdentityStore {
+  String? value;
+  int writes = 0;
+
+  @override
+  Future<String?> readIdentity() async => value;
+
+  @override
+  Future<void> writeIdentity(String encodedIdentity) async {
+    value = encodedIdentity;
+    writes++;
+  }
 }

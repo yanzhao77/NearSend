@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 class SpaceVolumeOverview {
   const SpaceVolumeOverview({
@@ -27,7 +28,7 @@ class SpaceVolumeOverview {
 }
 
 class SpaceOverview {
-  const SpaceOverview({required this.volumes, this.locationRef});
+  const SpaceOverview({required this.volumes, this.location});
 
   const SpaceOverview.unknown()
     : volumes = const <SpaceVolumeOverview>[
@@ -37,10 +38,10 @@ class SpaceOverview {
           availability: VolumeAvailability.unknown(),
         ),
       ],
-      locationRef = null;
+      location = null;
 
   final List<SpaceVolumeOverview> volumes;
-  final String? locationRef;
+  final StorageLocationRef? location;
 
   bool get hasUnknown => volumes.any(
     (SpaceVolumeOverview volume) => volume.verdict == SpaceVerdict.unknown,
@@ -66,9 +67,10 @@ class SpaceOverviewController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final String? location = await gateway.defaultReceiveLocation();
+      final StorageLocationRef? location = await gateway
+          .defaultReceiveLocation();
       final StorageMeasurement measurement = await gateway.measureFreeSpace(
-        locationRef: location,
+        location: location,
       );
       _overview = SpaceOverview(
         volumes: <SpaceVolumeOverview>[
@@ -78,7 +80,7 @@ class SpaceOverviewController extends ChangeNotifier {
             availability: measurement.availability,
           ),
         ],
-        locationRef: location,
+        location: location,
       );
     } on Object catch (error) {
       _error = error;

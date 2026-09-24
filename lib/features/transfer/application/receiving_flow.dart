@@ -6,9 +6,12 @@ import 'package:nearsend/core/protocol/manifest.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/transfer_resume_request.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
+import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
+import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/transfer_flow.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// The receiving side, from an offer the peer made to a file on this device.
@@ -35,10 +38,17 @@ import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 /// the confirmation screen - and it does not choose the save location silently: [accept] takes it as
 /// an argument, because the destination is the one thing a receiving user must be able to control.
 class ReceivingFlow extends ChangeNotifier {
-  ReceivingFlow({required this.engine, required this.wire, required this.now});
+  ReceivingFlow({
+    required this.engine,
+    required this.wire,
+    required this.now,
+    ReceiveOutputPlanRepository? outputPlans,
+  }) : outputPlans =
+           outputPlans ?? ReceiveOutputPlanRepository(engine.database);
 
   final TransferEngine engine;
   final TransferClient wire;
+  final ReceiveOutputPlanRepository outputPlans;
 
   /// The clock, injected so a test can state timestamps instead of racing them.
   final int Function() now;
@@ -55,6 +65,7 @@ class ReceivingFlow extends ChangeNotifier {
   String? _failureReason;
   TransferFlow? _flow;
   final List<String> _savedPaths = <String>[];
+  final List<SavedFileReference> _savedFiles = <SavedFileReference>[];
   int _currentIndex = 0;
   int _fileCount = 0;
 
@@ -74,6 +85,9 @@ class ReceivingFlow extends ChangeNotifier {
   /// Where the files that were written ended up, in the order they were written.
   List<String> get savedPaths => List<String>.unmodifiable(_savedPaths);
 
+  List<SavedFileReference> get savedFiles =>
+      List<SavedFileReference>.unmodifiable(_savedFiles);
+
   /// Which file of the transfer is in flight, one-based; 0 when none is.
   int get currentFileNumber => _flow == null ? 0 : _currentIndex + 1;
 
@@ -84,6 +98,8 @@ class ReceivingFlow extends ChangeNotifier {
       _flow == null || _offer == null ? null : _currentFileNames[_currentIndex];
 
   final List<String> _currentFileNames = <String>[];
+  final Map<String, FrozenManifest> _previewedManifests =
+      <String, FrozenManifest>{};
 
   bool get isBusy =>
       _phase == ReceivePhase.accepting || _phase == ReceivePhase.receiving;
@@ -112,6 +128,20 @@ class ReceivingFlow extends ChangeNotifier {
     }
   }
 
+  Future<List<ReceiveFilePreview>> preview(OfferSummary offer) async {
+    final FrozenManifest manifest = await wire.readManifest(offer.transferId);
+    _validateOffer(offer, manifest);
+    _previewedManifests[offer.transferId] = manifest;
+    return <ReceiveFilePreview>[
+      for (final ManifestFile file in manifest.files)
+        ReceiveFilePreview(
+          fileId: file.fileId,
+          originalPath: file.relativePath,
+          sizeBytes: file.sizeBytes,
+        ),
+    ];
+  }
+
   /// Accepts [offer] and pulls it to [saveLocationRef].
   ///
   /// [saveLocationRef] is the directory the files are written into, and it is required rather than
@@ -120,6 +150,7 @@ class ReceivingFlow extends ChangeNotifier {
   Future<bool> accept(
     OfferSummary offer, {
     required String saveLocationRef,
+    Map<String, String> outputNames = const <String, String>{},
     void Function(int received, int total)? onFileProgress,
   }) async {
     if (isBusy) {
@@ -128,11 +159,26 @@ class ReceivingFlow extends ChangeNotifier {
     _offer = offer;
     _failureReason = null;
     _savedPaths.clear();
+    _savedFiles.clear();
     _currentFileNames.clear();
     _currentIndex = 0;
     _set(ReceivePhase.accepting);
 
     try {
+      // File metadata is deliberately read before the decision. The session is bound to this task,
+      // and §6 requires the receiver to show and persist the exact output mapping before any task
+      // credential can make file bytes available.
+      final FrozenManifest manifest =
+          _previewedManifests.remove(offer.transferId) ??
+          await wire.readManifest(offer.transferId);
+      _validateOffer(offer, manifest);
+      _createOutputPlans(
+        transferId: offer.transferId,
+        files: manifest.files,
+        saveLocationRef: saveLocationRef,
+        outputNames: outputNames,
+      );
+
       // §6: the decision is this device's, and it is recorded with the digest it commits to.
       await wire.decide(
         transferId: offer.transferId,
@@ -156,7 +202,6 @@ class ReceivingFlow extends ChangeNotifier {
         receiverState: _receiverState(offer.transferId),
       );
 
-      final FrozenManifest manifest = await wire.readManifest(offer.transferId);
       engine.registerRemoteManifest(offer.transferId, manifest);
       _fileCount = manifest.files.length;
       _set(ReceivePhase.receiving);
@@ -221,9 +266,9 @@ class ReceivingFlow extends ChangeNotifier {
         // manifest reaches the target directory.
         _flow?.applyTaskState(TransferState.verifying, atMillis: now());
         _notify();
-        final ReceivedFileOutcome outcome = await engine.finishFile(
-          fileId: file.fileId,
-          targetRef: saveLocationRef,
+        final ReceivedFileOutcome outcome = await _finishPlannedFile(
+          transferId: offer.transferId,
+          file: file,
         );
         // `!= true` rather than `!`: a verification that could not be computed reports null, and
         // "unknown" must never be treated as "passed" - that is the one path that would put a file
@@ -234,6 +279,12 @@ class ReceivingFlow extends ChangeNotifier {
         final String? savedPath = outcome.savedPath;
         if (savedPath != null) {
           _savedPaths.add(savedPath);
+          _savedFiles.add(
+            SavedFileReference(
+              displayName: savedPath,
+              targetRef: outcome.export?.createdTargetRef,
+            ),
+          );
         }
         _flow?.applyCompleted(atMillis: now());
         _notify();
@@ -267,6 +318,87 @@ class ReceivingFlow extends ChangeNotifier {
       return false;
     }
   }
+
+  static void _validateOffer(OfferSummary offer, FrozenManifest manifest) {
+    if (manifest.manifestDigest != offer.manifestDigest ||
+        manifest.fileCount != offer.fileCount ||
+        manifest.totalBytes != offer.totalBytes) {
+      throw ReceivingRefused('对方提供的文件清单已经变化，请刷新后重新确认。');
+    }
+  }
+
+  void _createOutputPlans({
+    required String transferId,
+    required List<ManifestFile> files,
+    required String saveLocationRef,
+    required Map<String, String> outputNames,
+  }) {
+    final Set<String> offeredIds = <String>{
+      for (final ManifestFile file in files) file.fileId,
+    };
+    if (!offeredIds.containsAll(outputNames.keys)) {
+      throw ArgumentError.value(
+        outputNames.keys
+            .where((String id) => !offeredIds.contains(id))
+            .toList(),
+        'outputNames',
+        'contains a file that is not in the frozen manifest',
+      );
+    }
+    outputPlans.create(
+      transferId: transferId,
+      targetRef: saveLocationRef,
+      choices: <ReceiveOutputChoice>[
+        for (final ManifestFile file in files)
+          ReceiveOutputChoice(
+            fileId: file.fileId,
+            originalPath: file.relativePath,
+            selectedName:
+                outputNames[file.fileId] ?? _fileNameOf(file.relativePath),
+          ),
+      ],
+    );
+  }
+
+  Future<ReceivedFileOutcome> _finishPlannedFile({
+    required String transferId,
+    required ManifestFile file,
+  }) async {
+    final ReceiveOutputPlan plan = outputPlans.read(transferId, file.fileId)!;
+    outputPlans.markExporting(transferId, file.fileId);
+    try {
+      final ReceivedFileOutcome outcome = await engine.finishFile(
+        fileId: file.fileId,
+        targetRef: plan.targetRef,
+        outputName: plan.selectedName,
+        conflictPolicy: plan.conflictPolicy,
+      );
+      final export = outcome.export;
+      if (export == null || !export.isSaved || outcome.savedPath == null) {
+        outputPlans.markFailed(transferId, file.fileId);
+        throw ReceivingRefused('${file.relativePath} 未能保存，暂存内容已保留，可重试。');
+      }
+      outputPlans.markSaved(
+        transferId: transferId,
+        fileId: file.fileId,
+        finalName: outcome.savedPath!,
+        finalTargetRef: export.createdTargetRef,
+      );
+      return outcome;
+    } on Object {
+      final ReceiveOutputPlan? current = outputPlans.read(
+        transferId,
+        file.fileId,
+      );
+      if (current?.state == ReceiveOutputState.exporting) {
+        outputPlans.markFailed(transferId, file.fileId);
+      }
+      rethrow;
+    }
+  }
+
+  static String _fileNameOf(String relativePath) =>
+      relativePath.substring(relativePath.lastIndexOf('/') + 1);
 
   /// What this device has committed for the transfer, from its own rows.
   ///

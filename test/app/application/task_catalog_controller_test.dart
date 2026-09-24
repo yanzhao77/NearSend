@@ -69,6 +69,16 @@ INSERT INTO exports (file_id, target_uri, result, recorded_at, saved_path)
 VALUES ('file-saved', 'opaque://documents', 'saved', 3, 'saved.txt');
 ''');
     database.db.execute('''
+INSERT INTO receive_output_plans (
+  transfer_id, file_id, original_path, selected_name, target_ref,
+  conflict_policy, output_state, final_name, final_target_ref, updated_at
+) VALUES (
+  'task-detail', 'file-saved', 'saved.txt', 'saved.txt',
+  'opaque://documents', 'autoRename', 'saved', 'saved.txt',
+  'content://documents/saved-file', 3
+);
+''');
+    database.db.execute('''
 INSERT INTO files (
   file_id, task_id, relative_path, size_bytes, chunk_size_bytes, chunk_count,
   file_sha256, chunk_manifest_digest, export_state, created_at
@@ -94,6 +104,7 @@ VALUES ('file-failed', 'opaque://documents', 'failed', 4);
     expect(detail.files, hasLength(2));
     expect(detail.files.first.isSaved, isTrue);
     expect(detail.files.first.savedPath, 'saved.txt');
+    expect(detail.files.first.finalTargetRef, 'content://documents/saved-file');
     expect(detail.files.last.isFailed, isTrue);
     expect(detail.files.last.committedBytes, 4);
     expect(detail.failedFileCount, 1);

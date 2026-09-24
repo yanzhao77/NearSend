@@ -28,6 +28,16 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>NearSend 需要通过本地 Wi-Fi 发现并连接另一台设备，不使用互联网中转文件。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NearSend 使用相机扫描另一台设备主动展示的配对二维码。</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_nearsend._tcp</string>
+	</array>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>NearSend 使用蓝牙发现附近设备并交换有界的配对和组网消息，文件内容始终通过安全 Wi-Fi 通道传输。</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>NearSend 使用蓝牙让附近设备发现本机并建立安全连接。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

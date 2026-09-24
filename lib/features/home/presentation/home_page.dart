@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
+import 'package:nearsend/app/application/radar_controller.dart';
 
 /// The first screen for the four-section application shell.
 ///
@@ -16,6 +17,12 @@ class HomePage extends StatelessWidget {
     this.hasRecoverableTasks = false,
     this.recoverableTaskCount = 0,
     this.onContinue,
+    this.radarReady = false,
+    this.radarBusy = false,
+    this.radarFailureReason,
+    this.onRadarReadyChanged,
+    this.radarDevices = const <RadarDevice>[],
+    this.onRadarDevicePressed,
   });
 
   final String deviceName;
@@ -24,6 +31,12 @@ class HomePage extends StatelessWidget {
   final bool hasRecoverableTasks;
   final int recoverableTaskCount;
   final VoidCallback? onContinue;
+  final bool radarReady;
+  final bool radarBusy;
+  final String? radarFailureReason;
+  final ValueChanged<bool>? onRadarReadyChanged;
+  final List<RadarDevice> radarDevices;
+  final ValueChanged<RadarDevice>? onRadarDevicePressed;
 
   static const String connectRoute = '/connect';
   static const String transferRoute = '/transfer';
@@ -100,6 +113,15 @@ class HomePage extends StatelessWidget {
                   remainingWorkNote,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                const SizedBox(height: NearSendSpacing.lg),
+                _RadarSection(
+                  ready: radarReady,
+                  busy: radarBusy,
+                  failureReason: radarFailureReason,
+                  devices: radarDevices,
+                  onReadyChanged: onRadarReadyChanged,
+                  onDevicePressed: onRadarDevicePressed,
+                ),
                 if (hasRecoverableTasks) ...<Widget>[
                   const SizedBox(height: NearSendSpacing.xl),
                   NsTaskCard(
@@ -119,6 +141,94 @@ class HomePage extends StatelessWidget {
   }
 }
 
+class _RadarSection extends StatelessWidget {
+  const _RadarSection({
+    required this.ready,
+    required this.busy,
+    required this.failureReason,
+    required this.devices,
+    required this.onReadyChanged,
+    required this.onDevicePressed,
+  });
+
+  final bool ready;
+  final bool busy;
+  final String? failureReason;
+  final List<RadarDevice> devices;
+  final ValueChanged<bool>? onReadyChanged;
+  final ValueChanged<RadarDevice>? onDevicePressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('附近设备雷达'),
+          subtitle: Text(ready ? '本机可被发现并接受连接' : '已关闭发现和就绪状态'),
+          value: ready,
+          onChanged: busy ? null : onReadyChanged,
+        ),
+        if (busy || failureReason != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
+            child: Text(
+              busy
+                  ? (ready ? '正在关闭附近设备雷达...' : '正在启动附近设备雷达...')
+                  : failureReason!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: failureReason == null
+                    ? null
+                    : Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+        if (devices.isNotEmpty) ...<Widget>[
+          const SizedBox(height: NearSendSpacing.sm),
+          Text('附近与历史设备', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: NearSendSpacing.xs),
+          for (final RadarDevice device in devices)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: SizedBox.square(
+                dimension: 24,
+                child: device.isReady
+                    ? Center(
+                        child: Semantics(
+                          label: '已实时验证并就绪',
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF16835D),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const Icon(Icons.devices_outlined, size: 20),
+              ),
+              title: Text(
+                device.name,
+                semanticsLabel: device.isReady
+                    ? '${device.name}，已实时验证并就绪'
+                    : device.name,
+              ),
+              subtitle: Text(
+                device.isRevoked ? '已撤销 · ${device.detail}' : device.detail,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onDevicePressed == null
+                  ? null
+                  : () => onDevicePressed!(device),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
 class _DeviceStatus extends StatelessWidget {
   const _DeviceStatus({
     required this.deviceName,
@@ -133,32 +243,53 @@ class _DeviceStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(NearSendSpacing.md),
-        child: Row(
-          children: <Widget>[
-            const CircleAvatar(child: Icon(Icons.compare_arrows)),
-            const SizedBox(width: NearSendSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text('本机设备', style: Theme.of(context).textTheme.labelSmall),
-                  Text(
-                    deviceName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
+      child: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final Widget identity = Row(
+            children: <Widget>[
+              const CircleAvatar(child: Icon(Icons.compare_arrows)),
+              const SizedBox(width: NearSendSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('本机设备', style: Theme.of(context).textTheme.labelSmall),
+                    Text(
+                      deviceName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: NearSendSpacing.sm),
-            Flexible(
-              child: NsStatusBadge(label: connectionLabel, tone: tone),
-            ),
-          ],
-        ),
+            ],
+          );
+          return Padding(
+            padding: const EdgeInsets.all(NearSendSpacing.md),
+            child: constraints.maxWidth < 320
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      identity,
+                      const SizedBox(height: NearSendSpacing.sm),
+                      NsStatusBadge(label: connectionLabel, tone: tone),
+                    ],
+                  )
+                : Row(
+                    children: <Widget>[
+                      Expanded(child: identity),
+                      const SizedBox(width: NearSendSpacing.sm),
+                      Flexible(
+                        child: NsStatusBadge(
+                          label: connectionLabel,
+                          tone: tone,
+                        ),
+                      ),
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }

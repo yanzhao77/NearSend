@@ -4,7 +4,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.3`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.3`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
 
 ## 1. 状态口径
 
@@ -40,7 +40,7 @@
 | R01 | Flutter客户端与原生适配 | 部分完成：工程、核心层、UI 基线与代码级业务链路 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md)、[T12-10](tasks/T12-10.md) | T12 UI 基线已由 PR #61 合并；真实设备文件端口、恢复编排、Windows 取件器、Flutter SDK 复测和完整 UI 平台验收仍未完成 |
 | R02 | 安装包、签名构建及发布CI | 部分完成：自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.3 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | CI 门禁和发布流水线均已在 GitHub Actions 验证；发布签名与正式分发仍属 T10 |
-| R04 | 接收方持久化层 | 部分完成：schema v6 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2→v3→v4→v5→v6、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权、`SQLITE_FULL` 注入、**manifest staging 落 SQLite（v4）**、**任务凭证按摘要持久化与授权记录（v5）**、**发送端来源引用（v6）** 均已实现并测试；真实 OS `ENOSPC`、真机 `syncData` 与断电耐久性仍未验证 |
+| R04 | 接收方持久化层 | 部分完成：schema v9 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md)、[1.2 状态](releases/1.2/STATUS.md) | schema v1→v9、块权威、租约、幂等、manifest staging、任务凭证、来源引用、非机密设置（v7）、接收输出计划（v8）及公开身份元数据/peer 历史（v9）均已实现并测试；真实 OS `ENOSPC`、真机 `syncData`、平台权限撤销与断电耐久性仍未验证 |
 
 历史实验环境见[environment.json](testing/evidence/2026-09-20/environment.json)。20GiB整文件哈希通过；峰值RSS为18,944KiB，1GiB为18,816KiB。该口径不包含系统页缓存，不代表真机吞吐量或完整应用内存。
 
@@ -51,7 +51,7 @@
 | B01 | P0 | Android热点与Windows加入 | **真实同 AP 控制面样本通过**（`t03-02-05`：真机 `25102RKBEC`/Android 17 与 Windows 在同一 AP `CMCC-pbD4`，入站 TCP 与真实 HTTPS 控制面均实测可达）。**但这不等于本项完成**：`LocalOnlyHotspot` 探针仍未执行，「Windows 加入手机热点」这条路径从未跑过，本批次用的是既有路由器而不是热点 | 准备原生热点探针，关闭上游网络测试 | 实际双向样本传输、重建热点重新认证 |
 | B02 | P0 | Android指定Network与TLS衔接 | **DER pin 与 TLS 1.3 已在真机验证通过**（`t03-02-05`：Android 侧 `SHA-256(X509Certificate.der)` 与 Windows 发布的 pin 逐字节一致、`badCertificateCallback` 调用时机一致、错误 pin 由应用自身的比较拒绝）。**但「指定 Network」仍未完成**：本路径走的是系统默认路由，未涉及多网络下的接口选择与 socket 绑定 | 对比原生与 Dart 适配路径 | 多网络下走正确接口，pin前不发凭证 |
 | B03 | P0 | URI重开、seek、权限与暂存 | 真机已具备；尚无真实文档提供者样本 | 本地/外接/云占位文件分别测试 | 重启重开或明确暂存/阻断路径 |
-| B04 | P0 | 真实存储checkpoint及恢复 | SQLite schema v1→v2→v6、manifest staging、块权威和授权记录已实现并测试；真实设备耐久性、OS `ENOSPC`、`syncData` 与应用层 resume 仍未验证 | 在目标设备执行暂存损坏、OS `ENOSPC`、真机 `syncData`、进程退出与恢复测试 | 不假提交，恢复只信接收端持久化 checkpoint，最终哈希一致 |
+| B04 | P0 | 真实存储checkpoint及恢复 | SQLite schema v1→v8、manifest staging、块权威、授权记录和接收输出计划已实现并测试；真实设备耐久性、OS `ENOSPC`、`syncData` 与应用层 resume 仍未验证 | 在目标设备执行暂存损坏、OS `ENOSPC`、真机 `syncData`、进程退出与恢复测试 | 不假提交，恢复只信接收端持久化 checkpoint，最终哈希一致 |
 | B05 | P0 | 协议跨语言与完整API | Python 参考层与 Dart 独立编码/模型/路由/鉴权、HTTPS、配对、清单、分块和生命周期端点已有实现；跨语言比对、能力词表、版本冻结和完整设备链路仍未完成 | 完成 Kotlin/Swift/Windows 独立比对，补齐协议缺口并在目标设备执行完整链路 | 向量一致，授权与幂等正反例及真实链路通过 |
 | B06 | P1 | iOS关键能力探针 | 缺macOS/Xcode/iPhone | 早期验证TLS、局域网权限、文件生命周期 | 前后台中断后可靠恢复，记录实际边界 |
 | B07 | P1 | 真机大文件与队列 | 尚无完整产品链路 | 先小样本，再20GiB及小文件集合 | 准备/传输/终检/导出全流程证据 |
@@ -67,6 +67,7 @@
 | T11-02 UI 装配 | **进行中**：发送/接收页面、节点生命周期、真实 pin 与两种受理路径已有代码级闭环；真机第 6 项、平台文件端口和完整错误/空间体验待做 | 见 [T11-02](tasks/T11-02.md)：目标设备双向流程、SAF/Windows 取件器、恢复与错误体验 |
 | T11-01 MVP 双向数据面 | **进行中**（`t11-01-01` 数据面）：真实两个节点 + 真实 TLS 的代码级双向路径已有；真机双向传输与应用层 resume 未完成，详见下方 §6 交付记录 | 真机双向传完真实文件、断点恢复、平台文件端口 |
 | T12 UI 全平台改造 | **阻塞（代码已合并）**：T12-00 至 T12-09 已实现并有代码级证据，T12-10 已完成可执行验收覆盖并随 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) 合并到 `master`；Flutter SDK 版本、Android 真机截图以及 Windows/iOS 环境证据仍缺失 | 主题、共享组件、响应式应用壳、真实任务/空间/设置页面、三端适配和平台证据按 [T12-00](tasks/T12-00.md) 至 [T12-10](tasks/T12-10.md) 逐项满足退出门槛 |
+| NearSend 1.2 升级 | **当前环境开发与 V12-12 验证完成，产品验收仍进行中**：V12-00 至 V12-12 均有实现或明确阻塞记录；1369 项测试、Android debug APK、iOS Simulator 和仓库级门禁通过 | 在目标环境补 Android/Windows 双机、不同网络/热点、PAKE、指定 Android Network、Windows 自动入网、系统文件动作、大文件恢复和后台生命周期证据；未满足前不得发布 |
 | T01 工程/构建/配置 | 已完成 | 两端可安装/运行、版本可追踪（§6.1）；检查与双端构建已固化为 CI 门禁（§6.2） |
 | T02 协议/模型/向量 | 部分完成：模型已收敛，但**发现三处草案缺口** | 草案、Python 向量与 Dart 独立实现逐字节一致（T02-01）；错误码/状态机/协议协商/幂等已实现（T02-02）；**冻结被 §5 登记的三项草案缺口阻塞**，另需原生实现比对 |
 | T03 配对与单文件链路 | **部分完成**：配对、TLS、授权、清单、seal、分块端点、checkpoint、终检与导出编排已有实现；代码级双向测试已通过，真机双向传输、指定网络绑定、平台文件端口和完整 UI 验收仍未完成 | 用户授权后端到端收发、鉴权负例、目标设备与恢复证据通过 |
@@ -86,7 +87,7 @@
 | T01-02 CI 与检查 | T01-01 | 已完成 | format/analyze/test/build 可重复运行 |
 | T02-01 Dart canonical manifest | T01-01、D03/D04 | 已完成 | 固定向量正反例一致，不复制 Python 实现逻辑 |
 | T02-02 状态/错误/版本模型 | T01-01、D03 | 已完成 | 模型和序列化测试通过，未知字段规则明确 |
-| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 进行中（schema v6；v1→v6 迁移、manifest staging、chunk repository、幂等、统一状态 codec、状态与导出记录、peer 授权、磁盘满注入已实现并测试；真实暂存损坏、OS 层满盘、真机 syncData 与应用层 resume 未完成） | durable 提交顺序、staging 重启恢复、迁移和故障测试通过 |
+| T04-01 SQLite schema 与 chunk repository | B04 设备验证可后补 | 进行中（schema v9；v1→v9 迁移、manifest staging、chunk repository、幂等、统一状态 codec、状态与导出记录、peer 授权、非机密设置、接收输出计划、公开身份元数据和磁盘满注入已实现并测试；真实暂存损坏、OS 层满盘、真机 syncData 与应用层 resume 未完成） | durable 提交顺序、staging 重启恢复、迁移和故障测试通过 |
 | T03-01 同网二维码配对 | T01-01/T02-02/**B02（仅网络绑定部分）** | 进行中：配对载荷、TLS、令牌生命周期与限流、`/v1` 路由/鉴权、清单分页与 seal、分块规则、checkpoint 窗口、写入栅栏及主要控制端点已有实现并测试；能力词表、协议版本冻结、跨语言比对、背压、多进程文件锁和目标端网络绑定仍未完成 | pin 先于令牌，正负例、跨语言比对和目标端网络绑定通过 |
 | T03-02 Android→Windows 局域网端到端单文件闭环 | T03-01/T04-01/T06-01 | **进行中**（`t03-02-01` 前提验证：真机 `22081283C`/Android 14 与 Windows 在同一 AP 且**入站 TCP 实测可达**；TLS 1.3 下限经 openssl 外部验证**真实强制**。`t03-02-02` **TLS 身份层**：Dart 内生成 P-256 自签证书与密钥（私钥只以字节返回、模块无写文件路径）、pin 复用 `serverFingerprintOf`；**实测推翻了初稿的 pin 形态**——dart:io 即使证书已被信任库接受**仍校验 SAN/IP**。`t03-02-03` **HTTPS 传输层**：TLS 终止（1.3 下限设在 context 上）、§8 帧定界、接到既有 `ControlPipeline`；客户端按 pin 连接、不跟随重定向、关闭透明解压；裸 socket 实测出 dart:io 替我们挡下的帧形态（重复 `Content-Length` 由引擎拒绝、chunked 被引擎接受并保留头、两者同时出现时引擎会**移除** `Content-Length` 故该规则靠「拒绝任何 `Transfer-Encoding`」成立）；**期间修正一处真实缺陷：客户端未声明 `contentLength` 导致 dart:io 回落到 chunked 编码，违反 §8，被服务端正确拒绝**。`t03-02-04` **§3 配对端点与会话令牌**：`POST /v1/pair` 可用，**签发方与校验方是同一个类**（一个产出自己校验方不接受的令牌，会在两侧单测里都是绿的，直到真机首次配对才失败），并在**真实 TLS 上跑通「配对 → 用返回的会话令牌创建传输 → 数据库确有任务行」**；`ControlRequest` 新增 `peerAddress` 以满足 §3「每来源 5 次/分」；**限流先于令牌检查**（否则可用错误码探测令牌有效性）；重新签发的 QR 立即作废旧会话令牌。`t03-02-05` **Android 真机首次参与**：真机 `25102RKBEC`（Android 17/API 37，Wi-Fi `192.168.10.4/24`）与 Windows（`192.168.10.100`）在同一 AP，经**真实** LAN 完成配对与创建传输，测试断言**Android 侧每一次 `SHA-256(X509Certificate.der)` 都等于 Windows 公布的 pin**（若两平台对 DER 理解不同，pin 会一边匹配一边永远不匹配，而桌面全部测试仍全绿）、Android 上回调调用时机与 Windows 一致、错误 pin 同样被我们自己的比较拒绝；**期间发现并修正一处真实缺陷：`flutter create` 只在 debug/profile 清单放 `INTERNET` 权限，主清单没有，故 release 构建完全无法联网，而这正是产品的全部意义，且任何 debug 测试都看不见**。仍缺：**其余 15 个端点**、**任何文件字节传输**（chunk 端点与背压未做）、**身份持久化**、**能力词表未定义故宣告空能力集且不协商**、**无 UI 与扫码**（本运行载荷经命令行传入）。**证据口径的一处如实说明**：`t03-02-05` **没有**取得两个指纹具体字符串的日志证据——测试 isolate 的 `stdout` 不被 `flutter test` 转发，设备 logcat 又被启动器的 `flutter` 标签刷满；被验证的是**测试断言**（Android 每一次呈现的指纹都等于二维码里的 pin），断言足以证明两个平台对实际证书指纹一致，但**不能**当作"日志里看得到指纹"来引用） | [任务卡](tasks/T03-02.md) §验收条件 12 项逐条真机可复核 |
 | T06-01 空间计划、终检与导出 | T01-01/T04-01 | 进行中（空间计划、整文件终检、导出门禁与安全命名、导出编排与清理、schema v2 已实现并测试；平台 `ExportSink`、取消路径与调度接入未完成） | 分卷明细、unknown/不足、终检和幂等导出通过 |
@@ -1108,3 +1109,163 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - [PR #65](https://github.com/yanzhao77/NearSend/pull/65) 将五个目标声明的匹配与幂等校验改为 `final class`；合并提交 `ae4a2db3c86963e07376d9521d606de0090859eb`。合并后 CI [run 35848077863](https://github.com/yanzhao77/NearSend/actions/runs/35848077863) 四作业全通过。
 - Release [run 35848571953](https://github.com/yanzhao77/NearSend/actions/runs/35848571953) 的四个平台构建和发布 job 全通过；[macOS job](https://github.com/yanzhao77/NearSend/actions/runs/35848571953/job/107140604091) 日志显示补丁应用成功并构建 `nearsend.app`。GitHub 已发布 [v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)，附 Android APK、Windows/macOS ZIP、Linux DEB/便携包和 `SHA256SUMS.txt`。
 - T10 仍为“进行中”：此次证明 Flutter 3.47.5 的发布流水线可构建并归档，不证明安装升级、正式签名、设备互传或断点恢复；升级 Flutter 时需重新评估临时补丁。
+
+### 6.7 NearSend 1.2 接收输出计划（V12-02，2026-09-24）
+
+- 数据库升级到 schema v8，新增 `receive_output_plans`；冻结原始路径、本地保存名、目标位置引用、
+  冲突策略、实际保存名、平台目标句柄和导出状态分开持久化。v7→v8 迁移保留设置数据。
+- client 接收与 server 接收都在授权接受前创建输出计划。真实 TLS 流程测试在创建时断言授权仍未
+  接受且 committed 字节为 0；未绑定会话继续无法读取清单。
+- 本地改名只交给导出层，不改 manifest、fileId、摘要或恢复记录；同名默认安全重命名，不提供
+  静默覆盖。导出失败保留暂存并把计划标记为可重试失败，已导出文件没有删除入口。
+- FVM Flutter 3.47.5 / Dart 3.13.4 下格式、静态分析、1275 项测试、文档链接、敏感信息和 CI
+  规则检查通过。Android/Windows 的目录撤权、崩溃窗口、句柄重开和实际同名竞态仍需目标设备
+  验证，因此 V12-02 只标记当前环境完成，不代表平台验收完成。
+
+### 6.8 NearSend 1.2 设置与接收确认（V12-03，2026-09-24）
+
+- 默认接收位置通过平台系统选择器取得，并在写入设置前重新验证访问权限。取消、系统选择器异常、
+  权限撤销和无法解析的旧设置保留原状态并显示修复入口。
+- 接收方在内容传输前读取冻结清单文件元数据，以单个弹框确认所有文件的本地输出名和不透明保存
+  位置；本地改名按文件 ID 写入输出计划，不修改发送方清单、摘要或恢复依据。
+- Android SAF URI 不作为路径展示或推断。服务端推送在最终位置重新测量空间，已知不足阻断，未知
+  空间要求独立确认。取消或名称校验失败不会提交接受决定。
+- 设置/接收页 18 项定向测试和 1285 项全量测试通过，静态分析无问题；真实 Android/Windows
+  系统选择器、重启授权延续与撤权后的实际保存仍未验证。
+
+### 6.9 NearSend 1.2 稳定身份与历史基础（V12-04 第一阶段，2026-09-24）
+
+- 长期 P-256 设备身份与 TLS 身份分开建模并组成版本化安全载荷。Android 用 Keystore AES-GCM
+  包装，Windows 用当前用户作用域 DPAPI；普通 SQLite 只存 device ID、公钥、密钥引用和版本。
+- schema v9 扩展 peer 历史的公钥、平台、授权/撤销状态、配对时间与最近实时验证时间。只有已授权
+  且指纹匹配的认证结果能更新时间；仅发现同名设备不能形成在线证明。
+- 已绑定的安全身份缺失、损坏或与数据库公开元数据不匹配时拒绝启动，不静默重建或覆盖旧身份；
+  pre-v9 数据库没有身份元数据，可在升级时建立首个稳定身份。Android/Windows 生产启动使用持久
+  提供器；其他未适配平台保持临时身份并继续显示跨重启限制。
+- Android Kotlin 编译、Dart 定向测试及 1301 项全量测试通过；Windows C++ 后续由 PR #68 CI release
+  构建验证。长期身份还没有
+  绑定到 V12-07 双向认证，因此本阶段是安全基础，不代表可信配对或历史在线状态已经完成。
+
+### 6.10 NearSend 1.2 mDNS 发现（V12-05，2026-09-24）
+
+- 固定并审查 `bonsoir 7.1.5`：兼容 Dart 3.13.4 / Flutter 3.47.5，MIT 许可，Android/Darwin/
+  Windows/Linux 分包由锁文件固定。依赖仅封装系统 mDNS/DNS-SD，不承担认证或传输。
+- 新增 `_nearsend._tcp` 发布与浏览适配。TXT 只含版本、临时实例 UUID 和发现能力；候选严格限长、
+  过滤不可用地址、自发现，不把名称/IP 当身份。节点监听后发布，停止时先撤销发现资源。
+- mDNS 与节点生命周期 12 项测试、1308 项全量测试、Android Kotlin（含插件）和 iOS Simulator
+  构建通过。iOS 设备
+  构建缺 Development Team/Provisioning，Android APK 仍受 sqlite3 下载 TLS 问题阻塞，Windows
+  构建与同网双机发现/认证需目标环境，故 V12-05 保持进行中。
+
+### 6.11 NearSend 1.2 BLE 控制通道（V12-06，2026-09-24）
+
+- 固定并审查 `bluetooth_low_energy 6.2.1`（MIT，兼容项目 FVM 工具链），新增 Android/Windows
+  central/peripheral 适配。广告只携带固定 service UUID、协议版本和 48 位临时实例标签；不广播
+  设备名、长期身份、TLS pin、令牌、热点凭据或文件信息，候选不等于可信设备。
+- 新增 BLE 控制帧 v1：16 字节固定头、16 KiB 逻辑消息上限、512 字节帧上限、15 秒重组超时、
+  16 个对端总上限。重复、乱序、重放、截断、坏版本和不一致长度均拒绝；文件内容继续只走
+  认证 HTTPS 数据面。
+- GATT central 写入与 peripheral notification 构成双向控制链路，蓝牙角色不决定文件发送方向；
+  生命周期明确停止扫描/广告、断开连接、移除 service 和取消订阅。V12-07 双向认证完成前不能用
+  BLE 消息更新可信或在线状态。
+- 格式、静态分析、14 项定向测试和 1322 项全量测试通过。Android 首次 Maven TLS 中断，重试后
+  主应用和 BLE 插件 Kotlin 编译通过；iOS Simulator 构建通过。插件存在旧 GATT API/Kotlin Gradle
+  Plugin 弃用警告。Windows 插件后续由 PR #68 CI release 构建验证；Android/Windows 双机、权限、
+  MTU、后台和断线实测仍待目标环境，因而本任务保持进行中。
+
+### 6.12 NearSend 1.2 已知设备挑战认证（V12-07 部分，2026-09-24）
+
+- 已授权历史设备使用长期 P-256 身份完成一次性挑战认证。规范 transcript 绑定双方角色、协议版本、
+  事务 UUID、32 字节挑战、ready 状态和当前 TLS leaf 指纹；固定 64 字节 low-S ECDSA 签名，避免
+  可变编码和反射/降级字段遗漏。
+- 挑战和在线就绪证明均为 30 秒，最多 16 个待验证项，验证前即消费。重放、篡改、身份替换、角色
+  反射、过期和签发后撤销均失败关闭。只有数据库中仍授权且公钥精确匹配的记录能更新 TLS pin 与
+  `last_verified_at`；广告、名称和地址不能点亮在线状态。
+- `spake2plus 1.0.2` 因仅支持 Linux/macOS 且依赖外部 OpenSSL 3 FFI 被拒绝；`dsrp 0.5.5`
+  因未审计 0.x、发布包没有测试及生产 safe-prime 风险被拒绝。首次短码 PAKE 继续受阻，禁止用
+  自制哈希或加密替代；现有高熵二维码 pin + 一次性令牌路径继续可用。
+- 定向安全测试 42 项、全量测试 1337 项和静态分析通过。Android/Windows 经 BLE 的双向挑战与
+  PAKE 跨平台互操作仍无实机证据，不能将 V12-07 整项标记完成。
+
+### 6.13 NearSend 1.2 网络引导边界（V12-08 第一阶段，2026-09-24）
+
+- 新增有界网络选择器：最多 8 个候选、单候选 3 秒，只认实际认证端点探测；现有网络可达时不创建
+  热点，SSID/ping/BLE 不替代身份与 TLS 验证。
+- Android 使用官方 LocalOnlyHotspot reservation 和 WifiNetworkSpecifier 系统确认，按 lease 精确
+  释放并在 Activity 销毁时清理。系统返回的 SSID/密码不持久化、不进日志或对象文本，开放/畸形
+  热点失败关闭。Kotlin 编译、7 项定向测试和 1344 项全量测试通过，公网、回环和畸形候选不会进入探测。
+- Windows 自动入网仍关闭，只提供系统 Wi-Fi 设置回退；当前 macOS 无法验证 Native Wi-Fi WLAN
+  事件、临时 profile 所有权、恢复和清理，不能写固定成功实现。
+- Android 返回的 `networkHandle` 尚未与 Flutter HTTPS socket 完成真机绑定验证，且没有不同 Wi-Fi/
+  无路由器双向传输证据。因此 V12-08 只是平台边界第一阶段，不是热点传输完成。
+
+### 6.14 NearSend 1.2 Bootstrap 二维码载荷（V12-09 第一阶段，2026-09-24）
+
+- 新增 `nearsend-bootstrap` v1 严格载荷和统一扫描分发。解析前检查 UTF-8、4096 字节上限、重复键
+  与结构；旧 `lft-pair` 保持兼容，未知类型拒绝且不降级。
+- 新载荷绑定长期 P-256 公钥/device ID、TLS leaf pin、协议版本、会话、32 字节一次性令牌和邀请
+  角色，最长声明 120 秒；发行方未消费内存会话仍决定实际有效性。
+- 热点模式必须携带系统已建立热点的 WPA2/WPA3 凭据，已有网络模式必须没有凭据。密码不进入对象
+  文本、日志或持久化；入网后仍需 TLS pin、配对授权和接收确认。
+- 7 项协议测试通过。图像生成、Android 离线扫码、Windows 系统图片导入解码和统一入网协调器待
+  后续实现，不能把载荷解析写成二维码纵向流程完成。
+
+### 6.15 NearSend 1.2 二维码图像入口（V12-09 第二阶段，2026-09-24）
+
+- 固定 `qr_flutter 4.1.0`、`mobile_scanner 7.1.3`、`zxing2 0.2.4`、`image 4.10.1` 和测试
+  用 `qr 3.0.2`；均完成许可证和 SDK 约束审查。Android 保持 bundled ML Kit，首次离线可扫码。
+- 真实会话现在显示二维码。移动扫码只接受单个 QR 且必须通过统一严格解析器；Windows 图片导入走
+  IFileOpenDialog，压缩输入上限 16 MiB，解码像素上限 1600 万，解码在 isolate 执行，不记录路径、
+  图像或载荷。
+- QR PNG 往返/异常测试 2 项、连接页 24 项与全量 1353 项通过，静态分析无问题，iOS Simulator 构建成功。Android
+  构建连续两次受 Maven TLS 下载故障阻塞；后续 Android CI 与 Windows CI release 构建通过，真机
+  摄像头/导图未验。
+- 扫码结果尚未接入热点入网与统一配对协调器，所以 V12-09 仍进行中，不宣称关闭 BLE 后已可完成
+  不同网络配对。
+
+### 6.16 NearSend 1.2 二维码统一连接入口（V12-09 第三阶段，2026-09-24）
+
+- 粘贴、移动摄像头和 Windows 图片导入结果统一进入 `ScannedPairingPayload`；旧码交给原
+  `PeerSession`，bootstrap 码进入独立网络感知回调，不让 UI 猜测类型或绕过严格解析。
+- `networkBootstrap` 先用系统网络网关请求加入二维码中的受保护 Wi-Fi，保留真实 lease 后再把嵌套
+  `PairingPayload` 交给现有 TLS pin/一次性令牌握手。入网、TLS 配对失败或应用销毁会尽力释放 lease。
+- 连接页 25 项定向测试与静态分析通过。前一阶段台账中的“协调器尚未接入”由本阶段代码解决，但
+  后续 Android/Windows CI 构建通过；真实热点二维码纵向流程仍无证据，平台错误的可见分类待完善。
+
+### 6.17 NearSend 1.2 首页雷达与在线历史（V12-10 部分，2026-09-24）
+
+- 新增默认关闭的雷达状态机；HTTPS 节点运行不再自动等于 mDNS/BLE 就绪。用户开启后才请求 BLE
+  权限并启动 mDNS 广播/浏览与 BLE 广播/扫描，关闭时释放两类资源并清除候选和在线证明。
+- 首页合并授权历史、mDNS 与 BLE 候选。广告、名称和地址只产生无状态灯候选；只有 authorized
+  长期身份的新鲜、ready 且绑定 TLS pin 的验证结果显示绿色语义状态，过期、撤销和关闭后熄灭。
+- 首页主操作继续优先于雷达列表；320px 窄屏设备状态改为纵向布局，长设备名不溢出。定向 22 项、
+  应用真实 TLS 流程 6 项和静态分析通过。
+- 生产 BLE/mDNS 挑战交换、首次 PAKE、候选点击配对及 Android/Windows 双机仍未完成，所以
+  V12-10 为部分完成，不宣称雷达已形成端到端可信配对。
+
+### 6.18 NearSend 1.2 系统文件动作与异常收尾（V12-11，2026-09-24）
+
+- 接收结果与任务详情从真实导出结果和 `receive_output_plans.final_target_ref` 读取系统句柄；无句柄
+  不显示动作。Android SAF/FileProvider 和 Windows Shell API 均返回结构化状态，不泄露目标引用。
+- Android `FileProvider` 仅暴露应用私有 `received/` 子目录；Windows 只对存在的普通文件调用系统
+  打开/定位 API，不生成 shell 命令。后续 Android 与 Windows CI 构建均通过；系统动作仍未在目标
+  设备交互验证。
+- 应用进入后台时关闭雷达；停止失败不会阻塞其他资源清理或后续切换。移动扫码控制器、mDNS/BLE、
+  热点 reservation 和入网 lease 均有明确所有者与销毁路径。
+- 格式、静态分析及 1369 项全量测试通过。Android/Windows 系统动作、撤权、后台与热点资源清理
+  仍需真机/主机复核，详见 [1.2 验收记录](releases/1.2/ACCEPTANCE.md)。
+
+### 6.19 NearSend 1.2 当前环境回归与交付收口（V12-12，2026-09-24）
+
+- FVM 格式检查、静态分析及 1369 项 Flutter 测试通过；Android debug APK 在 Maven TLS 首次失败后
+  自动重试构建成功，iOS Simulator 构建成功。PR #68 CI 构建 Android debug/release APK 与 Windows
+  release；仓库未配置 macOS desktop。
+- 104 个 Markdown 文件/548 个链接、506 个跟踪文件敏感信息、CI Action 固定与权限边界检查通过。
+  S0 Python 协议/存储 21 项通过，TLS 类受当前 LibreSSL 无 TLS 1.3 支持阻塞，未降低安全门槛。
+- README、1.2 状态/验收和本台账已同步；详细命令与阻塞见
+  [V12-12 验收摘要](testing/evidence/2026-09-24/v1.2-upgrade/summary.md)。
+- 本阶段不等于产品验收：PAKE、Android 指定 Network、Windows 自动入网、真实 BLE/mDNS、热点、
+  系统文件动作、大文件恢复及 Android/Windows 双向传输均缺目标设备证据。本分支不得直接发布。
+- 首轮 Windows CI run `35961072170` 在 VS 2026 上因 `bluetooth_low_energy_windows 6.2.1` 使用旧
+  `/await` 触发 STL1011；提交 `d9e02e0` 仅对该插件目标启用 MSVC 指定的兼容宏，run
+  `35961651508` 随后编译和链接成功。此结果不替代 Windows BLE/WLAN/Shell 实测。

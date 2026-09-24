@@ -57,6 +57,14 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# bluetooth_low_energy_windows 6.2.1 still enables MSVC's legacy /await mode.
+# VS 2026 rejects the corresponding experimental coroutine header unless this
+# upstream-provided compatibility warning is explicitly acknowledged.
+if(TARGET bluetooth_low_energy_windows_plugin)
+  target_compile_definitions(bluetooth_low_energy_windows_plugin PRIVATE
+    "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS")
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

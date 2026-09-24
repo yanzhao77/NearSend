@@ -39,12 +39,33 @@ class PickedDocument {
   String toString() => 'PickedDocument($displayName)';
 }
 
+class AndroidDirectoryEntry {
+  const AndroidDirectoryEntry({
+    required this.uri,
+    required this.displayName,
+    required this.isDirectory,
+    this.sizeBytes,
+  });
+
+  final String uri;
+  final String displayName;
+  final bool isDirectory;
+  final int? sizeBytes;
+}
+
 /// The platform file operations a transfer needs from Android.
 abstract class AndroidFileGateway {
   /// Opens the system picker and returns what the user chose.
   ///
   /// An empty list means the user cancelled, which is not an error.
   Future<List<PickedDocument>> pickFiles();
+
+  Future<List<AndroidDirectoryEntry>> listDirectory({required String treeUri});
+
+  Future<PickedDocument> createDocument({
+    required String treeUri,
+    required String displayName,
+  });
 
   /// Reads at most [length] bytes at [offset] of [uri].
   ///
@@ -100,6 +121,42 @@ class MethodChannelAndroidFileGateway implements AndroidFileGateway {
       for (final Object? entry in result)
         _documentFrom((entry! as Map).cast<Object?, Object?>()),
     ];
+  }
+
+  @override
+  Future<List<AndroidDirectoryEntry>> listDirectory({
+    required String treeUri,
+  }) async {
+    final Object? result = await _channel.invokeMethod<Object?>(
+      'listDirectory',
+      <String, Object?>{'locationRef': treeUri},
+    );
+    if (result is! List) {
+      throw const PlatformFileFailure(
+        'the provider returned an invalid directory listing',
+      );
+    }
+    return <AndroidDirectoryEntry>[
+      for (final Object? entry in result)
+        _directoryEntryFrom((entry! as Map).cast<Object?, Object?>()),
+    ];
+  }
+
+  @override
+  Future<PickedDocument> createDocument({
+    required String treeUri,
+    required String displayName,
+  }) async {
+    final Object? result = await _channel.invokeMethod<Object?>(
+      'createDocument',
+      <String, Object?>{'locationRef': treeUri, 'displayName': displayName},
+    );
+    if (result is! Map) {
+      throw const PlatformFileFailure(
+        'the provider returned an invalid created document',
+      );
+    }
+    return _documentFrom(result.cast<Object?, Object?>());
   }
 
   @override
@@ -169,6 +226,24 @@ class MethodChannelAndroidFileGateway implements AndroidFileGateway {
       sizeBytes: size is int && size >= 0 ? size : null,
     );
   }
+
+  AndroidDirectoryEntry _directoryEntryFrom(Map<Object?, Object?> map) {
+    final Object? uri = map['uri'];
+    final Object? name = map['name'];
+    final Object? directory = map['isDirectory'];
+    final Object? size = map['sizeBytes'];
+    if (uri is! String || name is! String || directory is! bool) {
+      throw const PlatformFileFailure(
+        'a directory entry arrived without required fields',
+      );
+    }
+    return AndroidDirectoryEntry(
+      uri: uri,
+      displayName: name,
+      isDirectory: directory,
+      sizeBytes: size is int && size >= 0 ? size : null,
+    );
+  }
 }
 
 /// A failure from the platform adapter.
@@ -203,9 +278,38 @@ class InMemoryFileGateway implements AndroidFileGateway {
 
   /// How many bytes were written per URI, so a test can assert the whole file arrived.
   final Map<String, Uint8List> written = <String, Uint8List>{};
+  final Map<String, List<AndroidDirectoryEntry>> directories =
+      <String, List<AndroidDirectoryEntry>>{};
+
+  int _nextDocumentId = 0;
 
   @override
   Future<List<PickedDocument>> pickFiles() async => nextPick;
+
+  @override
+  Future<List<AndroidDirectoryEntry>> listDirectory({
+    required String treeUri,
+  }) async => List<AndroidDirectoryEntry>.unmodifiable(
+    directories[treeUri] ?? const <AndroidDirectoryEntry>[],
+  );
+
+  @override
+  Future<PickedDocument> createDocument({
+    required String treeUri,
+    required String displayName,
+  }) async {
+    final String uri = '$treeUri/document/${_nextDocumentId++}';
+    final AndroidDirectoryEntry entry = AndroidDirectoryEntry(
+      uri: uri,
+      displayName: displayName,
+      isDirectory: false,
+      sizeBytes: 0,
+    );
+    directories
+        .putIfAbsent(treeUri, () => <AndroidDirectoryEntry>[])
+        .add(entry);
+    return PickedDocument(uri: uri, displayName: displayName, sizeBytes: 0);
+  }
 
   @override
   Future<Uint8List> readChunk({
@@ -253,5 +357,8 @@ class InMemoryFileGateway implements AndroidFileGateway {
   @override
   Future<void> abortWrite({required String uri}) async {
     written.remove(uri);
+    for (final List<AndroidDirectoryEntry> entries in directories.values) {
+      entries.removeWhere((AndroidDirectoryEntry entry) => entry.uri == uri);
+    }
   }
 }

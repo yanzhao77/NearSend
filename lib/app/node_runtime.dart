@@ -1,9 +1,14 @@
 import 'dart:io';
 
+import 'package:nearsend/core/security/installation_identity.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
+import 'package:nearsend/core/storage/installation_identity_repository.dart';
+import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/android_export_sink.dart';
 
 /// Owns the application's one [NearSendNode], and the answers it needs before it can start.
 ///
@@ -17,13 +22,11 @@ import 'package:nearsend/platform/android_file_gateway.dart';
 ///
 /// ## What it deliberately does not decide
 ///
-/// **It does not persist the identity**, and it does not pretend to. `NearSendNode.open` mints a
-/// fresh TLS identity every time, so the pin a peer recorded last launch will not match this one.
-/// Identity persistence is an open item with its own consequences - where the private key lives, in
-/// platform secure storage, and what re-pairing means when it is missing - and inventing a
-/// half-answer here (a key file next to the database, say) would be exactly the "cheap secret store"
-/// `AGENTS.md` §5 rules out. So [start] mints a new identity and the UI says so; the day
-/// persistence lands, [start] is where it will be used and the UI note is what must change with it.
+/// Identity persistence is supplied through [identityProvider]. Android and Windows production
+/// startup use platform-protected storage; tests and unsupported platforms use the explicit
+/// ephemeral provider and continue to show the honest restart warning. Missing secure identity
+/// after public identity metadata has been committed fails closed rather than silently adopting a
+/// new device identity; an older database with no such metadata can establish its first identity.
 ///
 /// ## Why it takes its dependencies rather than building them
 ///
@@ -37,6 +40,7 @@ class NodeRuntime {
     this.commonName = 'NearSend',
     this.gateway,
     this.candidateAddresses,
+    this.identityProvider = const EphemeralInstallationIdentityProvider(),
   });
 
   /// The application-private directory holding the database and staging.
@@ -58,12 +62,19 @@ class NodeRuntime {
   /// Injectable so a test can state them instead of depending on the machine it runs on.
   final List<String>? candidateAddresses;
 
+  final InstallationIdentityProvider identityProvider;
+
   NearSendNode? _node;
+  InstallationIdentity? _identity;
 
   /// The running node, or null before [start] and after [stop].
   NearSendNode? get node => _node;
 
   bool get isRunning => _node != null;
+
+  bool get hasPersistentIdentity => identityProvider.isPersistent;
+
+  InstallationIdentity? get identity => _identity;
 
   /// Opens and starts the node, and issues the first pairing payload.
   ///
@@ -86,15 +97,45 @@ class NodeRuntime {
       );
     }
 
+    final String databasePath =
+        '$directory${Platform.pathSeparator}nearsend.db';
+    final InstallationIdentity identity = await identityProvider.load(
+      commonName: commonName,
+      subjectAltNames: candidates,
+      hasIdentityMetadata: InstallationIdentityMetadataRepository.existsAtPath(
+        databasePath,
+      ),
+    );
+
     final NearSendNode opened = await NearSendNode.open(
       directory: directory,
       candidateAddresses: candidates,
       port: port,
       commonName: commonName,
       sourceResolver: _resolverFor(gateway),
+      exportSinkFactory: gateway == null
+          ? null
+          : (LocalStagingLayout layout, StagingFileSink staging) =>
+                AndroidRoutingExportSink(
+                  local: LocalDirectoryExportSink(
+                    layout: layout,
+                    staging: staging,
+                  ),
+                  documents: AndroidDocumentExportSink(
+                    layout: layout,
+                    gateway: gateway!,
+                    staging: staging,
+                  ),
+                ),
+      exportNaming: gateway == null
+          ? const ExportNamingPolicy()
+          : const ExportNamingPolicy(layout: ExportTargetLayout.flatten),
+      tlsIdentity: identity.tls,
+      deviceIdentity: identityProvider.isPersistent ? identity.device : null,
     );
     await opened.start();
     _node = opened;
+    _identity = identity;
 
     // §3's payload is issued after the socket is bound, because a candidate carries a port and a
     // payload built earlier would offer one nothing is listening on.
@@ -109,6 +150,7 @@ class NodeRuntime {
   Future<void> stop() async {
     final NearSendNode? running = _node;
     _node = null;
+    _identity = null;
     if (running == null) {
       return;
     }

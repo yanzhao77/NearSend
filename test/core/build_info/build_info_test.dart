@@ -70,8 +70,8 @@ void main() {
       // never be a second definition of the number.
       expect(
         StorageSchema.currentVersion,
-        7,
-        reason: 'T12-03 adds the non-secret app_settings migration',
+        9,
+        reason: 'V12-04 adds public installation identity metadata and peer history',
       );
       expect(
         dbSchemaDisplay,

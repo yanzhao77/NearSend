@@ -5,11 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
+import 'package:nearsend/core/protocol/relative_path.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/storage_location.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
 
 /// The receiving screen: who is offering what, where it will go, and how far it has got.
 ///
@@ -32,6 +37,7 @@ class ReceivePage extends StatefulWidget {
     required this.phase,
     required this.offers,
     required this.onRefresh,
+    required this.onPreview,
     required this.onAccept,
     this.progress,
     this.fileName,
@@ -39,6 +45,7 @@ class ReceivePage extends StatefulWidget {
     this.fileCount = 0,
     this.failureReason,
     this.savedPaths = const <String>[],
+    this.savedFiles = const <SavedFileReference>[],
     this.refreshInterval = const Duration(seconds: 2),
     this.pushOffers = const <ServerOffer>[],
     this.pushPhase = ServerReceivePhase.waiting,
@@ -46,8 +53,14 @@ class ReceivePage extends StatefulWidget {
     this.pushSpaceEstimate,
     this.pushFailureReason,
     this.pushSavedPaths = const <String>[],
+    this.pushSavedFiles = const <SavedFileReference>[],
+    this.fileActions,
     this.onCheckPushSpace,
+    this.onPreviewPush,
     this.onPickLocation,
+    this.onValidateLocation,
+    this.onRememberDefault,
+    this.initialLocation,
     this.onAcceptPush,
   });
 
@@ -60,7 +73,12 @@ class ReceivePage extends StatefulWidget {
   final Future<void> Function() onRefresh;
 
   /// Answers one offer, writing the files under the location the user typed.
-  final Future<bool> Function(OfferSummary offer, String saveLocation) onAccept;
+  final Future<List<ReceiveFilePreview>> Function(OfferSummary offer) onPreview;
+  final Future<bool> Function(
+    OfferSummary offer,
+    ReceiveConfirmation confirmation,
+  )
+  onAccept;
 
   final TransferProgress? progress;
   final String? fileName;
@@ -68,6 +86,7 @@ class ReceivePage extends StatefulWidget {
   final int fileCount;
   final String? failureReason;
   final List<String> savedPaths;
+  final List<SavedFileReference> savedFiles;
   final Duration refreshInterval;
 
   /// What **this** device is being asked to accept, from its own database.
@@ -89,13 +108,24 @@ class ReceivePage extends StatefulWidget {
 
   final String? pushFailureReason;
   final List<String> pushSavedPaths;
+  final List<SavedFileReference> pushSavedFiles;
+  final PlatformFileActions? fileActions;
   final Future<SpaceEstimateSnapshot?> Function(
     ServerOffer offer,
-    String saveLocation,
+    StorageLocationRef saveLocation,
   )?
   onCheckPushSpace;
-  final Future<String?> Function()? onPickLocation;
-  final Future<bool> Function(ServerOffer offer, String saveLocation)?
+  final Future<List<ReceiveFilePreview>> Function(ServerOffer offer)?
+  onPreviewPush;
+  final Future<StorageLocationRef?> Function()? onPickLocation;
+  final Future<StorageLocationRef> Function(StorageLocationRef location)?
+  onValidateLocation;
+  final FutureOr<void> Function(StorageLocationRef location)? onRememberDefault;
+  final StorageLocationRef? initialLocation;
+  final Future<bool> Function(
+    ServerOffer offer,
+    ReceiveConfirmation confirmation,
+  )?
   onAcceptPush;
 
   static const String heading = '接收文件';
@@ -139,21 +169,29 @@ class ReceivePage extends StatefulWidget {
 
 class _ReceivePageState extends State<ReceivePage> {
   final TextEditingController _location = TextEditingController();
+  StorageLocationRef? _selectedLocation;
   Timer? _poll;
   final Map<String, SpaceEstimateSnapshot?> _checkedSpaces =
       <String, SpaceEstimateSnapshot?>{};
   final Map<String, String> _spaceCheckFailures = <String, String>{};
   bool _unknownSpaceAcknowledged = false;
+  String? _confirmationError;
+  bool _preparingConfirmation = false;
 
   @override
   void initState() {
     super.initState();
+    _applyInitialLocation(widget.initialLocation);
     _startPolling();
   }
 
   @override
   void didUpdateWidget(ReceivePage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_selectedLocation == null &&
+        oldWidget.initialLocation != widget.initialLocation) {
+      _applyInitialLocation(widget.initialLocation);
+    }
     if (!_samePushOffers(oldWidget.pushOffers, widget.pushOffers) ||
         oldWidget.pushSpaceEstimate != widget.pushSpaceEstimate) {
       _checkedSpaces.clear();
@@ -191,15 +229,21 @@ class _ReceivePageState extends State<ReceivePage> {
     return true;
   }
 
-  Future<void> _checkPushSpace(ServerOffer offer, String location) async {
-    final Future<SpaceEstimateSnapshot?> Function(ServerOffer, String)? check =
-        widget.onCheckPushSpace;
-    if (check == null || location.trim().isEmpty) {
+  Future<void> _checkPushSpace(
+    ServerOffer offer,
+    StorageLocationRef location,
+  ) async {
+    final Future<SpaceEstimateSnapshot?> Function(
+      ServerOffer,
+      StorageLocationRef,
+    )?
+    check = widget.onCheckPushSpace;
+    if (check == null) {
       return;
     }
     setState(() => _spaceCheckFailures.remove(offer.transferId));
     try {
-      final SpaceEstimateSnapshot? result = await check(offer, location.trim());
+      final SpaceEstimateSnapshot? result = await check(offer, location);
       if (!mounted) return;
       setState(() {
         _checkedSpaces[offer.transferId] = result;
@@ -215,25 +259,48 @@ class _ReceivePageState extends State<ReceivePage> {
   }
 
   void _onLocationChanged(String value) {
+    final String trimmed = value.trim();
+    _selectedLocation = trimmed.isEmpty
+        ? null
+        : StorageLocationRef(
+            kind: StorageLocationKind.nativeDirectory,
+            opaqueValue: trimmed,
+            displayName: trimmed,
+          );
     setState(() {
       _unknownSpaceAcknowledged = false;
       _checkedSpaces.clear();
       _spaceCheckFailures.clear();
     });
-    if (value.trim().isNotEmpty) {
+    final StorageLocationRef? location = _selectedLocation;
+    if (location != null) {
       for (final ServerOffer offer in widget.pushOffers) {
-        unawaited(_checkPushSpace(offer, value));
+        unawaited(_checkPushSpace(offer, location));
       }
     }
   }
 
   Future<void> _pickLocation() async {
-    final String? picked = await widget.onPickLocation?.call();
-    if (!mounted || picked == null || picked.trim().isEmpty) return;
+    final StorageLocationRef? picked = await widget.onPickLocation?.call();
+    if (!mounted || picked == null) return;
+    _selectedLocation = picked;
     _location
-      ..text = picked
-      ..selection = TextSelection.collapsed(offset: picked.length);
-    _onLocationChanged(picked);
+      ..text = picked.displayName
+      ..selection = TextSelection.collapsed(offset: picked.displayName.length);
+    setState(() {
+      _unknownSpaceAcknowledged = false;
+      _checkedSpaces.clear();
+      _spaceCheckFailures.clear();
+    });
+    for (final ServerOffer offer in widget.pushOffers) {
+      unawaited(_checkPushSpace(offer, picked));
+    }
+  }
+
+  void _applyInitialLocation(StorageLocationRef? location) {
+    if (location == null) return;
+    _selectedLocation = location;
+    _location.text = location.displayName;
   }
 
   @override
@@ -267,8 +334,9 @@ class _ReceivePageState extends State<ReceivePage> {
   Widget build(BuildContext context) {
     final bool canAccept =
         !_isBusy &&
+        !_preparingConfirmation &&
         widget.offers.isNotEmpty &&
-        _location.text.trim().isNotEmpty;
+        _selectedLocation != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text(ReceivePage.heading)),
@@ -318,10 +386,14 @@ class _ReceivePageState extends State<ReceivePage> {
                 TextField(
                   controller: _location,
                   enabled: !_isBusy,
+                  readOnly: widget.onPickLocation != null,
                   onChanged: _onLocationChanged,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     border: OutlineInputBorder(),
                     hintText: ReceivePage.saveLocationHint,
+                    suffixIcon: widget.onPickLocation == null
+                        ? null
+                        : const Icon(Icons.folder_outlined),
                   ),
                 ),
                 if (widget.onPickLocation != null) ...<Widget>[
@@ -332,7 +404,7 @@ class _ReceivePageState extends State<ReceivePage> {
                     label: '选择保存位置',
                   ),
                 ],
-                if (widget.offers.isNotEmpty && _location.text.trim().isEmpty)
+                if (widget.offers.isNotEmpty && _selectedLocation == null)
                   Padding(
                     padding: const EdgeInsets.only(top: NearSendSpacing.xs),
                     child: NsInfoBanner(
@@ -342,14 +414,21 @@ class _ReceivePageState extends State<ReceivePage> {
                     ),
                   ),
                 const SizedBox(height: NearSendSpacing.sm),
+                if (_confirmationError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
+                    child: NsInfoBanner(
+                      title: '无法确认接收',
+                      message: _confirmationError!,
+                      tone: NsStatusTone.error,
+                    ),
+                  ),
                 for (final OfferSummary offer in widget.offers)
                   Padding(
                     padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
                     child: FilledButton.icon(
                       onPressed: canAccept
-                          ? () => unawaited(
-                              widget.onAccept(offer, _location.text.trim()),
-                            )
+                          ? () => unawaited(_confirmPullOffer(offer))
                           : null,
                       icon: const Icon(Icons.check),
                       label: const Text('接收并保存'),
@@ -388,16 +467,13 @@ class _ReceivePageState extends State<ReceivePage> {
                       Padding(
                         padding: const EdgeInsets.only(top: NearSendSpacing.sm),
                         child: NsPrimaryButton(
-                          onPressed: () => unawaited(
-                            widget.onAcceptPush!(offer, _location.text.trim()),
-                          ),
+                          onPressed: () => unawaited(_confirmPushOffer(offer)),
                           icon: Icons.check,
                           label: '接收并保存',
                         ),
                       ),
                   ],
-                  if (widget.pushOffers.isNotEmpty &&
-                      _location.text.trim().isEmpty)
+                  if (widget.pushOffers.isNotEmpty && _selectedLocation == null)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.xs),
                       child: NsInfoBanner(
@@ -406,15 +482,15 @@ class _ReceivePageState extends State<ReceivePage> {
                         tone: NsStatusTone.warning,
                       ),
                     ),
-                  for (final String path in widget.pushSavedPaths)
-                    Padding(
-                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: NsInfoBanner(
-                        title: '已保存',
-                        message: '已保存：$path',
-                        tone: NsStatusTone.success,
+                  if (widget.pushSavedFiles.isNotEmpty)
+                    for (final SavedFileReference file in widget.pushSavedFiles)
+                      _SavedFileCard(file: file, actions: widget.fileActions)
+                  else
+                    for (final String path in widget.pushSavedPaths)
+                      _SavedFileCard(
+                        file: SavedFileReference(displayName: path),
+                        actions: widget.fileActions,
                       ),
-                    ),
                   if (widget.pushFailureReason != null)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.sm),
@@ -433,6 +509,8 @@ class _ReceivePageState extends State<ReceivePage> {
                   fileCount: widget.fileCount,
                   failureReason: widget.failureReason,
                   savedPaths: widget.savedPaths,
+                  savedFiles: widget.savedFiles,
+                  fileActions: widget.fileActions,
                 ),
               ],
             ),
@@ -442,6 +520,118 @@ class _ReceivePageState extends State<ReceivePage> {
     );
   }
 
+  Future<void> _confirmPullOffer(OfferSummary offer) async {
+    await _confirmOffer(
+      loadFiles: () => widget.onPreview(offer),
+      accept: (ReceiveConfirmation confirmation) =>
+          widget.onAccept(offer, confirmation),
+    );
+  }
+
+  Future<void> _confirmPushOffer(ServerOffer offer) async {
+    final Future<List<ReceiveFilePreview>> Function(ServerOffer)? preview =
+        widget.onPreviewPush;
+    final Future<bool> Function(ServerOffer, ReceiveConfirmation)? accept =
+        widget.onAcceptPush;
+    if (preview == null || accept == null) return;
+    await _confirmOffer(
+      loadFiles: () => preview(offer),
+      beforeAccept: (ReceiveConfirmation confirmation) async {
+        final check = widget.onCheckPushSpace;
+        if (check == null) return true;
+        final SpaceEstimateSnapshot? estimate = await check(
+          offer,
+          confirmation.location,
+        );
+        if (estimate == null || estimate.verdict == SpaceVerdict.insufficient) {
+          if (mounted) {
+            setState(() {
+              _confirmationError = estimate == null
+                  ? '空间预检未完成，请重试或更换保存位置。'
+                  : ReceivePage.spaceInsufficientNote;
+            });
+          }
+          return false;
+        }
+        if (estimate.verdict == SpaceVerdict.unknown) {
+          if (!mounted) return false;
+          return await showDialog<bool>(
+                context: context,
+                builder: (BuildContext context) => AlertDialog(
+                  title: const Text('无法确认剩余空间'),
+                  content: const Text(ReceivePage.spaceUnknownNote),
+                  actions: <Widget>[
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('返回'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('仍然接收'),
+                    ),
+                  ],
+                ),
+              ) ??
+              false;
+        }
+        return true;
+      },
+      accept: (ReceiveConfirmation confirmation) => accept(offer, confirmation),
+    );
+  }
+
+  Future<void> _confirmOffer({
+    required Future<List<ReceiveFilePreview>> Function() loadFiles,
+    required Future<bool> Function(ReceiveConfirmation confirmation) accept,
+    Future<bool> Function(ReceiveConfirmation confirmation)? beforeAccept,
+  }) async {
+    final StorageLocationRef? initialLocation = _selectedLocation;
+    if (initialLocation == null || _preparingConfirmation) return;
+    setState(() {
+      _preparingConfirmation = true;
+      _confirmationError = null;
+    });
+    try {
+      final List<ReceiveFilePreview> files = await loadFiles();
+      if (!mounted) return;
+      if (files.isEmpty) {
+        setState(() => _confirmationError = '对方没有提供可接收的文件。');
+        return;
+      }
+      final ReceiveConfirmation? confirmation =
+          await showDialog<ReceiveConfirmation>(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) => _ReceiveConfirmationDialog(
+              files: files,
+              initialLocation: initialLocation,
+              onPickLocation: widget.onPickLocation,
+              onValidateLocation: widget.onValidateLocation,
+            ),
+          );
+      if (!mounted || confirmation == null) return;
+      final bool mayAccept =
+          beforeAccept == null || await beforeAccept(confirmation);
+      if (!mayAccept || !mounted) return;
+      _selectedLocation = confirmation.location;
+      _location.text = confirmation.location.displayName;
+      if (confirmation.rememberAsDefault) {
+        await widget.onRememberDefault?.call(confirmation.location);
+      }
+      await accept(confirmation);
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _confirmationError = '读取或验证接收清单失败，请刷新后重试。';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _preparingConfirmation = false);
+      }
+    }
+  }
+
   bool get _isBusy =>
       widget.phase == ReceivePhase.accepting ||
       widget.phase == ReceivePhase.receiving;
@@ -449,8 +639,10 @@ class _ReceivePageState extends State<ReceivePage> {
   /// Whether one pushed offer can be answered now: a location, and nothing already in flight.
   bool canAcceptPush(ServerOffer offer) =>
       widget.onAcceptPush != null &&
+      widget.onPreviewPush != null &&
       !_isPushing &&
-      _location.text.trim().isNotEmpty &&
+      !_preparingConfirmation &&
+      _selectedLocation != null &&
       _effectiveVerdict(offer) != SpaceVerdict.insufficient &&
       _effectiveVerdict(offer) != null &&
       (_effectiveVerdict(offer) != SpaceVerdict.unknown ||
@@ -609,6 +801,231 @@ class _ReceivePageState extends State<ReceivePage> {
   }
 }
 
+class _ReceiveConfirmationDialog extends StatefulWidget {
+  const _ReceiveConfirmationDialog({
+    required this.files,
+    required this.initialLocation,
+    required this.onPickLocation,
+    required this.onValidateLocation,
+  });
+
+  final List<ReceiveFilePreview> files;
+  final StorageLocationRef initialLocation;
+  final Future<StorageLocationRef?> Function()? onPickLocation;
+  final Future<StorageLocationRef> Function(StorageLocationRef location)?
+  onValidateLocation;
+
+  @override
+  State<_ReceiveConfirmationDialog> createState() =>
+      _ReceiveConfirmationDialogState();
+}
+
+class _ReceiveConfirmationDialogState
+    extends State<_ReceiveConfirmationDialog> {
+  late final Map<String, TextEditingController> _names;
+  final Map<String, String> _nameErrors = <String, String>{};
+  late StorageLocationRef _location;
+  bool _rememberAsDefault = false;
+  bool _validating = false;
+  String? _locationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _location = widget.initialLocation;
+    _names = <String, TextEditingController>{
+      for (final ReceiveFilePreview file in widget.files)
+        file.fileId: TextEditingController(text: file.suggestedName),
+    };
+  }
+
+  @override
+  void dispose() {
+    for (final TextEditingController controller in _names.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _pickLocation() async {
+    final StorageLocationRef? selected = await widget.onPickLocation?.call();
+    if (!mounted || selected == null) return;
+    setState(() {
+      _location = selected;
+      _locationError = null;
+    });
+  }
+
+  String? _validateName(String value) {
+    final String candidate = value.trim();
+    if (candidate.isEmpty) return '文件名不能为空。';
+    if (candidate.contains('/')) return '文件名不能包含目录分隔符。';
+    try {
+      RelativePathRules.validate(candidate);
+    } on Object {
+      return '文件名包含无效字符、保留名称或不安全路径。';
+    }
+    return null;
+  }
+
+  Future<void> _confirm() async {
+    final Map<String, String> outputNames = <String, String>{};
+    final Map<String, String> errors = <String, String>{};
+    for (final ReceiveFilePreview file in widget.files) {
+      final String name = _names[file.fileId]!.text.trim();
+      final String? error = _validateName(name);
+      if (error == null) {
+        outputNames[file.fileId] = name;
+      } else {
+        errors[file.fileId] = error;
+      }
+    }
+    if (errors.isNotEmpty) {
+      setState(() {
+        _nameErrors
+          ..clear()
+          ..addAll(errors);
+      });
+      return;
+    }
+
+    setState(() {
+      _validating = true;
+      _locationError = null;
+      _nameErrors.clear();
+    });
+    try {
+      final StorageLocationRef validated =
+          await widget.onValidateLocation?.call(_location) ?? _location;
+      if (!mounted) return;
+      if (validated.permissionState == StoragePermissionState.denied ||
+          validated.permissionState == StoragePermissionState.unavailable) {
+        setState(() {
+          _location = validated;
+          _locationError = '无法访问该保存位置，请重新选择并授予目录访问权限。';
+        });
+        return;
+      }
+      Navigator.of(context).pop(
+        ReceiveConfirmation(
+          location: validated,
+          outputNames: outputNames,
+          rememberAsDefault: _rememberAsDefault,
+        ),
+      );
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _locationError = '无法验证保存位置，请重新选择后再试。';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _validating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('确认接收文件'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 560),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Text(
+                '${widget.files.length} 个文件将保存到：',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: NearSendSpacing.xs),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(_location.displayName),
+                subtitle: const Text('系统授权的保存位置'),
+                trailing: widget.onPickLocation == null
+                    ? null
+                    : IconButton(
+                        onPressed: _validating ? null : _pickLocation,
+                        icon: const Icon(Icons.folder_open_outlined),
+                        tooltip: '更换保存位置',
+                      ),
+              ),
+              if (_locationError != null) ...<Widget>[
+                NsInfoBanner(
+                  title: '保存位置不可用',
+                  message: _locationError!,
+                  tone: NsStatusTone.error,
+                  actionLabel: widget.onPickLocation == null ? null : '重新选择',
+                  onAction: widget.onPickLocation == null
+                      ? null
+                      : _pickLocation,
+                ),
+                const SizedBox(height: NearSendSpacing.sm),
+              ],
+              for (
+                int index = 0;
+                index < widget.files.length;
+                index++
+              ) ...<Widget>[
+                TextField(
+                  key: ValueKey<String>(
+                    'receive-output-name-${widget.files[index].fileId}',
+                  ),
+                  controller: _names[widget.files[index].fileId],
+                  enabled: !_validating,
+                  decoration: InputDecoration(
+                    labelText: widget.files.length == 1
+                        ? '保存文件名'
+                        : '文件 ${index + 1} 的保存名称',
+                    helperText:
+                        '${widget.files[index].originalPath} · ${formatBytes(widget.files[index].sizeBytes)}',
+                    errorText: _nameErrors[widget.files[index].fileId],
+                  ),
+                  onChanged: (_) => setState(
+                    () => _nameErrors.remove(widget.files[index].fileId),
+                  ),
+                ),
+                if (index != widget.files.length - 1)
+                  const SizedBox(height: NearSendSpacing.sm),
+              ],
+              const SizedBox(height: NearSendSpacing.sm),
+              CheckboxListTile(
+                value: _rememberAsDefault,
+                onChanged: _validating
+                    ? null
+                    : (bool? value) =>
+                          setState(() => _rememberAsDefault = value ?? false),
+                title: const Text('设为默认接收位置'),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: _validating ? null : () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton.icon(
+          onPressed: _validating ? null : _confirm,
+          icon: _validating
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.check),
+          label: Text(_validating ? '正在验证…' : '接收并保存'),
+        ),
+      ],
+    );
+  }
+}
+
 class _PhaseSection extends StatelessWidget {
   const _PhaseSection({
     required this.phase,
@@ -618,6 +1035,8 @@ class _PhaseSection extends StatelessWidget {
     required this.fileCount,
     required this.failureReason,
     required this.savedPaths,
+    required this.savedFiles,
+    required this.fileActions,
   });
 
   final ReceivePhase phase;
@@ -627,6 +1046,8 @@ class _PhaseSection extends StatelessWidget {
   final int fileCount;
   final String? failureReason;
   final List<String> savedPaths;
+  final List<SavedFileReference> savedFiles;
+  final PlatformFileActions? fileActions;
 
   @override
   Widget build(BuildContext context) {
@@ -652,22 +1073,15 @@ class _PhaseSection extends StatelessWidget {
           _Stat(label: '速度', value: figures.speedLabel),
           _Stat(label: '剩余时间', value: figures.remainingLabel),
         ],
-        for (final String path in savedPaths)
-          Padding(
-            padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(NearSendSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const SizedBox(width: NearSendSpacing.sm),
-                    Expanded(child: Text('已保存：$path')),
-                  ],
-                ),
-              ),
+        if (savedFiles.isNotEmpty)
+          for (final SavedFileReference file in savedFiles)
+            _SavedFileCard(file: file, actions: fileActions)
+        else
+          for (final String path in savedPaths)
+            _SavedFileCard(
+              file: SavedFileReference(displayName: path),
+              actions: fileActions,
             ),
-          ),
         if (failureReason != null)
           Padding(
             padding: const EdgeInsets.only(top: NearSendSpacing.sm),
@@ -678,6 +1092,74 @@ class _PhaseSection extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _SavedFileCard extends StatelessWidget {
+  const _SavedFileCard({required this.file, required this.actions});
+
+  final SavedFileReference file;
+  final PlatformFileActions? actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? targetRef = file.targetRef;
+    return Padding(
+      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(NearSendSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('已保存：${file.displayName}'),
+              if (targetRef != null && actions != null) ...<Widget>[
+                const SizedBox(height: NearSendSpacing.xs),
+                Wrap(
+                  spacing: NearSendSpacing.xs,
+                  children: <Widget>[
+                    if (actions!.supportsOpen)
+                      TextButton.icon(
+                        onPressed: () => _run(
+                          context,
+                          actions!.open(targetRef),
+                          reveal: false,
+                        ),
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('打开'),
+                      ),
+                    if (actions!.supportsReveal)
+                      TextButton.icon(
+                        onPressed: () => _run(
+                          context,
+                          actions!.reveal(targetRef),
+                          reveal: true,
+                        ),
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('显示位置'),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _run(
+    BuildContext context,
+    Future<PlatformFileActionResult> operation, {
+    required bool reveal,
+  }) async {
+    final PlatformFileActionResult result = await operation;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(platformFileActionMessage(result, reveal: reveal)),
+      ),
     );
   }
 }

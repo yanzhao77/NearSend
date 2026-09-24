@@ -8,6 +8,8 @@ import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
+import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
@@ -96,8 +98,15 @@ void main() {
     ],
   );
 
-  ReceivingFlow flow() =>
-      ReceivingFlow(engine: client.engine, wire: wire, now: () => 1000);
+  ReceivingFlow flow({void Function()? afterPlanCreated}) => ReceivingFlow(
+    engine: client.engine,
+    wire: wire,
+    now: () => 1000,
+    outputPlans: _ObservingOutputPlans(
+      client.database,
+      afterCreate: afterPlanCreated,
+    ),
+  );
 
   File writtenFile(Directory exports) => exports
       .listSync(recursive: true)
@@ -107,7 +116,14 @@ void main() {
 
   test('an offer becomes a verified file on this device', () async {
     final OutgoingPlan plan = await offer();
-    final ReceivingFlow subject = flow();
+    bool observedPreAcceptancePlan = false;
+    final ReceivingFlow subject = flow(
+      afterPlanCreated: () {
+        observedPreAcceptancePlan = true;
+        expect(server.authorizations.read(transferId)?.isAccepted, isNot(true));
+        expect(client.tasks.committedBytesForTask(transferId), 0);
+      },
+    );
 
     // §6: what is being offered is learned by asking, and the peer's digest is what this device
     // commits to when it answers.
@@ -121,6 +137,7 @@ void main() {
     final bool ok = await subject.accept(
       offers.single,
       saveLocationRef: exports.path,
+      outputNames: const <String, String>{fileId: '本地副本.bin'},
       onFileProgress: (int count, int total) {
         received.add(count);
         expect(total, plan.manifest.files.single.chunkCount);
@@ -129,6 +146,7 @@ void main() {
 
     expect(ok, isTrue, reason: 'accept failed: ${subject.failureReason}');
     expect(subject.phase, ReceivePhase.saved);
+    expect(observedPreAcceptancePlan, isTrue);
     expect(
       received,
       List<int>.generate(
@@ -157,6 +175,9 @@ void main() {
       reason:
           'a file that verified and saved has a location, and it is reported',
     );
+    expect(subject.savedFiles, hasLength(1));
+    expect(subject.savedFiles.single.displayName, subject.savedPaths.single);
+    expect(subject.savedFiles.single.targetRef, writtenFile(exports).path);
     expect(
       sha256.convert(writtenFile(exports).readAsBytesSync()).toString(),
       sha256.convert(payload).toString(),
@@ -164,6 +185,16 @@ void main() {
           'the flow exists so that an offer becomes a file on this device; this is the assertion '
           'that says it does',
     );
+    expect(writtenFile(exports).uri.pathSegments.last, '本地副本.bin');
+    final ReceiveOutputPlan output = subject.outputPlans.read(
+      transferId,
+      fileId,
+    )!;
+    expect(output.originalPath, '接收流程.bin');
+    expect(output.selectedName, '本地副本.bin');
+    expect(output.finalName, '本地副本.bin');
+    expect(output.state, ReceiveOutputState.saved);
+    expect(plan.manifest.files.single.relativePath, '接收流程.bin');
 
     // §10: the sender learns that this device saved the file, and that is all it can know.
     expect(server.transfers.taskState(transferId).wireName, 'COMPLETED');
@@ -208,5 +239,29 @@ void main() {
           'transfer that never happened',
     );
     expect(subject.phase, ReceivePhase.offered);
+    expect(subject.outputPlans.readTransfer(transferId), isEmpty);
   });
+}
+
+class _ObservingOutputPlans extends ReceiveOutputPlanRepository {
+  _ObservingOutputPlans(super.database, {this.afterCreate});
+
+  final void Function()? afterCreate;
+
+  @override
+  List<ReceiveOutputPlan> create({
+    required String transferId,
+    required List<ReceiveOutputChoice> choices,
+    required String targetRef,
+    NameConflictPolicy conflictPolicy = NameConflictPolicy.autoRename,
+  }) {
+    final List<ReceiveOutputPlan> plans = super.create(
+      transferId: transferId,
+      choices: choices,
+      targetRef: targetRef,
+      conflictPolicy: conflictPolicy,
+    );
+    afterCreate?.call();
+    return plans;
+  }
 }

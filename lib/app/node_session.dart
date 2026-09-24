@@ -22,20 +22,22 @@
 ///
 /// ## What it does not decide
 ///
-/// **Identity persistence.** `NearSendNode.open` mints a fresh TLS identity every time, so the pin
-/// this session publishes changes at every launch. That is an open item with real consequences
-/// (where the private key lives, what re-pairing means when it is gone), and inventing a half-answer
-/// here - a key file beside the database - is the "cheap secret store" `AGENTS.md` §5 rules out. So
-/// the note beside the pin on the connection screen is true today, and the day persistence lands
-/// that note and this paragraph change together.
+/// **Identity persistence.** The provider states whether its identity is platform-protected and
+/// persistent. The UI only removes the restart warning for that case. A missing or corrupt secure
+/// identity becomes a failed node state; this class never falls back to a newly generated identity
+/// over an existing database.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:nearsend/app/node_runtime.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 /// Where a session is in its life.
 enum NodePhase {
@@ -62,6 +64,7 @@ typedef NodeRuntimeFactory = NodeRuntime Function({
   String commonName,
   AndroidFileGateway? gateway,
   List<String>? candidateAddresses,
+  InstallationIdentityProvider identityProvider,
 });
 
 /// Owns the application's node and publishes the state a screen renders.
@@ -72,6 +75,8 @@ class NodeSession extends ChangeNotifier {
     this.commonName = 'NearSend',
     this.gateway,
     this.candidateAddresses,
+    this.identityProvider = const EphemeralInstallationIdentityProvider(),
+    this.discovery,
     this.openRuntime = NodeRuntime.new,
   });
 
@@ -86,6 +91,9 @@ class NodeSession extends ChangeNotifier {
 
   /// The addresses to publish, or null to read them from the network interfaces.
   final List<String>? candidateAddresses;
+
+  final InstallationIdentityProvider identityProvider;
+  final MdnsDiscoveryGateway? discovery;
 
   /// Opens the runtime. Overridable so a test can state its own, and so a failure to open one is
   /// reachable without a broken filesystem.
@@ -104,7 +112,9 @@ class NodeSession extends ChangeNotifier {
   NodeRuntime? _runtime;
   PairingPayload? _payload;
   String? _failureReason;
+  String? _discoveryFailureReason;
   Future<void>? _attempt;
+  bool _discoveryEnabled = false;
   bool _disposed = false;
 
   NodePhase get phase => _phase;
@@ -114,6 +124,9 @@ class NodeSession extends ChangeNotifier {
   /// The running node, or null when none is.
   NearSendNode? get node => _runtime?.node;
 
+  bool get hasPersistentIdentity =>
+      _runtime?.hasPersistentIdentity ?? identityProvider.isPersistent;
+
   /// The runtime, for the parts of the application that need its gateway or engine.
   NodeRuntime? get runtime => _runtime;
 
@@ -122,6 +135,11 @@ class NodeSession extends ChangeNotifier {
 
   /// Why the node is not running, as a sentence a user can act on.
   String? get failureReason => _failureReason;
+
+  String? get discoveryFailureReason => _discoveryFailureReason;
+
+  Stream<MdnsDiscoveryEvent> get discoveryEvents =>
+      discovery?.events ?? const Stream<MdnsDiscoveryEvent>.empty();
 
   /// Opens the node, or returns the attempt already in flight.
   ///
@@ -154,10 +172,26 @@ class NodeSession extends ChangeNotifier {
         commonName: commonName,
         gateway: gateway,
         candidateAddresses: candidateAddresses,
+        identityProvider: identityProvider,
       );
       final NearSendNode node = await opened.start();
       _runtime = opened;
       _payload = node.payload;
+      _discoveryFailureReason = null;
+      final MdnsDiscoveryGateway? mdns = discovery;
+      final PairingPayload? payload = node.payload;
+      if (_discoveryEnabled && mdns != null && payload != null) {
+        try {
+          await mdns.start(
+            MdnsPublication(
+              instanceId: payload.sessionId,
+              port: node.server.boundPort,
+            ),
+          );
+        } on Object {
+          _discoveryFailureReason = '局域网自动发现不可用，仍可使用手动连接。';
+        }
+      }
       _set(phase: NodePhase.ready, failureReason: null);
     } on Object catch (error) {
       // A runtime that opened and then failed to listen holds an open database. Releasing it is not
@@ -172,6 +206,35 @@ class NodeSession extends ChangeNotifier {
     }
   }
 
+  Future<void> setDiscoveryEnabled(bool enabled) async {
+    _discoveryEnabled = enabled;
+    final MdnsDiscoveryGateway? mdns = discovery;
+    if (mdns == null) return;
+    if (!enabled) {
+      await mdns.stop();
+      _discoveryFailureReason = null;
+      notifyListeners();
+      return;
+    }
+    final NearSendNode? running = node;
+    final PairingPayload? currentPayload = payload;
+    if (phase != NodePhase.ready || running == null || currentPayload == null) {
+      return;
+    }
+    try {
+      await mdns.start(
+        MdnsPublication(
+          instanceId: currentPayload.sessionId,
+          port: running.server.boundPort,
+        ),
+      );
+      _discoveryFailureReason = null;
+    } on Object {
+      _discoveryFailureReason = '局域网自动发现不可用，仍可使用手动连接。';
+    }
+    notifyListeners();
+  }
+
   /// Closes the node, waiting for an in-flight open so a stop cannot be undone by it.
   Future<void> stop() async {
     final Future<void>? inFlight = _attempt;
@@ -181,6 +244,13 @@ class NodeSession extends ChangeNotifier {
     final NodeRuntime? running = _runtime;
     _runtime = null;
     _payload = null;
+    _discoveryEnabled = false;
+    _discoveryFailureReason = null;
+    try {
+      await discovery?.stop();
+    } on Object {
+      // The node still has to close even if the platform failed to withdraw discovery.
+    }
     if (running != null) {
       await _release(running);
     }
@@ -207,6 +277,9 @@ class NodeSession extends ChangeNotifier {
   /// Only three conditions are distinguishable to a user, and only one of them has a remedy, so the
   /// rest collapse into a single sentence rather than leaking an exception's text into the UI.
   static String _reasonFor(Object error) {
+    if (error is IdentityRecoveryRequired) {
+      return '本机安全身份缺失或损坏，已停止启动以避免冒充旧设备。请重新建立本机身份并重新配对。';
+    }
     if (error is StateError) {
       return noAddressReason;
     }

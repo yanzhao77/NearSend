@@ -59,6 +59,7 @@ class TaskFileOverview {
     this.exportResult,
     this.targetUri,
     this.savedPath,
+    this.finalTargetRef,
   });
 
   final String fileId;
@@ -70,6 +71,7 @@ class TaskFileOverview {
   final String? exportResult;
   final String? targetUri;
   final String? savedPath;
+  final String? finalTargetRef;
 
   double? get progress =>
       sizeBytes <= 0 ? null : (committedBytes / sizeBytes).clamp(0.0, 1.0);
@@ -155,9 +157,12 @@ SELECT
     WHERE c.file_id = f.file_id AND c.state = 'committed') AS committed_bytes,
   e.target_uri,
   e.result AS export_result,
-  e.${StorageSchema.exportsSavedPathColumn} AS saved_path
+  e.${StorageSchema.exportsSavedPathColumn} AS saved_path,
+  o.final_target_ref
 FROM files f
 LEFT JOIN exports e ON e.file_id = f.file_id
+LEFT JOIN ${StorageSchema.receiveOutputPlansTable} o
+  ON o.file_id = f.file_id AND o.transfer_id = f.task_id
 WHERE f.task_id = ?
 ORDER BY f.rowid;
 ''',
@@ -180,6 +185,7 @@ ORDER BY f.rowid;
             exportResult: row['export_result'] as String?,
             targetUri: row['target_uri'] as String?,
             savedPath: row['saved_path'] as String?,
+            finalTargetRef: row['final_target_ref'] as String?,
           ),
       ],
     );

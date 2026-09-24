@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.os.StatFs
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -44,19 +43,20 @@ import java.nio.channels.FileChannel
  *
  * ## What it deliberately does not do
  *
- * It does not persist a URI permission for later use. A transfer that outlives the process needs
- * `takePersistableUriPermission`, and `AGENTS.md` §9 wants that behaviour verified on a device before
- * anything relies on it; when the permission is gone, `readChunk` fails and the Dart side must enter
- * BLOCKED rather than silently recreating a duplicate file. Persisting it without that verification
- * would be the silent version of the same failure.
+ * Directory-tree grants are persisted when the provider and system grant that capability. Every use
+ * validates the persisted read/write grant again; losing it is a blocked state, never an empty tree.
  */
 class MainActivity : FlutterActivity() {
 
     private val channelName = "com.nearsend.app/files"
+    private val identityChannelName = "com.nearsend.app/secure_identity"
 
     /** The single in-flight pick, so a second request cannot race the first. */
     private var pendingPick: MethodChannel.Result? = null
     private val pickRequestCode = 4711
+    private val storageLocations by lazy { AndroidStorageLocations(this) }
+    private val secureIdentity by lazy { AndroidSecureIdentityStore(applicationContext) }
+    private val networkBootstrap by lazy { AndroidNetworkBootstrap(this) }
 
     /** Open write channels, keyed by URI, so a chunked write does not reopen per chunk. */
     private val writeChannels = HashMap<String, FileChannel>()
@@ -65,6 +65,30 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result -> handle(call, result) }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, identityChannelName)
+            .setMethodCallHandler { call, result -> handleIdentity(call, result) }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            AndroidNetworkBootstrap.channelName,
+        ).setMethodCallHandler { call, result -> networkBootstrap.handle(call, result) }
+    }
+
+    private fun handleIdentity(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            when (call.method) {
+                "readIdentity" -> result.success(secureIdentity.read())
+                "writeIdentity" -> {
+                    secureIdentity.write(
+                        call.argument<String>("value")
+                            ?: throw IllegalArgumentException("an identity value is required"),
+                    )
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        } catch (error: Exception) {
+            result.error("NS-IDENTITY", error.javaClass.simpleName, null)
+        }
     }
 
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
@@ -74,10 +98,30 @@ class MainActivity : FlutterActivity() {
                     applicationContext.filesDir.absolutePath,
                 )
                 "defaultReceiveLocation" -> result.success(
-                    defaultReceiveLocation(),
+                    storageLocations.defaultReceiveLocation(),
+                )
+                "pickReceiveDirectory" -> storageLocations.pickReceiveDirectory(result)
+                "validateReceiveDirectory" -> result.success(
+                    storageLocations.validateReceiveDirectory(uriOfLocation(call)),
                 )
                 "measureFreeSpace" -> result.success(
-                    measureFreeSpace(call.argument<String>("locationRef")),
+                    storageLocations.measureFreeSpace(call.argument<String>("locationRef")),
+                )
+                "listDirectory" -> result.success(
+                    storageLocations.listDirectory(uriOfLocation(call)),
+                )
+                "createDocument" -> result.success(
+                    storageLocations.createDocument(
+                        treeUri = uriOfLocation(call),
+                        displayName = call.argument<String>("displayName")
+                            ?: throw IllegalArgumentException("a displayName argument is required"),
+                    ),
+                )
+                "openSavedFile" -> result.success(
+                    storageLocations.openSavedFile(targetRefOf(call)),
+                )
+                "revealSavedFile" -> result.success(
+                    storageLocations.revealSavedFile(targetRefOf(call)),
                 )
                 "pickFiles" -> pickFiles(result)
                 "probe" -> result.success(probe(uriOf(call)))
@@ -112,41 +156,17 @@ class MainActivity : FlutterActivity() {
         return Uri.parse(value)
     }
 
+    private fun uriOfLocation(call: MethodCall): Uri {
+        val value = call.argument<String>("locationRef")
+            ?: throw IllegalArgumentException("a locationRef argument is required")
+        return Uri.parse(value)
+    }
+
+    private fun targetRefOf(call: MethodCall): String =
+        call.argument<String>("targetRef")
+            ?: throw IllegalArgumentException("a targetRef argument is required")
+
     // --- picking ------------------------------------------------------------------------------
-
-    /** The default is app-private and therefore writable by the existing path-based exporter. */
-    private fun defaultReceiveLocation(): String {
-        val directory = java.io.File(applicationContext.filesDir, "received")
-        if (!directory.exists() && !directory.mkdirs()) {
-            throw IllegalStateException("the default receive directory could not be created")
-        }
-        return directory.absolutePath
-    }
-
-    /** Returns an honest unknown answer for opaque provider references. */
-    private fun measureFreeSpace(locationRef: String?): Map<String, Any?> {
-        if (locationRef.isNullOrBlank() || locationRef.startsWith("content://")) {
-            return mapOf(
-                "volume" to "unknown",
-                "label" to "保存位置",
-                "freeBytes" to null,
-            )
-        }
-        return try {
-            val stat = StatFs(locationRef)
-            mapOf(
-                "volume" to "android-app-private",
-                "label" to "应用私有存储",
-                "freeBytes" to stat.availableBytes,
-            )
-        } catch (_: Exception) {
-            mapOf(
-                "volume" to "unknown",
-                "label" to "保存位置",
-                "freeBytes" to null,
-            )
-        }
-    }
 
     private fun pickFiles(result: MethodChannel.Result) {
         if (pendingPick != null) {
@@ -165,6 +185,7 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (storageLocations.handleActivityResult(requestCode, resultCode, data)) return
         if (requestCode != pickRequestCode) {
             return
         }
@@ -183,6 +204,20 @@ class MainActivity : FlutterActivity() {
         }
         data.data?.let { picked.add(probe(it)) }
         pending.success(picked)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        networkBootstrap.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onDestroy() {
+        networkBootstrap.close()
+        super.onDestroy()
     }
 
     // --- reading ------------------------------------------------------------------------------
@@ -258,6 +293,9 @@ class MainActivity : FlutterActivity() {
 
     private fun beginWrite(call: MethodCall): Boolean {
         val uri = uriOf(call)
+        if (writeChannels.containsKey(uri.toString())) {
+            throw IllegalStateException("a write is already open for this document")
+        }
         val mode = call.argument<String>("mode") ?: "rwt"
         val descriptor = contentResolver.openFileDescriptor(uri, mode)
             ?: throw IllegalStateException("the provider opened no descriptor for writing")
@@ -287,14 +325,17 @@ class MainActivity : FlutterActivity() {
      */
     private fun endWrite(call: MethodCall, force: Boolean): Boolean {
         val uri = uriOf(call)
-        val channel = writeChannels.remove(uri.toString()) ?: return true
-        try {
-            if (force) {
-                channel.force(true)
+        val channel = writeChannels.remove(uri.toString())
+        if (channel != null) {
+            try {
+                if (force) {
+                    channel.force(true)
+                }
+            } finally {
+                channel.close()
             }
-        } finally {
-            channel.close()
         }
+        storageLocations.completeDocument(uri, committed = force)
         return true
     }
 }

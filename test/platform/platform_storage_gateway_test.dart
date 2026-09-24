@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +35,11 @@ void main() {
     final MethodChannelAndroidStorageGateway gateway =
         MethodChannelAndroidStorageGateway();
     final StorageMeasurement measurement = await gateway.measureFreeSpace(
-      locationRef: '/private/received',
+      location: const StorageLocationRef(
+        kind: StorageLocationKind.appPrivate,
+        opaqueValue: '/private/received',
+        displayName: '应用私有存储',
+      ),
     );
 
     expect(measurement.volume, const VolumeId('android-app-private'));
@@ -57,7 +62,11 @@ void main() {
 
       final StorageMeasurement measurement =
           await MethodChannelAndroidStorageGateway().measureFreeSpace(
-            locationRef: 'content://provider/tree/1',
+            location: const StorageLocationRef(
+              kind: StorageLocationKind.androidDocumentTree,
+              opaqueValue: 'content://provider/tree/1',
+              displayName: 'Downloads',
+            ),
           );
 
       expect(measurement.availability.freeBytes, isNull);
@@ -65,14 +74,29 @@ void main() {
     },
   );
 
-  test(
-    'directory selection remains disabled until opaque export is supported',
-    () async {
-      final MethodChannelAndroidStorageGateway gateway =
-          MethodChannelAndroidStorageGateway();
+  test('directory selection returns an opaque structured reference', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+          expect(call.method, 'pickReceiveDirectory');
+          return <String, Object?>{
+            'kind': 'androidDocumentTree',
+            'opaqueValue': 'content://provider/tree/1',
+            'displayName': 'Downloads',
+            'permissionState': 'granted',
+          };
+        });
+    final MethodChannelAndroidStorageGateway gateway =
+        MethodChannelAndroidStorageGateway();
 
-      expect(gateway.supportsDirectorySelection, isFalse);
-      expect(await gateway.pickReceiveDirectory(), isNull);
-    },
-  );
+    expect(gateway.supportsDirectorySelection, isTrue);
+    expect(
+      await gateway.pickReceiveDirectory(),
+      const StorageLocationRef(
+        kind: StorageLocationKind.androidDocumentTree,
+        opaqueValue: 'content://provider/tree/1',
+        displayName: 'Downloads',
+        permissionState: StoragePermissionState.granted,
+      ),
+    );
+  });
 }

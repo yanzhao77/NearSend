@@ -37,6 +37,7 @@ library;
 
 import 'package:sqlite3/sqlite3.dart';
 
+import 'package:nearsend/core/protocol/relative_path.dart';
 import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
@@ -104,7 +105,7 @@ class TargetInventory {
 
 /// How the platform committed the target name.
 class ExportCommitResult {
-  const ExportCommitResult({required this.atomic});
+  const ExportCommitResult({required this.atomic, this.createdTargetRef});
 
   /// Whether the platform could make the name appear atomically.
   ///
@@ -112,6 +113,9 @@ class ExportCommitResult {
   /// in-place write cannot promise it. V2.1 §15 forbids calling that atomic, so it is
   /// reported rather than assumed.
   final bool atomic;
+
+  /// The platform handle created for this file, when it can be retained for open/reveal actions.
+  final String? createdTargetRef;
 }
 
 /// The platform port that writes to the user's target and frees the app's staging.
@@ -189,6 +193,7 @@ class ExportOutcome {
     this.committedAtomically,
     this.stagingRelease = StagingRelease.notNeeded,
     this.cleanupFailure,
+    this.createdTargetRef,
   });
 
   final ExportOutcomeKind kind;
@@ -213,6 +218,8 @@ class ExportOutcome {
 
   /// Why staging was not freed. Space only; never a reason to call the export failed.
   final String? cleanupFailure;
+
+  final String? createdTargetRef;
 
   /// Whether the user's file is at the target.
   ///
@@ -255,8 +262,13 @@ class ExportService {
     required String fileId,
     required String targetRef,
     required FileVerificationResult verification,
+    String? outputName,
+    NameConflictPolicy? conflictPolicy,
   }) async {
     final _FrozenTarget target = _readFrozen(fileId);
+    final String plannedName = outputName ?? target.relativePath;
+    RelativePathRules.validate(plannedName);
+    final ExportNamingPolicy effectiveNaming = _namingFor(conflictPolicy);
 
     // Already recorded for this target: the user has the file, so nothing is written and
     // a retry cannot produce a second copy.
@@ -298,8 +310,8 @@ class ExportService {
 
     // The name this file would take with no conflict at all. Used first to ask whether an
     // earlier attempt already put the copy there.
-    final ExportTargetPlan natural = naming.plan(
-      frozenRelativePath: target.relativePath,
+    final ExportTargetPlan natural = effectiveNaming.plan(
+      frozenRelativePath: plannedName,
       takenPaths: const <String>{},
     );
     if (natural.isPlanned) {
@@ -322,12 +334,13 @@ class ExportService {
           safePath: record.savedPath,
           wroteToTarget: false,
           committedAtomically: null,
+          createdTargetRef: null,
         );
       }
     }
 
-    final ExportTargetPlan plan = naming.plan(
-      frozenRelativePath: target.relativePath,
+    final ExportTargetPlan plan = effectiveNaming.plan(
+      frozenRelativePath: plannedName,
       takenPaths: inventory.paths,
     );
     switch (plan.status) {
@@ -387,6 +400,7 @@ class ExportService {
         reason: 'the copy was written but could not be recorded: $error',
         wroteToTarget: true,
         committedAtomically: committed.atomic,
+        createdTargetRef: committed.createdTargetRef,
         stagingRelease: StagingRelease.retained,
       );
     }
@@ -396,6 +410,21 @@ class ExportService {
       safePath: record.savedPath,
       wroteToTarget: true,
       committedAtomically: committed.atomic,
+      createdTargetRef: committed.createdTargetRef,
+    );
+  }
+
+  ExportNamingPolicy _namingFor(NameConflictPolicy? conflictPolicy) {
+    if (conflictPolicy == null || conflictPolicy == naming.conflict) {
+      return naming;
+    }
+    return ExportNamingPolicy(
+      conflict: conflictPolicy,
+      layout: naming.layout,
+      maxSegmentBytes: naming.maxSegmentBytes,
+      fallbackStem: naming.fallbackStem,
+      maxRenameAttempts: naming.maxRenameAttempts,
+      targetIsCaseInsensitive: naming.targetIsCaseInsensitive,
     );
   }
 
@@ -407,6 +436,7 @@ class ExportService {
     required String? safePath,
     required bool wroteToTarget,
     required bool? committedAtomically,
+    required String? createdTargetRef,
   }) async {
     try {
       await sink.deleteStaging(fileId: fileId);
@@ -416,6 +446,7 @@ class ExportService {
         safePath: safePath,
         wroteToTarget: wroteToTarget,
         committedAtomically: committedAtomically,
+        createdTargetRef: createdTargetRef,
         stagingRelease: StagingRelease.freed,
       );
     } on Object catch (error) {
@@ -425,6 +456,7 @@ class ExportService {
         safePath: safePath,
         wroteToTarget: wroteToTarget,
         committedAtomically: committedAtomically,
+        createdTargetRef: createdTargetRef,
         stagingRelease: StagingRelease.failed,
         cleanupFailure: '$error',
       );

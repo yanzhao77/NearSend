@@ -1,5 +1,6 @@
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/storage_schema.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 /// The user-editable presentation settings that may be persisted locally.
 ///
@@ -13,19 +14,22 @@ class AppSettings {
     this.defaultReceiveLocation,
     this.themePreference = AppThemePreference.system,
     this.reduceMotion = false,
+    this.defaultReceiveLocationNeedsRepair = false,
   });
 
   final String deviceName;
-  final String? defaultReceiveLocation;
+  final StorageLocationRef? defaultReceiveLocation;
+  final bool defaultReceiveLocationNeedsRepair;
   final AppThemePreference themePreference;
   final bool reduceMotion;
 
   AppSettings copyWith({
     String? deviceName,
-    String? defaultReceiveLocation,
+    StorageLocationRef? defaultReceiveLocation,
     bool clearDefaultReceiveLocation = false,
     AppThemePreference? themePreference,
     bool? reduceMotion,
+    bool? defaultReceiveLocationNeedsRepair,
   }) {
     return AppSettings(
       deviceName: deviceName ?? this.deviceName,
@@ -34,6 +38,11 @@ class AppSettings {
           : defaultReceiveLocation ?? this.defaultReceiveLocation,
       themePreference: themePreference ?? this.themePreference,
       reduceMotion: reduceMotion ?? this.reduceMotion,
+      defaultReceiveLocationNeedsRepair:
+          defaultReceiveLocationNeedsRepair ??
+          (defaultReceiveLocation != null || clearDefaultReceiveLocation
+              ? false
+              : this.defaultReceiveLocationNeedsRepair),
     );
   }
 }
@@ -71,9 +80,23 @@ class AppSettingsRepository {
       'dark' => AppThemePreference.dark,
       _ => AppThemePreference.system,
     };
+    final String? storedLocation = _nonEmpty(values[_defaultReceiveLocation]);
+    StorageLocationRef? location;
+    bool locationNeedsRepair = false;
+    if (storedLocation != null) {
+      try {
+        location = StorageLocationRef.fromPersistedValue(storedLocation);
+        if (!storedLocation.trim().startsWith('{')) {
+          _upsert(_defaultReceiveLocation, location.toPersistedValue(), now());
+        }
+      } on FormatException {
+        locationNeedsRepair = true;
+      }
+    }
     return AppSettings(
       deviceName: name.isEmpty ? 'NearSend' : name,
-      defaultReceiveLocation: _nonEmpty(values[_defaultReceiveLocation]),
+      defaultReceiveLocation: location,
+      defaultReceiveLocationNeedsRepair: locationNeedsRepair,
       themePreference: theme,
       reduceMotion: values[_reduceMotion] == 'true',
     );
@@ -88,7 +111,8 @@ class AppSettingsRepository {
         'must not be empty',
       );
     }
-    final String? receiveLocation = _nonEmpty(settings.defaultReceiveLocation);
+    final String? receiveLocation = settings.defaultReceiveLocation
+        ?.toPersistedValue();
     final int moment = now();
     database.transaction(() {
       _upsert(_deviceName, deviceName, moment);

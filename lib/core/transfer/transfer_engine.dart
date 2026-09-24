@@ -52,6 +52,7 @@ import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/export_service.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/local_file_layer.dart';
@@ -551,6 +552,8 @@ class TransferEngine {
   Future<ReceivedFileOutcome> finishFile({
     required String fileId,
     String? targetRef,
+    String? outputName,
+    NameConflictPolicy? conflictPolicy,
   }) async {
     // §10's per-file chain has to be walked, not jumped: `recordSavedExport` asserts
     // `exporting → completed`, so a file that arrived and was never advanced would fail at the
@@ -580,6 +583,8 @@ class TransferEngine {
       fileId: fileId,
       targetRef: targetRef,
       verification: verification,
+      outputName: outputName,
+      conflictPolicy: conflictPolicy,
     );
     return ReceivedFileOutcome(
       fileId: fileId,

@@ -183,6 +183,92 @@ void main() {
         reason: 'merely seeing a device again must not re-authorise it',
       );
     });
+
+    test('only a matching authorised identity records verified presence', () {
+      int now = 10;
+      peers = PeerRepository(database, now: () => now);
+      peers.recordUserAuthorization(
+        peerId: peerId,
+        identityFingerprint: fingerprintA,
+        identityPublicKey: 'public-key',
+        platform: 'android',
+      );
+      now = 20;
+
+      expect(
+        peers.recordVerifiedPresence(
+          peerId: peerId,
+          identityFingerprint: fingerprintB,
+        ),
+        isFalse,
+      );
+      expect(peers.history().single.lastVerifiedAt, 10);
+
+      expect(
+        peers.recordVerifiedPresence(
+          peerId: peerId,
+          identityFingerprint: fingerprintA,
+        ),
+        isTrue,
+      );
+      final PeerRecord record = peers.history().single;
+      expect(record.lastVerifiedAt, 20);
+      expect(record.identityPublicKey, 'public-key');
+      expect(record.platform, 'android');
+    });
+
+    test('signed identity presence may rotate the bound TLS fingerprint', () {
+      int now = 10;
+      peers = PeerRepository(database, now: () => now);
+      peers.recordUserAuthorization(
+        peerId: peerId,
+        identityFingerprint: fingerprintA,
+        identityPublicKey: 'public-key-a',
+      );
+      now = 20;
+
+      expect(
+        peers.recordVerifiedIdentityPresence(
+          peerId: peerId,
+          identityPublicKey: 'wrong-key',
+          tlsFingerprint: fingerprintB,
+        ),
+        isFalse,
+      );
+      expect(peers.storedFingerprint(peerId), fingerprintA);
+
+      expect(
+        peers.recordVerifiedIdentityPresence(
+          peerId: peerId,
+          identityPublicKey: 'public-key-a',
+          tlsFingerprint: fingerprintB,
+        ),
+        isTrue,
+      );
+      final PeerRecord record = peers.find(peerId)!;
+      expect(record.identityFingerprint, fingerprintB);
+      expect(record.lastVerifiedAt, 20);
+    });
+
+    test('revocation prevents a signed presence update', () {
+      peers.recordUserAuthorization(
+        peerId: peerId,
+        identityFingerprint: fingerprintA,
+        identityPublicKey: 'public-key-a',
+      );
+      peers.revoke(peerId);
+
+      expect(
+        peers.recordVerifiedIdentityPresence(
+          peerId: peerId,
+          identityPublicKey: 'public-key-a',
+          tlsFingerprint: fingerprintB,
+        ),
+        isFalse,
+      );
+      expect(peers.find(peerId)!.trust, PeerTrust.revoked);
+      expect(peers.storedFingerprint(peerId), fingerprintA);
+    });
   });
 
   group('storage shape', () {
@@ -198,12 +284,17 @@ void main() {
         'identity_fingerprint',
         'authorized',
         'last_seen_at',
+        'identity_public_key',
+        'platform',
+        'trust_state',
+        'paired_at',
+        'last_verified_at',
       ]);
       for (final String column in columns) {
         expect(
           column.contains('token') ||
               column.contains('secret') ||
-              column.contains('key') ||
+              (column.contains('key') && column != 'identity_public_key') ||
               column.contains('password'),
           isFalse,
           reason:

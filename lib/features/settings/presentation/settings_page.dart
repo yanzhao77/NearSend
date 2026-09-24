@@ -5,6 +5,7 @@ import 'package:nearsend/app/application/settings_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
@@ -22,6 +23,9 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _deviceName;
+  StoragePermissionState? _locationPermission;
+  String? _locationError;
+  bool _checkingLocation = false;
 
   @override
   void initState() {
@@ -29,12 +33,87 @@ class _SettingsPageState extends State<SettingsPage> {
     _deviceName = TextEditingController(
       text: widget.controller.settings.deviceName,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _validateSavedLocation();
+    });
   }
 
   @override
   void dispose() {
     _deviceName.dispose();
     super.dispose();
+  }
+
+  Future<void> _validateSavedLocation() async {
+    final StorageLocationRef? location =
+        widget.controller.settings.defaultReceiveLocation;
+    if (location == null) return;
+    await _validateLocation(location, persist: false);
+  }
+
+  Future<bool> _validateLocation(
+    StorageLocationRef location, {
+    required bool persist,
+  }) async {
+    setState(() {
+      _checkingLocation = true;
+      _locationError = null;
+    });
+    try {
+      final StorageLocationRef validated = await widget.space.gateway
+          .validateReceiveLocation(location);
+      if (!mounted) return false;
+      final bool granted =
+          validated.permissionState == StoragePermissionState.granted;
+      setState(() {
+        _locationPermission = validated.permissionState;
+        _locationError = granted ? null : '无法访问已保存的目录，请重新选择并授予访问权限。';
+      });
+      if (granted && persist) {
+        widget.controller.updateDefaultReceiveLocation(validated);
+      }
+      return granted;
+    } on Object {
+      if (!mounted) return false;
+      setState(() {
+        _locationPermission = StoragePermissionState.unavailable;
+        _locationError = '目录权限验证失败，原设置未更改。请重新选择后再试。';
+      });
+      return false;
+    } finally {
+      if (mounted) setState(() => _checkingLocation = false);
+    }
+  }
+
+  Future<void> _pickReceiveLocation() async {
+    try {
+      final StorageLocationRef? location = await widget.space.gateway
+          .pickReceiveDirectory();
+      if (!mounted || location == null) return;
+      await _validateLocation(location, persist: true);
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _locationError = '系统目录选择器未能完成，原设置保持不变。';
+        });
+      }
+    }
+  }
+
+  String _locationSubtitle(AppSettings settings) {
+    if (settings.defaultReceiveLocationNeedsRepair) {
+      return '原保存位置不可识别，请重新选择';
+    }
+    final StorageLocationRef? location = settings.defaultReceiveLocation;
+    if (location == null) return '未设置';
+    final String state = switch (_locationPermission) {
+      StoragePermissionState.granted => '访问权限有效',
+      StoragePermissionState.denied ||
+      StoragePermissionState.unavailable => '需要重新授权',
+      StoragePermissionState.unknown ||
+      null => _checkingLocation ? '正在验证访问权限' : '尚未验证访问权限',
+    };
+    return '${location.displayName} · $state';
   }
 
   @override
@@ -77,23 +156,36 @@ class _SettingsPageState extends State<SettingsPage> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('默认接收位置'),
-                subtitle: Text(settings.defaultReceiveLocation ?? '未设置'),
+                subtitle: Text(_locationSubtitle(settings)),
                 trailing: widget.space.gateway.supportsDirectorySelection
                     ? IconButton(
-                        onPressed: () async {
-                          final String? location = await widget.space.gateway
-                              .pickReceiveDirectory();
-                          if (location != null) {
-                            widget.controller.updateDefaultReceiveLocation(
-                              location,
-                            );
-                          }
-                        },
+                        onPressed: _checkingLocation
+                            ? null
+                            : _pickReceiveLocation,
                         icon: const Icon(Icons.folder_open_outlined),
-                        tooltip: '选择目录',
+                        tooltip:
+                            settings.defaultReceiveLocationNeedsRepair ||
+                                _locationError != null
+                            ? '重新选择目录'
+                            : '选择目录',
                       )
                     : null,
               ),
+              if (settings.defaultReceiveLocationNeedsRepair ||
+                  _locationError != null) ...<Widget>[
+                NsInfoBanner(
+                  title: '默认接收位置需要修复',
+                  message: _locationError ?? '保存的位置数据无法识别，请通过系统选择器重新选择。',
+                  tone: NsStatusTone.warning,
+                  actionLabel: widget.space.gateway.supportsDirectorySelection
+                      ? '重新选择'
+                      : null,
+                  onAction: widget.space.gateway.supportsDirectorySelection
+                      ? _pickReceiveLocation
+                      : null,
+                ),
+                const SizedBox(height: NearSendSpacing.sm),
+              ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('减少动态效果'),

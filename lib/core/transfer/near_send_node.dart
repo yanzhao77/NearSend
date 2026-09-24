@@ -54,12 +54,15 @@ import 'package:nearsend/core/security/pairing_service.dart';
 import 'package:nearsend/core/security/tls_identity.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
 import 'package:nearsend/core/storage/export_service.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/idempotency_repository.dart';
+import 'package:nearsend/core/storage/installation_identity_repository.dart';
 import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/receiver_mirror_repository.dart';
+import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/task_credential_repository.dart';
@@ -151,6 +154,7 @@ class NearSendNode {
     required this.sources,
     required this.ownership,
     required this.mirror,
+    required this.outputPlans,
     required this.windows,
     required this.layout,
     required this.sink,
@@ -177,6 +181,7 @@ class NearSendNode {
   final TaskSourceRepository sources;
   final SqliteTaskOwnership ownership;
   final ReceiverMirrorRepository mirror;
+  final ReceiveOutputPlanRepository outputPlans;
   final ChunkWindowRegistry windows;
   final LocalStagingLayout layout;
   final StagingFileSink sink;
@@ -231,20 +236,35 @@ class NearSendNode {
     int port = 0,
     String commonName = 'NearSend',
     SourceBytes Function(String sourceRef, int sizeBytes)? sourceResolver,
+    ExportSink Function(LocalStagingLayout, StagingFileSink)? exportSinkFactory,
+    ExportNamingPolicy exportNaming = const ExportNamingPolicy(),
+    TlsIdentity? tlsIdentity,
+    DeviceIdentity? deviceIdentity,
   }) async {
     final Directory root = Directory(directory);
     if (!root.existsSync()) {
       await root.create(recursive: true);
     }
 
-    final TlsIdentity identity = generateTlsIdentity(
-      commonName: commonName,
-      subjectAltNames: candidateAddresses,
-    );
+    final TlsIdentity identity =
+        tlsIdentity ??
+        generateTlsIdentity(
+          commonName: commonName,
+          subjectAltNames: candidateAddresses,
+        );
 
     final NearSendDatabase database = NearSendDatabase.open(
       path: '${root.path}${Platform.pathSeparator}nearsend.db',
     );
+    try {
+      if (deviceIdentity != null) {
+        InstallationIdentityMetadataRepository(database)
+            .ensureMatches(deviceIdentity);
+      }
+    } on Object {
+      database.close();
+      rethrow;
+    }
 
     final TransferRepository transfers = TransferRepository(database);
     final ChunkRepository tasks = ChunkRepository(database);
@@ -259,6 +279,9 @@ class NearSendNode {
     final TaskSourceRepository sources = TaskSourceRepository(database);
     final SqliteTaskOwnership ownership = SqliteTaskOwnership(database);
     final ReceiverMirrorRepository mirror = ReceiverMirrorRepository(database);
+    final ReceiveOutputPlanRepository outputPlans = ReceiveOutputPlanRepository(
+      database,
+    );
     final ChunkWindowRegistry windows = ChunkWindowRegistry(tasks: tasks);
     final LocalStagingLayout layout = LocalStagingLayout(
       Directory('${root.path}${Platform.pathSeparator}staging-root'),
@@ -275,6 +298,9 @@ class NearSendNode {
       ],
     );
 
+    final ExportSink exportSink =
+        exportSinkFactory?.call(layout, sink) ??
+        LocalDirectoryExportSink(layout: layout, staging: sink);
     final TransferEngine engine = TransferEngine(
       database: database,
       transfers: transfers,
@@ -290,8 +316,9 @@ class NearSendNode {
       verifier: FileVerifier(database, reader: reader, chunks: tasks),
       exporter: ExportService(
         database: database,
-        sink: LocalDirectoryExportSink(layout: layout, staging: sink),
+        sink: exportSink,
         transfers: transfers,
+        naming: exportNaming,
       ),
       windows: windows,
       // Omitted on a platform whose files are paths, which is every platform but Android with a
@@ -419,6 +446,7 @@ class NearSendNode {
       sources: sources,
       ownership: ownership,
       mirror: mirror,
+      outputPlans: outputPlans,
       windows: windows,
       layout: layout,
       sink: sink,

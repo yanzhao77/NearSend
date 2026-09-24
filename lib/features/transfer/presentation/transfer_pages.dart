@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
+import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/qr_image_gateway.dart';
 
 /// The connection screen: what this device publishes, and how to reach another one.
 ///
@@ -30,15 +33,18 @@ import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// The state of the "paste a payload" field.
 class PairingImportState {
-  const PairingImportState({this.payload, this.error});
+  const PairingImportState({this.payload, this.bootstrap, this.error});
 
   /// The parsed payload, when the text is one.
   final PairingPayload? payload;
+  final BootstrapPairingPayload? bootstrap;
 
   /// Why it was refused, when it was. The parser's own message, not a generic one.
   final String? error;
 
-  bool get isAccepted => payload != null;
+  bool get isAccepted => pairing != null;
+
+  PairingPayload? get pairing => bootstrap?.pairing ?? payload;
 }
 
 /// Where the attempt to reach another device is.
@@ -82,6 +88,9 @@ class ConnectionPage extends StatefulWidget {
     super.key,
     required this.payload,
     this.onConnect,
+    this.onConnectBootstrap,
+    this.enableCameraScanner = false,
+    this.qrImageGateway,
     this.starting = false,
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
@@ -91,6 +100,7 @@ class ConnectionPage extends StatefulWidget {
     this.localPlatform = '当前平台',
     this.peerDeviceName = '对端设备名称未提供',
     this.peerPlatform = '对端平台未提供',
+    this.persistentLocalIdentity = false,
   });
 
   /// The payload this device publishes, or null when it has not opened a session.
@@ -102,6 +112,9 @@ class ConnectionPage extends StatefulWidget {
   /// rendered**: a control that cannot act is the placeholder this project's rules forbid, and an
   /// absent control with a stated reason is the honest version.
   final void Function(PairingPayload payload)? onConnect;
+  final void Function(BootstrapPairingPayload payload)? onConnectBootstrap;
+  final bool enableCameraScanner;
+  final QrImageGateway? qrImageGateway;
 
   /// Whether this device's own node is still starting.
   final bool starting;
@@ -131,6 +144,7 @@ class ConnectionPage extends StatefulWidget {
   final String localPlatform;
   final String peerDeviceName;
   final String peerPlatform;
+  final bool persistentLocalIdentity;
 
   static const String pasteHint = '粘贴对方设备显示的连接信息';
   static const String emptySessionNote = '本机尚未开启配对会话，因此还没有可出示的连接信息。';
@@ -148,13 +162,7 @@ class ConnectionPage extends StatefulWidget {
   static const String continueLabelSend = '选择文件';
   static const String continueLabelReceive = '查看对方提供的文件';
 
-  /// Shown under the published pin, because that pin is not stable across launches.
-  ///
-  /// The node generates a fresh TLS identity every time it opens, so the fingerprint a peer
-  /// recorded last time will not match this time. That is a real limitation of the current build and
-  /// the screen has to say so: a person comparing fingerprints with the peer would otherwise see a
-  /// change and reasonably suspect the wrong thing. It disappears when identity persistence lands,
-  /// and it must disappear **then** rather than being left behind as a stale warning.
+  /// Shown only when the current platform is using the explicit ephemeral identity provider.
   static const String ephemeralIdentityNote =
       '本机身份在每次启动时重新生成，因此这个指纹下次启动会变；配对结果无法跨重启保留。';
 
@@ -179,11 +187,40 @@ class _ConnectionPageState extends State<ConnectionPage> {
       return;
     }
     try {
-      // The scanner's parser, so this page cannot accept something the handshake would refuse.
-      final PairingPayload parsed = PairingPayload.parse(trimmed);
-      setState(() => _import = PairingImportState(payload: parsed));
+      final ScannedPairingPayload parsed = ScannedPairingPayload.parse(trimmed);
+      setState(
+        () => _import = switch (parsed) {
+          LegacyScannedPairingPayload() => PairingImportState(
+            payload: parsed.pairing,
+          ),
+          BootstrapPairingPayload() => PairingImportState(bootstrap: parsed),
+        },
+      );
     } on Object catch (error) {
       setState(() => _import = PairingImportState(error: '$error'));
+    }
+  }
+
+  void _acceptImportedText(String value) {
+    _controller.text = value;
+    _parse(value);
+  }
+
+  Future<void> _scan() async {
+    final String? value = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const MobilePairingScannerPage(),
+      ),
+    );
+    if (value != null && mounted) _acceptImportedText(value);
+  }
+
+  void _connectImported() {
+    final BootstrapPairingPayload? bootstrap = _import.bootstrap;
+    if (bootstrap != null) {
+      widget.onConnectBootstrap?.call(bootstrap);
+    } else {
+      widget.onConnect?.call(_import.payload!);
     }
   }
 
@@ -231,6 +268,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       palette: palette,
                       deviceName: widget.localDeviceName,
                       platform: widget.localPlatform,
+                      persistentIdentity: widget.persistentLocalIdentity,
                     ),
                   const SizedBox(height: NearSendSpacing.xl),
                   Text(
@@ -250,17 +288,41 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     ),
                   ),
                   const SizedBox(height: NearSendSpacing.sm),
+                  if (widget.enableCameraScanner ||
+                      widget.qrImageGateway != null)
+                    Wrap(
+                      spacing: NearSendSpacing.sm,
+                      runSpacing: NearSendSpacing.sm,
+                      children: <Widget>[
+                        if (widget.enableCameraScanner)
+                          OutlinedButton.icon(
+                            onPressed: _scan,
+                            icon: const Icon(Icons.qr_code_scanner),
+                            label: const Text('扫描二维码'),
+                          ),
+                        if (widget.qrImageGateway != null)
+                          SizedBox(
+                            width: 180,
+                            child: PairingImageImportButton(
+                              gateway: widget.qrImageGateway!,
+                              onDecoded: _acceptImportedText,
+                            ),
+                          ),
+                      ],
+                    ),
                   if (_import.error != null)
                     _Notice(
                       text: _import.error!,
                       palette: palette,
                       isError: true,
                     ),
-                  if (_import.isAccepted && widget.onConnect != null)
+                  if (_import.isAccepted &&
+                      ((_import.bootstrap == null &&
+                              widget.onConnect != null) ||
+                          (_import.bootstrap != null &&
+                              widget.onConnectBootstrap != null)))
                     FilledButton.icon(
-                      onPressed: attempt.isBusy
-                          ? null
-                          : () => widget.onConnect?.call(_import.payload!),
+                      onPressed: attempt.isBusy ? null : _connectImported,
                       icon: const Icon(Icons.link),
                       label: const Text('连接'),
                     )
@@ -310,7 +372,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   if (_import.isAccepted) ...<Widget>[
                     const SizedBox(height: NearSendSpacing.md),
                     _PeerPreview(
-                      payload: _import.payload!,
+                      payload: _import.pairing!,
                       deviceName: widget.peerDeviceName,
                       platform: widget.peerPlatform,
                       verified: attempt.isConnected,
@@ -346,12 +408,14 @@ class _PublishedPayload extends StatelessWidget {
     required this.palette,
     required this.deviceName,
     required this.platform,
+    required this.persistentIdentity,
   });
 
   final PairingPayload payload;
   final NearSendColors palette;
   final String deviceName;
   final String platform;
+  final bool persistentIdentity;
 
   @override
   Widget build(BuildContext context) {
@@ -363,6 +427,8 @@ class _PublishedPayload extends StatelessWidget {
           children: <Widget>[
             Text('本机连接信息', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: NearSendSpacing.sm),
+            Center(child: PairingQrView(payload: payload.encode())),
+            const SizedBox(height: NearSendSpacing.md),
             _Field(label: '设备名', value: deviceName),
             const SizedBox(height: NearSendSpacing.xs),
             _Field(label: '平台', value: platform),
@@ -384,24 +450,23 @@ class _PublishedPayload extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: NearSendSpacing.sm),
-            // Said because it is currently true and a user would otherwise be misled: the node
-            // mints a fresh TLS identity every time it opens, so this pin is not the same one the
-            // next launch will show. Without this line a person comparing fingerprints across two
-            // launches would conclude the peer changed identity, and a pairing they thought they
-            // had made would look like it had been tampered with.
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Icon(Icons.info_outline, color: palette.warning),
-                const SizedBox(width: NearSendSpacing.sm),
-                Expanded(
-                  child: Text(
-                    ConnectionPage.ephemeralIdentityNote,
-                    style: Theme.of(context).textTheme.bodySmall,
+            // Unsupported platforms and tests still use an explicit ephemeral provider, and must
+            // keep stating that limitation. Android/Windows production hide it only after their
+            // platform-protected provider has loaded successfully.
+            if (!persistentIdentity)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.info_outline, color: palette.warning),
+                  const SizedBox(width: NearSendSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      ConnectionPage.ephemeralIdentityNote,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),

@@ -87,6 +87,99 @@ void main() {
     });
   });
 
+  test(
+    'a version 7 database gains output plans without rewriting settings',
+    () {
+      final String path = dbPath('v7-output-plans.db');
+      final Database old = sqlite3.open(path);
+      StorageSchema.applyVersion1(old);
+      StorageSchema.applyVersion2(old);
+      StorageSchema.applyVersion3(old);
+      StorageSchema.applyVersion4(old);
+      StorageSchema.applyVersion5(old);
+      StorageSchema.applyVersion6(old);
+      StorageSchema.applyVersion7(old);
+      old.execute(
+        'INSERT INTO ${StorageSchema.metaTable} (id, version, applied_at) '
+        'VALUES (1, 7, 1);',
+      );
+      old.execute(
+        'INSERT INTO ${StorageSchema.appSettingsTable} '
+        '(setting_key, setting_value, updated_at) VALUES (?, ?, ?);',
+        <Object?>['device_name', 'Office PC', 7],
+      );
+      old.close();
+
+      final NearSendDatabase upgraded = NearSendDatabase.open(path: path);
+      try {
+        expect(upgraded.schemaVersion, StorageSchema.currentVersion);
+        expect(
+          upgraded.db.select(
+            'SELECT setting_value FROM ${StorageSchema.appSettingsTable} '
+            'WHERE setting_key = ?;',
+            <Object?>['device_name'],
+          ).single['setting_value'],
+          'Office PC',
+        );
+        expect(
+          upgraded.db.select(
+            'PRAGMA table_info(${StorageSchema.receiveOutputPlansTable});',
+          ),
+          isNotEmpty,
+        );
+      } finally {
+        upgraded.close();
+      }
+    },
+  );
+
+  test('a version 8 database gains identity metadata and peer history', () {
+    final String path = dbPath('v8-identity.db');
+    final Database old = sqlite3.open(path);
+    StorageSchema.applyVersion1(old);
+    StorageSchema.applyVersion2(old);
+    StorageSchema.applyVersion3(old);
+    StorageSchema.applyVersion4(old);
+    StorageSchema.applyVersion5(old);
+    StorageSchema.applyVersion6(old);
+    StorageSchema.applyVersion7(old);
+    StorageSchema.applyVersion8(old);
+    old.execute(
+      'INSERT INTO ${StorageSchema.metaTable} (id, version, applied_at) '
+      'VALUES (1, 8, 1);',
+    );
+    old.execute(
+      'INSERT INTO peers (peer_id, display_name, identity_fingerprint, '
+      'authorized, last_seen_at) VALUES (?, ?, ?, 1, 7), (?, ?, ?, 0, 9);',
+      <Object?>['trusted', 'Phone', 'aa', 'revoked', 'Tablet', 'bb'],
+    );
+    old.close();
+
+    final NearSendDatabase upgraded = NearSendDatabase.open(path: path);
+    try {
+      expect(upgraded.schemaVersion, StorageSchema.currentVersion);
+      final ResultSet peers = upgraded.db.select(
+        'SELECT peer_id, trust_state, paired_at, last_verified_at FROM peers '
+        'ORDER BY peer_id;',
+      );
+      expect(peers.first['peer_id'], 'revoked');
+      expect(peers.first['trust_state'], 'revoked');
+      expect(peers.first['paired_at'], 9);
+      expect(peers.first['last_verified_at'], isNull);
+      expect(peers.last['peer_id'], 'trusted');
+      expect(peers.last['trust_state'], 'authorized');
+      expect(peers.last['last_verified_at'], 7);
+      expect(
+        upgraded.db.select(
+          'PRAGMA table_info(${StorageSchema.localIdentityTable});',
+        ),
+        isNotEmpty,
+      );
+    } finally {
+      upgraded.close();
+    }
+  });
+
   group('a newer schema is refused without modifying the file', () {
     test('opening a version-99 database throws schemaTooNew', () {
       final String path = dbPath('newer.db');

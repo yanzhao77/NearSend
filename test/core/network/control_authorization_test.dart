@@ -289,6 +289,26 @@ void main() {
       expect(decision, isA<ControlAuthorized>());
     });
 
+    test('only the bound session may read file metadata before acceptance', () {
+      expect(
+        decide(
+          route: ApiRoutes.getManifest,
+          authorization: 'Bearer $sessionToken',
+          ownership: owns(<String, TaskOwner>{taskId: sessionOwnsTask}),
+        ),
+        isA<ControlAuthorized>(),
+        reason: 'the receiver needs the bounded file pages to persist its output plan before deciding',
+      );
+      expect(
+        decide(
+          route: ApiRoutes.getManifest,
+          authorization: 'Bearer $sessionToken',
+        ),
+        deniedWith(ProtocolErrorCode.notFound),
+        reason: 'an unrelated session must not enumerate a transfer manifest',
+      );
+    });
+
     test('a session bound to a different peer is refused as if absent', () {
       // Same answer as a transfer that does not exist, so the status cannot be used to learn
       // which transfers exist or who owns them.

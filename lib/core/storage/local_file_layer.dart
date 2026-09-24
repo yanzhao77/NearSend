@@ -522,7 +522,10 @@ class LocalDirectoryExportSink implements ExportSink {
 
       final bool sameVolume = _sameVolume(temp.path, destination.path);
       await temp.rename(destination.path);
-      return ExportCommitResult(atomic: sameVolume);
+      return ExportCommitResult(
+        atomic: sameVolume,
+        createdTargetRef: destination.path,
+      );
     } on FileSystemException catch (error) {
       if (temp.existsSync()) {
         try {

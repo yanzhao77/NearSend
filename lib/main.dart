@@ -5,9 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:nearsend/app/app.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
+import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/app_directories.dart';
+import 'package:nearsend/platform/ble_control_gateway.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/platform_identity_store.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
 
 /// Starts the application, with this device's node behind it.
 ///
@@ -31,16 +36,32 @@ Future<void> main() async {
       : null;
   final PlatformStorageGateway? storageGateway = Platform.isAndroid
       ? MethodChannelAndroidStorageGateway()
+      : Platform.isWindows
+      ? MethodChannelWindowsStorageGateway()
       : null;
+  final InstallationIdentityProvider identityProvider =
+      Platform.isAndroid || Platform.isWindows
+      ? SecureInstallationIdentityProvider(MethodChannelSecureIdentityStore())
+      : const EphemeralInstallationIdentityProvider();
 
   runApp(
     NearSendApp(
       session: NodeSession(
         resolveDirectory: AppDirectories().resolve,
         gateway: gateway,
+        identityProvider: identityProvider,
+        discovery: MdnsDiscoveryGateway(),
       ),
       peer: PeerSession(),
       storageGateway: storageGateway,
+      bleGateway: Platform.isAndroid || Platform.isWindows
+          ? BleControlGateway()
+          : null,
+      fileActions: Platform.isAndroid || Platform.isWindows
+          ? MethodChannelPlatformFileActions(
+              supportsReveal: Platform.isWindows || Platform.isAndroid,
+            )
+          : const UnavailablePlatformFileActions(),
     ),
   );
 }

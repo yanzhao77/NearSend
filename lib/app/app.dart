@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/app_settings_repository.dart';
+import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/app/application/settings_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/application/task_catalog_controller.dart';
@@ -14,8 +15,10 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
+import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/peer_repository.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
@@ -24,6 +27,7 @@ import 'package:nearsend/features/space/presentation/space_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_detail_page.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
@@ -32,6 +36,12 @@ import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/platform_network_gateway.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
+import 'package:nearsend/platform/qr_image_gateway.dart';
+import 'package:nearsend/platform/storage_location.dart';
+import 'package:nearsend/platform/ble_control_gateway.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 /// NearSend application root.
 ///
@@ -64,6 +74,9 @@ class NearSendApp extends StatefulWidget {
     this.peer,
     this.transferIdFactory,
     this.storageGateway,
+    this.networkGateway,
+    this.bleGateway,
+    this.fileActions,
   });
 
   /// This device's node, when the application has one.
@@ -80,6 +93,9 @@ class NearSendApp extends StatefulWidget {
   final String Function()? transferIdFactory;
 
   final PlatformStorageGateway? storageGateway;
+  final PlatformNetworkGateway? networkGateway;
+  final BleControlGateway? bleGateway;
+  final PlatformFileActions? fileActions;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
@@ -111,12 +127,25 @@ class NearSendApp extends StatefulWidget {
   State<NearSendApp> createState() => _NearSendAppState();
 }
 
-class _NearSendAppState extends State<NearSendApp> {
+class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   late final TaskCatalogController _tasks = TaskCatalogController();
   late final SpaceOverviewController _space = SpaceOverviewController(
     gateway: widget.storageGateway,
   );
   late final SettingsController _settings = SettingsController();
+  late final RadarController _radar = RadarController();
+  StreamSubscription<MdnsDiscoveryEvent>? _radarDiscovery;
+  StreamSubscription<BleControlEvent>? _radarBle;
+  Future<void> _radarTransition = Future<void>.value();
+  bool _radarDesired = false;
+  bool _disposing = false;
+  late final PlatformNetworkGateway _networkGateway =
+      widget.networkGateway ??
+      ((defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.windows)
+          ? MethodChannelPlatformNetworkGateway()
+          : const UnavailablePlatformNetworkGateway());
+  JoinedWifiLease? _joinedWifi;
 
   /// The sending flow, once there is a verified peer and a node to send from.
   ///
@@ -137,6 +166,8 @@ class _NearSendAppState extends State<NearSendApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _radarBle = widget.bleGateway?.events.listen(_radar.handleBle);
     // Not awaited: the first frame must not wait for a socket and a database, and the session
     // publishes its own phases for the screen to render in the meantime.
     unawaited(_openNode());
@@ -155,10 +186,16 @@ class _NearSendAppState extends State<NearSendApp> {
     }
     _incoming = ServerReceivingFlow(
       engine: node.engine,
+      outputPlans: node.outputPlans,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
     _tasks.attach(node.database);
     _settings.attach(AppSettingsRepository(node.database));
+    _radar.attach(PeerRepository(node.database));
+    final MdnsDiscoveryGateway? discovery = session.discovery;
+    if (discovery != null) {
+      _radarDiscovery = discovery.events.listen(_radar.handleMdns);
+    }
     unawaited(_space.refresh());
     if (mounted) {
       setState(() {});
@@ -167,6 +204,9 @@ class _NearSendAppState extends State<NearSendApp> {
 
   @override
   void dispose() {
+    _disposing = true;
+    _radarDesired = false;
+    WidgetsBinding.instance.removeObserver(this);
     final NodeSession? session = widget.session;
     if (session != null) {
       // Stopped before it is disposed, because `stop` is what closes the listener and the database
@@ -181,7 +221,88 @@ class _NearSendAppState extends State<NearSendApp> {
     _tasks.dispose();
     _space.dispose();
     _settings.dispose();
+    unawaited(_radarDiscovery?.cancel());
+    unawaited(_radarBle?.cancel());
+    unawaited(widget.bleGateway?.stop());
+    _radar.dispose();
+    final JoinedWifiLease? joinedWifi = _joinedWifi;
+    if (joinedWifi != null) {
+      unawaited(_releaseJoinedWifi(joinedWifi));
+    }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_disposing && state != AppLifecycleState.resumed && _radarDesired) {
+      _requestRadarReady(false);
+    }
+  }
+
+  void _requestRadarReady(bool value) {
+    if (_disposing) return;
+    _radarDesired = value;
+    _radarTransition = _radarTransition
+        .catchError((Object _) {})
+        .then((_) => _applyRadarReady(value));
+  }
+
+  Future<void> _applyRadarReady(bool value) async {
+    final NodeSession? session = widget.session;
+    if (!value) {
+      _radar.markStopping();
+      await Future.wait<void>(<Future<void>>[
+        if (session != null)
+          session.setDiscoveryEnabled(false).catchError((Object _) {}),
+        if (widget.bleGateway != null)
+          widget.bleGateway!.stop().catchError((Object _) {}),
+      ]);
+      if (!_disposing) _radar.markOff();
+      return;
+    }
+
+    if (session?.phase != NodePhase.ready || session?.payload == null) {
+      _radar.markError('本机节点尚未就绪，请稍后重试。');
+      return;
+    }
+    _radar.markStarting();
+    bool started = false;
+    final List<String> failures = <String>[];
+    if (session!.discovery != null) {
+      try {
+        await session.setDiscoveryEnabled(true);
+        if (session.discovery!.isRunning) {
+          started = true;
+        } else if (session.discoveryFailureReason != null) {
+          failures.add(session.discoveryFailureReason!);
+        }
+      } on Object {
+        failures.add('局域网发现不可用。');
+      }
+    }
+    final BleControlGateway? ble = widget.bleGateway;
+    if (ble != null) {
+      try {
+        if (await ble.requestAuthorization()) {
+          await ble.start(
+            BlePublication.fromInstanceId(session.payload!.sessionId),
+          );
+          started = ble.isRunning || started;
+        } else {
+          failures.add('蓝牙权限未授予。');
+        }
+      } on Object {
+        failures.add('蓝牙发现不可用。');
+      }
+    }
+    if (_disposing || !_radarDesired) return;
+    if (started) {
+      _radar.markReady();
+    } else {
+      _radar.markError(
+        failures.isEmpty ? '当前平台没有可用的附近设备发现渠道。' : failures.join(' '),
+      );
+    }
   }
 
   /// Pairs with the device that published [payload], and prepares for either direction.
@@ -190,15 +311,15 @@ class _NearSendAppState extends State<NearSendApp> {
   /// not exist, and `PeerSession` is what guarantees it does not. Which of them a screen uses is the
   /// user's choice - the same connection serves sending and receiving, which is why they are made
   /// together rather than on the way into a screen.
-  Future<void> connect(PairingPayload payload) async {
+  Future<bool> connect(PairingPayload payload) async {
     final PeerSession? peer = widget.peer;
     if (peer == null) {
-      return;
+      return false;
     }
     final bool connected = await peer.connect(payload);
     final NearSendNode? node = widget.session?.node;
     if (!connected || node == null) {
-      return;
+      return false;
     }
     _flow?.dispose();
     // The session this device published: a peer that pairs with it becomes a client of this node,
@@ -222,10 +343,50 @@ class _NearSendAppState extends State<NearSendApp> {
     _receiving = ReceivingFlow(
       engine: node.engine,
       wire: peer.client!,
+      outputPlans: node.outputPlans,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
     if (mounted) {
       setState(() {});
+    }
+    return true;
+  }
+
+  Future<void> connectBootstrap(BootstrapPairingPayload payload) async {
+    JoinedWifiLease? joined;
+    final BootstrapWifiOffer? wifi = payload.wifi;
+    try {
+      if (wifi != null) {
+        final JoinedWifiLease? previous = _joinedWifi;
+        if (previous != null) {
+          await _releaseJoinedWifi(previous);
+        }
+        joined = await _networkGateway.joinWifi(
+          ssid: wifi.ssid,
+          passphrase: wifi.passphrase,
+          security: wifi.security == 'wpa3'
+              ? WifiSecurity.wpa3
+              : WifiSecurity.wpa2,
+        );
+        _joinedWifi = joined;
+      }
+      if (!await connect(payload.pairing) && joined != null) {
+        await _releaseJoinedWifi(joined);
+      }
+    } on Object {
+      if (joined != null) {
+        await _releaseJoinedWifi(joined);
+      }
+    }
+  }
+
+  Future<void> _releaseJoinedWifi(JoinedWifiLease lease) async {
+    try {
+      await _networkGateway.releaseJoinedWifi(lease.leaseId);
+    } on Object {
+      // Cleanup is best effort. The platform also owns lifecycle cleanup.
+    } finally {
+      if (_joinedWifi?.leaseId == lease.leaseId) _joinedWifi = null;
     }
   }
 
@@ -261,12 +422,14 @@ class _NearSendAppState extends State<NearSendApp> {
   /// the estimate is recorded as unknown, the flow refuses only a *proven* shortfall, and the screen
   /// says out loud that no pre-check was done. Adding the measurement is a platform task, and until
   /// it exists this is the honest arrangement.
-  Future<ReceiverStorageContext> _storageContext(String saveLocation) async {
+  Future<ReceiverStorageContext> _storageContext(
+    StorageLocationRef saveLocation,
+  ) async {
     const VolumeId appPrivate = VolumeId('app-private');
     final PlatformStorageGateway gateway =
         widget.storageGateway ?? const UnknownPlatformStorageGateway();
     final StorageMeasurement measurement = await gateway.measureFreeSpace(
-      locationRef: saveLocation,
+      location: saveLocation,
     );
     return ReceiverStorageContext(
       stagingVolume: appPrivate,
@@ -276,13 +439,13 @@ class _NearSendAppState extends State<NearSendApp> {
         appPrivate: const VolumeAvailability.unknown(),
         measurement.volume: measurement.availability,
       },
-      saveLocationRef: saveLocation,
+      saveLocationRef: saveLocation.opaqueValue,
     );
   }
 
   Future<SpaceEstimateSnapshot?> _measureIncomingSpace(
     ServerOffer offer,
-    String saveLocation,
+    StorageLocationRef saveLocation,
   ) async {
     final ServerReceivingFlow? incoming = _incoming;
     if (incoming == null) {
@@ -343,11 +506,15 @@ class _NearSendAppState extends State<NearSendApp> {
               tasks: _tasks,
               space: _space,
               settings: _settings,
+              radar: _radar,
               deviceName: _settings.settings.deviceName,
               connectionLabel: _connectionLabel,
               connectionTone: _connectionTone,
               onContinueTask: () =>
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
+              onRadarReadyChanged: _requestRadarReady,
+              onRadarDevicePressed: (RadarDevice _) =>
+                  Navigator.of(context).pushNamed(NearSendApp.connectRoute),
             ),
             NearSendApp.aboutRoute: (_) => const AboutPage(),
             NearSendApp.tasksRoute: (_) => TaskOverviewPage(controller: _tasks),
@@ -367,7 +534,11 @@ class _NearSendAppState extends State<NearSendApp> {
                   ),
                 );
               }
-              return TaskDetailPage(controller: _tasks, taskId: argument);
+              return TaskDetailPage(
+                controller: _tasks,
+                taskId: argument,
+                fileActions: widget.fileActions,
+              );
             },
             NearSendApp.connectRoute: (BuildContext context) {
               // Which action the user came here for, so one connection screen can lead to the send flow
@@ -394,6 +565,16 @@ class _NearSendAppState extends State<NearSendApp> {
                         : null,
                     connection: attempt,
                     onConnect: widget.peer == null ? null : connect,
+                    onConnectBootstrap: widget.peer == null
+                        ? null
+                        : connectBootstrap,
+                    enableCameraScanner:
+                        defaultTargetPlatform == TargetPlatform.android ||
+                        defaultTargetPlatform == TargetPlatform.iOS,
+                    qrImageGateway:
+                        defaultTargetPlatform == TargetPlatform.windows
+                        ? MethodChannelQrImageGateway()
+                        : null,
                     onContinue: _continueTarget(receiving) == null
                         ? null
                         : () =>
@@ -404,6 +585,8 @@ class _NearSendAppState extends State<NearSendApp> {
                         : ConnectionPage.continueLabelSend,
                     localDeviceName: _settings.settings.deviceName,
                     localPlatform: defaultTargetPlatform.name,
+                    persistentLocalIdentity:
+                        session?.hasPersistentIdentity ?? false,
                   );
                 },
               );
@@ -432,16 +615,21 @@ class _NearSendAppState extends State<NearSendApp> {
                   fileCount: receiving?.fileCount ?? 0,
                   failureReason: receiving?.failureReason,
                   savedPaths: receiving?.savedPaths ?? const <String>[],
+                  savedFiles: receiving?.savedFiles ?? const [],
                   // Both halves are asked, because §6 announces neither: a client's view of what the
                   // peer offers, and this device's own view of what is being pushed to it.
                   onRefresh: () async {
                     await receiving?.refresh();
                     await incoming?.refresh();
                   },
-                  onAccept: (offer, saveLocation) async =>
+                  onPreview: (offer) async =>
+                      await receiving?.preview(offer) ??
+                      const <ReceiveFilePreview>[],
+                  onAccept: (offer, confirmation) async =>
                       await receiving?.accept(
                         offer,
-                        saveLocationRef: saveLocation,
+                        saveLocationRef: confirmation.location.opaqueValue,
+                        outputNames: confirmation.outputNames,
                       ) ??
                       false,
                   pushOffers: incoming?.pending ?? const <ServerOffer>[],
@@ -450,19 +638,28 @@ class _NearSendAppState extends State<NearSendApp> {
                   pushSpaceEstimate: incoming?.spaceEstimate,
                   pushFailureReason: incoming?.failureReason,
                   pushSavedPaths: incoming?.savedPaths ?? const <String>[],
+                  pushSavedFiles: incoming?.savedFiles ?? const [],
+                  fileActions: widget.fileActions,
                   onCheckPushSpace: _measureIncomingSpace,
+                  onPreviewPush: incoming == null
+                      ? null
+                      : (offer) async => incoming.preview(offer),
+                  initialLocation: _settings.settings.defaultReceiveLocation,
                   onPickLocation:
                       widget.storageGateway == null ||
                           !widget.storageGateway!.supportsDirectorySelection
                       ? null
-                      : () async =>
-                            widget.storageGateway!.pickReceiveDirectory(),
+                      : widget.storageGateway!.pickReceiveDirectory,
+                  onValidateLocation:
+                      widget.storageGateway?.validateReceiveLocation,
+                  onRememberDefault: _settings.updateDefaultReceiveLocation,
                   onAcceptPush: incoming == null
                       ? null
-                      : (offer, saveLocation) async => incoming.accept(
+                      : (offer, confirmation) async => incoming.accept(
                           offer,
-                          context: await _storageContext(saveLocation),
-                          targetRef: saveLocation,
+                          context: await _storageContext(confirmation.location),
+                          targetRef: confirmation.location.opaqueValue,
+                          outputNames: confirmation.outputNames,
                         ),
                 ),
               );
