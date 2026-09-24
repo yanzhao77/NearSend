@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
+import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/core/security/tls_identity.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
@@ -303,6 +305,52 @@ void main() {
       );
       await tester.pump();
       expect(find.text('连接'), findsOneWidget);
+    });
+
+    testWidgets('bootstrap input uses the network-aware connect callback', (
+      tester,
+    ) async {
+      final DeviceIdentity identity = generateDeviceIdentity();
+      final BootstrapPairingPayload bootstrap = BootstrapPairingPayload(
+        mode: BootstrapPairingMode.networkBootstrap,
+        pairing: PairingPayload.parse(
+          '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
+          '"serverFingerprint":"${'ab' * 32}",'
+          '"sessionId":"11111111-2222-4333-8444-555555555555",'
+          '"candidates":[{"host":"10.0.0.9","port":18443}],'
+          '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",'
+          '"expiresInSeconds":120}',
+        ),
+        identityPublicKey: identity.publicKeyDer,
+        deviceId: identity.deviceId,
+        invitationRole: 'host',
+        wifi: BootstrapWifiOffer(
+          ssid: 'NearSend-test',
+          passphrase: 'eight-or-more',
+          security: 'wpa2',
+        ),
+      );
+      BootstrapPairingPayload? connected;
+      bool legacyCalled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildNearSendTheme(Brightness.light),
+          home: ConnectionPage(
+            payload: null,
+            onConnect: (_) => legacyCalled = true,
+            onConnectBootstrap: (BootstrapPairingPayload value) =>
+                connected = value,
+          ),
+        ),
+      );
+
+      await tester.enterText(find.byType(TextField), bootstrap.encode());
+      await tester.pump();
+      await tester.tap(find.text('连接'));
+
+      expect(legacyCalled, isFalse);
+      expect(connected?.deviceId, identity.deviceId);
+      expect(connected?.wifi?.ssid, 'NearSend-test');
     });
 
     testWidgets('a node that is starting is not reported as having none', (

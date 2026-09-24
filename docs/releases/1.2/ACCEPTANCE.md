@@ -49,6 +49,7 @@
 | V12-09 Android 扫码构建 | 受阻 | 两次均在 Maven 下载 Kotlin 1.8 工件时 TLS 握手中断，未进入插件源码编译 |
 | V12-09 Windows 图片导入编译 | 受阻 | 当前主机非 Windows；IFileOpenDialog/有界读取通道需 Windows CI/主机编译 |
 | V12-09 全量测试 | 通过 | `fvm flutter test --reporter compact`，1353 项全部通过 |
+| V12-09 统一入口定向测试 | 通过 | 连接页 25 项通过；bootstrap 扫描值进入网络感知回调，旧 `lft-pair` 保持原路径 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |

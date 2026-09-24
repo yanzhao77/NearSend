@@ -1220,3 +1220,12 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   构建连续两次受 Maven TLS 下载故障阻塞；Windows C++ 未在 Windows 编译，真机摄像头/导图未验。
 - 扫码结果尚未接入热点入网与统一配对协调器，所以 V12-09 仍进行中，不宣称关闭 BLE 后已可完成
   不同网络配对。
+
+### 6.16 NearSend 1.2 二维码统一连接入口（V12-09 第三阶段，2026-09-24）
+
+- 粘贴、移动摄像头和 Windows 图片导入结果统一进入 `ScannedPairingPayload`；旧码交给原
+  `PeerSession`，bootstrap 码进入独立网络感知回调，不让 UI 猜测类型或绕过严格解析。
+- `networkBootstrap` 先用系统网络网关请求加入二维码中的受保护 Wi-Fi，保留真实 lease 后再把嵌套
+  `PairingPayload` 交给现有 TLS pin/一次性令牌握手。入网、TLS 配对失败或应用销毁会尽力释放 lease。
+- 连接页 25 项定向测试与静态分析通过。前一阶段台账中的“协调器尚未接入”由本阶段代码解决，但
+  Android Maven 下载、Windows 编译和真实热点二维码纵向流程仍无证据；平台错误的可见分类待完善。

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
+import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/qr_image_gateway.dart';
 
 /// The connection screen: what this device publishes, and how to reach another one.
 ///
@@ -31,15 +33,18 @@ import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// The state of the "paste a payload" field.
 class PairingImportState {
-  const PairingImportState({this.payload, this.error});
+  const PairingImportState({this.payload, this.bootstrap, this.error});
 
   /// The parsed payload, when the text is one.
   final PairingPayload? payload;
+  final BootstrapPairingPayload? bootstrap;
 
   /// Why it was refused, when it was. The parser's own message, not a generic one.
   final String? error;
 
-  bool get isAccepted => payload != null;
+  bool get isAccepted => pairing != null;
+
+  PairingPayload? get pairing => bootstrap?.pairing ?? payload;
 }
 
 /// Where the attempt to reach another device is.
@@ -83,6 +88,9 @@ class ConnectionPage extends StatefulWidget {
     super.key,
     required this.payload,
     this.onConnect,
+    this.onConnectBootstrap,
+    this.enableCameraScanner = false,
+    this.qrImageGateway,
     this.starting = false,
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
@@ -104,6 +112,9 @@ class ConnectionPage extends StatefulWidget {
   /// rendered**: a control that cannot act is the placeholder this project's rules forbid, and an
   /// absent control with a stated reason is the honest version.
   final void Function(PairingPayload payload)? onConnect;
+  final void Function(BootstrapPairingPayload payload)? onConnectBootstrap;
+  final bool enableCameraScanner;
+  final QrImageGateway? qrImageGateway;
 
   /// Whether this device's own node is still starting.
   final bool starting;
@@ -176,11 +187,40 @@ class _ConnectionPageState extends State<ConnectionPage> {
       return;
     }
     try {
-      // The scanner's parser, so this page cannot accept something the handshake would refuse.
-      final PairingPayload parsed = PairingPayload.parse(trimmed);
-      setState(() => _import = PairingImportState(payload: parsed));
+      final ScannedPairingPayload parsed = ScannedPairingPayload.parse(trimmed);
+      setState(
+        () => _import = switch (parsed) {
+          LegacyScannedPairingPayload() => PairingImportState(
+            payload: parsed.pairing,
+          ),
+          BootstrapPairingPayload() => PairingImportState(bootstrap: parsed),
+        },
+      );
     } on Object catch (error) {
       setState(() => _import = PairingImportState(error: '$error'));
+    }
+  }
+
+  void _acceptImportedText(String value) {
+    _controller.text = value;
+    _parse(value);
+  }
+
+  Future<void> _scan() async {
+    final String? value = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const MobilePairingScannerPage(),
+      ),
+    );
+    if (value != null && mounted) _acceptImportedText(value);
+  }
+
+  void _connectImported() {
+    final BootstrapPairingPayload? bootstrap = _import.bootstrap;
+    if (bootstrap != null) {
+      widget.onConnectBootstrap?.call(bootstrap);
+    } else {
+      widget.onConnect?.call(_import.payload!);
     }
   }
 
@@ -248,17 +288,41 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     ),
                   ),
                   const SizedBox(height: NearSendSpacing.sm),
+                  if (widget.enableCameraScanner ||
+                      widget.qrImageGateway != null)
+                    Wrap(
+                      spacing: NearSendSpacing.sm,
+                      runSpacing: NearSendSpacing.sm,
+                      children: <Widget>[
+                        if (widget.enableCameraScanner)
+                          OutlinedButton.icon(
+                            onPressed: _scan,
+                            icon: const Icon(Icons.qr_code_scanner),
+                            label: const Text('扫描二维码'),
+                          ),
+                        if (widget.qrImageGateway != null)
+                          SizedBox(
+                            width: 180,
+                            child: PairingImageImportButton(
+                              gateway: widget.qrImageGateway!,
+                              onDecoded: _acceptImportedText,
+                            ),
+                          ),
+                      ],
+                    ),
                   if (_import.error != null)
                     _Notice(
                       text: _import.error!,
                       palette: palette,
                       isError: true,
                     ),
-                  if (_import.isAccepted && widget.onConnect != null)
+                  if (_import.isAccepted &&
+                      ((_import.bootstrap == null &&
+                              widget.onConnect != null) ||
+                          (_import.bootstrap != null &&
+                              widget.onConnectBootstrap != null)))
                     FilledButton.icon(
-                      onPressed: attempt.isBusy
-                          ? null
-                          : () => widget.onConnect?.call(_import.payload!),
+                      onPressed: attempt.isBusy ? null : _connectImported,
                       icon: const Icon(Icons.link),
                       label: const Text('连接'),
                     )
@@ -308,7 +372,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   if (_import.isAccepted) ...<Widget>[
                     const SizedBox(height: NearSendSpacing.md),
                     _PeerPreview(
-                      payload: _import.payload!,
+                      payload: _import.pairing!,
                       deviceName: widget.peerDeviceName,
                       platform: widget.peerPlatform,
                       verified: attempt.isConnected,

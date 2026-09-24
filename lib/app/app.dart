@@ -14,6 +14,7 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
+import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
@@ -33,6 +34,8 @@ import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/platform_network_gateway.dart';
+import 'package:nearsend/platform/qr_image_gateway.dart';
 import 'package:nearsend/platform/storage_location.dart';
 
 /// NearSend application root.
@@ -66,6 +69,7 @@ class NearSendApp extends StatefulWidget {
     this.peer,
     this.transferIdFactory,
     this.storageGateway,
+    this.networkGateway,
   });
 
   /// This device's node, when the application has one.
@@ -82,6 +86,7 @@ class NearSendApp extends StatefulWidget {
   final String Function()? transferIdFactory;
 
   final PlatformStorageGateway? storageGateway;
+  final PlatformNetworkGateway? networkGateway;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
@@ -119,6 +124,13 @@ class _NearSendAppState extends State<NearSendApp> {
     gateway: widget.storageGateway,
   );
   late final SettingsController _settings = SettingsController();
+  late final PlatformNetworkGateway _networkGateway =
+      widget.networkGateway ??
+      ((defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.windows)
+          ? MethodChannelPlatformNetworkGateway()
+          : const UnavailablePlatformNetworkGateway());
+  JoinedWifiLease? _joinedWifi;
 
   /// The sending flow, once there is a verified peer and a node to send from.
   ///
@@ -184,6 +196,10 @@ class _NearSendAppState extends State<NearSendApp> {
     _tasks.dispose();
     _space.dispose();
     _settings.dispose();
+    final JoinedWifiLease? joinedWifi = _joinedWifi;
+    if (joinedWifi != null) {
+      unawaited(_releaseJoinedWifi(joinedWifi));
+    }
     super.dispose();
   }
 
@@ -193,15 +209,15 @@ class _NearSendAppState extends State<NearSendApp> {
   /// not exist, and `PeerSession` is what guarantees it does not. Which of them a screen uses is the
   /// user's choice - the same connection serves sending and receiving, which is why they are made
   /// together rather than on the way into a screen.
-  Future<void> connect(PairingPayload payload) async {
+  Future<bool> connect(PairingPayload payload) async {
     final PeerSession? peer = widget.peer;
     if (peer == null) {
-      return;
+      return false;
     }
     final bool connected = await peer.connect(payload);
     final NearSendNode? node = widget.session?.node;
     if (!connected || node == null) {
-      return;
+      return false;
     }
     _flow?.dispose();
     // The session this device published: a peer that pairs with it becomes a client of this node,
@@ -230,6 +246,45 @@ class _NearSendAppState extends State<NearSendApp> {
     );
     if (mounted) {
       setState(() {});
+    }
+    return true;
+  }
+
+  Future<void> connectBootstrap(BootstrapPairingPayload payload) async {
+    JoinedWifiLease? joined;
+    final BootstrapWifiOffer? wifi = payload.wifi;
+    try {
+      if (wifi != null) {
+        final JoinedWifiLease? previous = _joinedWifi;
+        if (previous != null) {
+          await _releaseJoinedWifi(previous);
+        }
+        joined = await _networkGateway.joinWifi(
+          ssid: wifi.ssid,
+          passphrase: wifi.passphrase,
+          security: wifi.security == 'wpa3'
+              ? WifiSecurity.wpa3
+              : WifiSecurity.wpa2,
+        );
+        _joinedWifi = joined;
+      }
+      if (!await connect(payload.pairing) && joined != null) {
+        await _releaseJoinedWifi(joined);
+      }
+    } on Object {
+      if (joined != null) {
+        await _releaseJoinedWifi(joined);
+      }
+    }
+  }
+
+  Future<void> _releaseJoinedWifi(JoinedWifiLease lease) async {
+    try {
+      await _networkGateway.releaseJoinedWifi(lease.leaseId);
+    } on Object {
+      // Cleanup is best effort. The platform also owns lifecycle cleanup.
+    } finally {
+      if (_joinedWifi?.leaseId == lease.leaseId) _joinedWifi = null;
     }
   }
 
@@ -400,6 +455,16 @@ class _NearSendAppState extends State<NearSendApp> {
                         : null,
                     connection: attempt,
                     onConnect: widget.peer == null ? null : connect,
+                    onConnectBootstrap: widget.peer == null
+                        ? null
+                        : connectBootstrap,
+                    enableCameraScanner:
+                        defaultTargetPlatform == TargetPlatform.android ||
+                        defaultTargetPlatform == TargetPlatform.iOS,
+                    qrImageGateway:
+                        defaultTargetPlatform == TargetPlatform.windows
+                        ? MethodChannelQrImageGateway()
+                        : null,
                     onContinue: _continueTarget(receiving) == null
                         ? null
                         : () =>
