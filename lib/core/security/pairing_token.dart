@@ -158,6 +158,18 @@ List<int> generateSecureRandomBytes(int count) {
   return List<int>.generate(count, (_) => random.nextInt(256));
 }
 
+/// Generates a canonical lowercase UUID version 4 (§4).
+String randomUuidV4() {
+  final List<int> bytes = generateSecureRandomBytes(ProtocolLimits.uuidBytes);
+  bytes[6] = (bytes[6] & 0x0F) | 0x40;
+  bytes[8] = (bytes[8] & 0x3F) | 0x80;
+  final String hex = bytes
+      .map((int byte) => byte.toRadixString(16).padLeft(2, '0'))
+      .join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+}
+
 /// Generates the 32 random bytes a pairing token is made of.
 List<int> generatePairingTokenBytes() =>
     generateSecureRandomBytes(ProtocolLimits.pairTokenBytes);

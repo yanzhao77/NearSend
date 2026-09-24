@@ -37,6 +37,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:pointycastle/api.dart';
+import 'package:pointycastle/asn1.dart';
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/ecc/api.dart';
 import 'package:pointycastle/ecc/curves/prime256v1.dart';
@@ -110,8 +111,65 @@ class DeviceIdentity {
 
   String get deviceId => bytesToSha256Hex(SHA256Digest().process(publicKeyDer));
 
+  /// Signs a canonical peer-authentication transcript with the installation key.
+  ///
+  /// The fixed-width `r || s` result avoids accepting multiple DER spellings. A
+  /// low-S signature is required so the same proof has one canonical encoding.
+  Uint8List signAuthenticationTranscript(Uint8List transcript) {
+    final _ParsedDeviceKey key = _parseDeviceKeyPair(
+      publicKeyDer,
+      privateKeyPkcs8Der,
+    );
+    final ECSignature generated = _sign(
+      transcript,
+      key.privateKey,
+      secureRandom(),
+    );
+    final BigInt halfOrder = key.curve.n >> 1;
+    final BigInt canonicalS = generated.s > halfOrder
+        ? key.curve.n - generated.s
+        : generated.s;
+    return Uint8List.fromList(<int>[
+      ..._fixedLength(generated.r, 32),
+      ..._fixedLength(canonicalS, 32),
+    ]);
+  }
+
   @override
   String toString() => 'DeviceIdentity(deviceId=$deviceId)';
+}
+
+/// Verifies a canonical long-term identity signature from an untrusted peer.
+bool verifyDeviceAuthenticationSignature({
+  required Uint8List publicKeyDer,
+  required Uint8List transcript,
+  required Uint8List signature,
+}) {
+  if (signature.length != 64) return false;
+  try {
+    final _ParsedPublicDeviceKey key = _parseDevicePublicKey(publicKeyDer);
+    final BigInt r = _unsignedBigInt(Uint8List.sublistView(signature, 0, 32));
+    final BigInt s = _unsignedBigInt(Uint8List.sublistView(signature, 32));
+    if (r <= BigInt.zero ||
+        r >= key.curve.n ||
+        s <= BigInt.zero ||
+        s > (key.curve.n >> 1)) {
+      return false;
+    }
+    final ECDSASigner verifier = ECDSASigner(
+      SHA256Digest(),
+      HMac(SHA256Digest(), 64),
+    )..init(false, PublicKeyParameter<ECPublicKey>(key.publicKey));
+    return verifier.verifySignature(transcript, ECSignature(r, s));
+  } on Object {
+    return false;
+  }
+}
+
+/// Validates a canonical P-256 public key and returns its stable device ID.
+String deviceIdForPublicKey(Uint8List publicKeyDer) {
+  _parseDevicePublicKey(publicKeyDer);
+  return bytesToSha256Hex(SHA256Digest().process(publicKeyDer));
 }
 
 /// Generates a P-256 identity used to recognize an installation across sessions.
@@ -233,6 +291,181 @@ ECSignature _sign(Uint8List message, ECPrivateKey key, FortunaRandom random) {
         ParametersWithRandom(PrivateKeyParameter<ECPrivateKey>(key), random),
       );
   return signer.generateSignature(message) as ECSignature;
+}
+
+class _ParsedPublicDeviceKey {
+  const _ParsedPublicDeviceKey(this.curve, this.publicKey);
+
+  final ECDomainParameters curve;
+  final ECPublicKey publicKey;
+}
+
+class _ParsedDeviceKey extends _ParsedPublicDeviceKey {
+  const _ParsedDeviceKey(super.curve, super.publicKey, this.privateKey);
+
+  final ECPrivateKey privateKey;
+}
+
+_ParsedPublicDeviceKey _parseDevicePublicKey(Uint8List encoded) {
+  final ASN1Sequence outer = _canonicalSequence(encoded, 'device public key');
+  final List<ASN1Object> fields = outer.elements ?? const <ASN1Object>[];
+  if (fields.length != 2 ||
+      fields[0] is! ASN1Sequence ||
+      fields[1] is! ASN1BitString) {
+    throw const FormatException('device public key schema does not match');
+  }
+  _requireP256Algorithm(fields[0] as ASN1Sequence);
+  final ASN1BitString pointBits = fields[1] as ASN1BitString;
+  final List<int>? pointBytes = pointBits.stringValues;
+  if (pointBits.unusedbits != 0 ||
+      pointBytes == null ||
+      pointBytes.length != 65 ||
+      pointBytes.first != 0x04) {
+    throw const FormatException(
+      'device public key point is not uncompressed P-256',
+    );
+  }
+  final ECDomainParameters curve = ECCurve_prime256v1();
+  final ECPoint? point = curve.curve.decodePoint(
+    Uint8List.fromList(pointBytes),
+  );
+  if (point == null || point.isInfinity) {
+    throw const FormatException('device public key point is invalid');
+  }
+  return _ParsedPublicDeviceKey(curve, ECPublicKey(point, curve));
+}
+
+_ParsedDeviceKey _parseDeviceKeyPair(
+  Uint8List publicKeyDer,
+  Uint8List privateKeyDer,
+) {
+  final _ParsedPublicDeviceKey public = _parseDevicePublicKey(publicKeyDer);
+  final ASN1Sequence outer = _canonicalSequence(
+    privateKeyDer,
+    'device private key',
+  );
+  final List<ASN1Object> fields = outer.elements ?? const <ASN1Object>[];
+  if (fields.length != 3 ||
+      fields[0] is! ASN1Integer ||
+      (fields[0] as ASN1Integer).integer != BigInt.zero ||
+      fields[1] is! ASN1Sequence ||
+      fields[2] is! ASN1OctetString) {
+    throw const FormatException('device private key schema does not match');
+  }
+  _requireP256Algorithm(fields[1] as ASN1Sequence);
+  final Uint8List? sec1Bytes = (fields[2] as ASN1OctetString).octets;
+  if (sec1Bytes == null) {
+    throw const FormatException('device private key payload is missing');
+  }
+  final ASN1Sequence sec1 = _canonicalSequence(sec1Bytes, 'EC private key');
+  final List<ASN1Object> sec1Fields = sec1.elements ?? const <ASN1Object>[];
+  if (sec1Fields.length != 4 ||
+      sec1Fields[0] is! ASN1Integer ||
+      (sec1Fields[0] as ASN1Integer).integer != BigInt.one ||
+      sec1Fields[1] is! ASN1OctetString ||
+      sec1Fields[2].tag != 0xA0 ||
+      sec1Fields[3].tag != 0xA1) {
+    throw const FormatException('EC private key schema does not match');
+  }
+  _requireExplicitOid(sec1Fields[2], _oidPrime256v1);
+  final ASN1BitString embeddedPublic = _explicitBitString(sec1Fields[3]);
+  final Uint8List expectedPoint = public.publicKey.Q!.getEncoded(false);
+  if (embeddedPublic.unusedbits != 0 ||
+      embeddedPublic.stringValues == null ||
+      !_sameBytes(embeddedPublic.stringValues!, expectedPoint)) {
+    throw const FormatException('device private and public keys do not match');
+  }
+  final Uint8List? scalarBytes = (sec1Fields[1] as ASN1OctetString).octets;
+  if (scalarBytes == null || scalarBytes.length != 32) {
+    throw const FormatException('device private scalar has the wrong length');
+  }
+  final BigInt scalar = _unsignedBigInt(scalarBytes);
+  if (scalar <= BigInt.zero || scalar >= public.curve.n) {
+    throw const FormatException('device private scalar is out of range');
+  }
+  final ECPoint calculated = (public.curve.G * scalar)!;
+  if (!_sameBytes(calculated.getEncoded(false), expectedPoint)) {
+    throw const FormatException(
+      'device private scalar does not match public key',
+    );
+  }
+  return _ParsedDeviceKey(
+    public.curve,
+    public.publicKey,
+    ECPrivateKey(scalar, public.curve),
+  );
+}
+
+ASN1Sequence _canonicalSequence(Uint8List encoded, String field) {
+  try {
+    final ASN1Parser parser = ASN1Parser(encoded);
+    final ASN1Object parsed = parser.nextObject();
+    if (parsed is! ASN1Sequence ||
+        parser.hasNext() ||
+        !_sameBytes(parsed.encode(), encoded)) {
+      throw FormatException('$field is not one canonical DER sequence');
+    }
+    return parsed;
+  } on FormatException {
+    rethrow;
+  } on Object {
+    throw FormatException('$field is not valid DER');
+  }
+}
+
+void _requireP256Algorithm(ASN1Sequence sequence) {
+  final List<ASN1Object> fields = sequence.elements ?? const <ASN1Object>[];
+  if (fields.length != 2 ||
+      fields[0] is! ASN1ObjectIdentifier ||
+      fields[1] is! ASN1ObjectIdentifier ||
+      (fields[0] as ASN1ObjectIdentifier).objectIdentifierAsString !=
+          _oidEcPublicKey ||
+      (fields[1] as ASN1ObjectIdentifier).objectIdentifierAsString !=
+          _oidPrime256v1) {
+    throw const FormatException('device key algorithm must be P-256');
+  }
+}
+
+void _requireExplicitOid(ASN1Object object, String expected) {
+  final Uint8List? bytes = object.valueBytes;
+  if (bytes == null) throw const FormatException('explicit OID is missing');
+  final ASN1Parser parser = ASN1Parser(bytes);
+  final ASN1Object parsed = parser.nextObject();
+  if (parsed is! ASN1ObjectIdentifier ||
+      parser.hasNext() ||
+      parsed.objectIdentifierAsString != expected) {
+    throw const FormatException('explicit OID does not match');
+  }
+}
+
+ASN1BitString _explicitBitString(ASN1Object object) {
+  final Uint8List? bytes = object.valueBytes;
+  if (bytes == null) {
+    throw const FormatException('explicit bit string is missing');
+  }
+  final ASN1Parser parser = ASN1Parser(bytes);
+  final ASN1Object parsed = parser.nextObject();
+  if (parsed is! ASN1BitString || parser.hasNext()) {
+    throw const FormatException('explicit value is not one bit string');
+  }
+  return parsed;
+}
+
+BigInt _unsignedBigInt(List<int> bytes) {
+  BigInt value = BigInt.zero;
+  for (final int byte in bytes) {
+    value = (value << 8) | BigInt.from(byte);
+  }
+  return value;
+}
+
+bool _sameBytes(List<int> first, List<int> second) {
+  if (first.length != second.length) return false;
+  int difference = 0;
+  for (int index = 0; index < first.length; index++) {
+    difference |= first[index] ^ second[index];
+  }
+  return difference == 0;
 }
 
 List<Uint8List> _extensions(List<String> subjectAltNames) => <Uint8List>[

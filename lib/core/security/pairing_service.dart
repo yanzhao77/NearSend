@@ -32,6 +32,8 @@
 /// both ends of this build are the same code, so they agree because neither claims anything.
 library;
 
+export 'package:nearsend/core/security/pairing_token.dart' show randomUuidV4;
+
 import 'package:nearsend/core/network/control_authorization.dart';
 import 'package:nearsend/core/network/control_message.dart';
 import 'package:nearsend/core/network/control_pipeline.dart';
@@ -278,21 +280,4 @@ final class _PairedSession {
   final String sessionId;
   final String tokenDigest;
   final int expiresAtMillis;
-}
-
-/// Generates a canonical lowercase UUID version 4 (§4).
-///
-/// Written here rather than taken from a package because §4's rules are about the *spelling*,
-/// and a UUID library that emits uppercase or urn-prefixed forms would produce identifiers
-/// this project's own `uuidToBytes` refuses. The version and variant bits are set as RFC 4122
-/// requires, so the result is a real v4 and not merely 16 random bytes in the right shape.
-String randomUuidV4() {
-  final List<int> bytes = generateSecureRandomBytes(ProtocolLimits.uuidBytes);
-  bytes[6] = (bytes[6] & 0x0F) | 0x40; // version 4
-  bytes[8] = (bytes[8] & 0x3F) | 0x80; // RFC 4122 variant
-  final String hex = bytes
-      .map((int b) => b.toRadixString(16).padLeft(2, '0'))
-      .join();
-  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
-      '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
 }

@@ -29,10 +29,10 @@
 | V12-01 系统位置与迁移 | 进行中 | 已实现严格版本化 `StorageLocationRef`、旧字符串值迁移、畸形值保留修复状态、Android 系统目录树选择/持久授权复查/有界 SAF 导出，以及 Windows `IFileDialog`/Known Folder/空间查询；28 项定向测试、1267 项全量测试与 Android Kotlin 编译通过 | Android 真机验证重启后写入/撤权；在 Windows CI/主机编译并实测目录选择与写入 |
 | V12-02 接收输出计划 | 当前环境完成 | schema v8 持久化冻结原名、本地改名、目标引用、冲突策略和导出状态；两个真实 TLS 方向均在接受前建计划，改名不改变清单/哈希，1275 项全量测试通过 | Android/Windows 实机验证权限失效、崩溃重试、同名冲突和平台句柄重开 |
 | V12-03 设置与确认 UI | 当前环境完成 | 默认目录选择先复查权限再持久化；单/多文件在一次弹框中确认位置与本地名称；取消、非法名、撤权和空间不足均不会接受；两个真实 TLS 方向已从确认 UI 保存并校验文件 | Android/Windows 实机验证系统选择器、重启授权、撤权修复与多文件保存 |
-| V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据，已绑定身份缺失/错配失败关闭，旧数据库可建立首个稳定身份；peer 历史含撤销与最近实时验证 | 将长期身份绑定到 V12-07 双向认证；Windows 编译及 Android/Windows 重启实测 |
+| V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据；已知设备挑战已将身份、就绪状态和 TLS pin 绑定并可更新最近实时验证 | Windows 编译及 Android/Windows 重启、双向挑战实测 |
 | V12-05 mDNS 发现 | 进行中 | 固定 `bonsoir 7.1.5`；实现最小 TXT、严格候选解析、发布/浏览/更新/丢失/停止生命周期；Android Kotlin 与 iOS Simulator 构建通过 | Android/Windows 同网双机发现并完成身份认证；验证隔离网络与网络切换清理 |
 | V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现无设备名广告、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；14 项定向测试、1322 项全量测试通过 | Android/Windows 双机验证不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期；Windows 编译 |
-| V12-07 统一安全配对 | 受阻于 V12-00 | 现有 QR 指纹与一次性令牌路径可用；短码 PAKE 尚未选型 | 选择成熟 PAKE 实现并完成向量互操作 |
+| V12-07 统一安全配对 | 部分完成，PAKE 受阻 | 已实现已授权设备 P-256 新鲜挑战、角色/版本/ready/TLS pin 绑定、30 秒有效期、重放/撤销/身份替换失败关闭；现有 QR 指纹与一次性令牌路径保留 | 选择满足审计、向量和 Android/Windows/iOS 支持的成熟 PAKE；双机验证双向挑战 |
 | V12-08 热点与数据通道 | 受阻于 V12-00/V12-06/V12-07 | 现有 HTTPS 数据通道可复用 | 验证 Android 热点、Windows 加入和目标网络绑定 |
 | V12-09 二维码入口 | 未开始 | 现有严格 `lft-pair` 解析器保留 | 定义新版载荷并复用统一认证协调器 |
 | V12-10 首页雷达与在线历史 | 未开始 | 首页仅显示节点连接状态 | 等发现、身份和网络状态接口稳定后接入 |
@@ -127,6 +127,21 @@
   TLS 中断失败，重试后主应用和 BLE 插件 Kotlin 编译通过；iOS Simulator 构建通过。插件报告旧
   Android GATT API 和 Kotlin Gradle Plugin 弃用警告。Windows 编译、Android/Windows 双机控制
   消息、权限、MTU、适配器关闭、后台和断线恢复尚未执行，因此 V12-06 保持进行中。
+
+## V12-07 已知设备认证阶段记录
+
+- 长期 P-256 身份现在可签署规范 `NSPEER1` transcript。签名覆盖协议版本、事务 UUID、verifier/
+  prover 角色、32 字节挑战、ready 和当前 TLS leaf 指纹；使用固定 64 字节 low-S ECDSA
+  P-256/SHA-256，严格解析规范 SPKI/PKCS#8 DER。
+- 挑战 30 秒过期、一次消费、最多 16 个待处理项。成功、失败、过期和撤销后均不可重放；已授权
+  公钥必须逐字节匹配。只有成功验证能更新 `last_verified_at` 和该长期身份绑定的 TLS pin。
+- 自动化覆盖 proof 重放、ready/TLS pin 篡改、身份替换、角色反射、签发后撤销、过期、上限回收和
+  畸形/超限 wire 输入。广告、设备名、IP 和 mDNS 记录没有更新在线状态的入口。
+- PAKE 调研拒绝 `spake2plus 1.0.2`（仅 Linux/macOS、外部 OpenSSL 3 FFI）和 `dsrp 0.5.5`
+  （未审计 0.x、发布包缺测试、自选 safe prime 风险）。首次短码配对继续受阻，不使用自制替代；
+  现有高熵二维码一次性令牌路径保留。
+- 定向安全测试 42 项、全量测试 1337 项和静态分析通过。Android/Windows 双向认证与平台构建仍
+  缺少对应环境；当前没有双机实测证据。
 
 ## 人工重点复核
 

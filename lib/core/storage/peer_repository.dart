@@ -114,6 +114,16 @@ class PeerRepository {
     return rows.isEmpty ? null : rows.first['identity_fingerprint'] as String;
   }
 
+  PeerRecord? find(String peerId) {
+    final ResultSet rows = database.db.select(
+      'SELECT peer_id, display_name, identity_fingerprint, identity_public_key, '
+      'platform, trust_state, paired_at, last_seen_at, last_verified_at FROM peers '
+      'WHERE peer_id = ?;',
+      <Object?>[peerId],
+    );
+    return rows.isEmpty ? null : _recordFromRow(rows.first);
+  }
+
   /// Records that the **user** authorised this peer at this fingerprint.
   ///
   /// Named for the user's decision on purpose: calling it is an assertion that the user
@@ -203,27 +213,48 @@ class PeerRepository {
     return true;
   }
 
+  /// Commits a signed long-term identity proof and its TLS endpoint binding.
+  ///
+  /// The caller must cryptographically verify the proof before calling this
+  /// method. The SQL still requires the exact stored public key and authorized
+  /// state, so a stale or revoked proof cannot update either presence or pin.
+  bool recordVerifiedIdentityPresence({
+    required String peerId,
+    required String identityPublicKey,
+    required String tlsFingerprint,
+  }) {
+    final int moment = now();
+    return database.transaction(() {
+      database.db.execute(
+        'UPDATE peers SET identity_fingerprint = ?, last_seen_at = ?, '
+        'last_verified_at = ? WHERE peer_id = ? AND identity_public_key = ? '
+        "AND trust_state = 'authorized';",
+        <Object?>[tlsFingerprint, moment, moment, peerId, identityPublicKey],
+      );
+      return database.db.updatedRows == 1;
+    });
+  }
+
   List<PeerRecord> history() {
     final ResultSet rows = database.db.select(
       'SELECT peer_id, display_name, identity_fingerprint, identity_public_key, '
       'platform, trust_state, paired_at, last_seen_at, last_verified_at FROM peers '
       'ORDER BY COALESCE(last_seen_at, 0) DESC, peer_id;',
     );
-    return <PeerRecord>[
-      for (final Row row in rows)
-        PeerRecord(
-          peerId: row['peer_id'] as String,
-          displayName: row['display_name'] as String?,
-          identityFingerprint: row['identity_fingerprint'] as String,
-          identityPublicKey: row['identity_public_key'] as String?,
-          platform: row['platform'] as String?,
-          trust: row['trust_state'] == 'authorized'
-              ? PeerTrust.authorized
-              : PeerTrust.revoked,
-          pairedAt: row['paired_at'] as int?,
-          lastSeenAt: row['last_seen_at'] as int?,
-          lastVerifiedAt: row['last_verified_at'] as int?,
-        ),
-    ];
+    return <PeerRecord>[for (final Row row in rows) _recordFromRow(row)];
   }
+
+  static PeerRecord _recordFromRow(Row row) => PeerRecord(
+    peerId: row['peer_id'] as String,
+    displayName: row['display_name'] as String?,
+    identityFingerprint: row['identity_fingerprint'] as String,
+    identityPublicKey: row['identity_public_key'] as String?,
+    platform: row['platform'] as String?,
+    trust: row['trust_state'] == 'authorized'
+        ? PeerTrust.authorized
+        : PeerTrust.revoked,
+    pairedAt: row['paired_at'] as int?,
+    lastSeenAt: row['last_seen_at'] as int?,
+    lastVerifiedAt: row['last_verified_at'] as int?,
+  );
 }

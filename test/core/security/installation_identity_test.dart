@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/security/installation_identity.dart';
@@ -36,6 +38,67 @@ void main() {
     expect(
       () => InstallationIdentity.decode('{"version":2}'),
       throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('device identity signs a canonical low-S authentication proof', () {
+    final DeviceIdentity identity = generateDeviceIdentity();
+    final Uint8List transcript = Uint8List.fromList(<int>[1, 2, 3, 4]);
+
+    final Uint8List signature = identity.signAuthenticationTranscript(
+      transcript,
+    );
+
+    expect(signature, hasLength(64));
+    expect(
+      verifyDeviceAuthenticationSignature(
+        publicKeyDer: identity.publicKeyDer,
+        transcript: transcript,
+        signature: signature,
+      ),
+      isTrue,
+    );
+    expect(
+      verifyDeviceAuthenticationSignature(
+        publicKeyDer: identity.publicKeyDer,
+        transcript: Uint8List.fromList(<int>[1, 2, 3, 5]),
+        signature: signature,
+      ),
+      isFalse,
+    );
+  });
+
+  test('device authentication rejects another key and malformed encodings', () {
+    final DeviceIdentity identity = generateDeviceIdentity();
+    final DeviceIdentity other = generateDeviceIdentity();
+    final Uint8List transcript = Uint8List.fromList(<int>[9, 8, 7]);
+    final Uint8List signature = identity.signAuthenticationTranscript(
+      transcript,
+    );
+
+    expect(
+      verifyDeviceAuthenticationSignature(
+        publicKeyDer: other.publicKeyDer,
+        transcript: transcript,
+        signature: signature,
+      ),
+      isFalse,
+    );
+    expect(
+      verifyDeviceAuthenticationSignature(
+        publicKeyDer: Uint8List.fromList(<int>[0x30, 0]),
+        transcript: transcript,
+        signature: signature,
+      ),
+      isFalse,
+    );
+    expect(
+      verifyDeviceAuthenticationSignature(
+        publicKeyDer: identity.publicKeyDer,
+        transcript: transcript,
+        signature: Uint8List(63),
+      ),
+      isFalse,
     );
   });
 
