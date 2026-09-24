@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/settings_controller.dart';
+import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/application/task_catalog_controller.dart';
 import 'package:nearsend/features/home/presentation/home_page.dart';
@@ -16,19 +17,25 @@ class NearSendAppShell extends StatefulWidget {
     required this.tasks,
     required this.space,
     required this.settings,
+    this.radar,
     this.deviceName = 'NearSend',
     this.connectionLabel = '连接状态未知',
     this.connectionTone = NsStatusTone.warning,
     this.onContinueTask,
+    this.onRadarReadyChanged,
+    this.onRadarDevicePressed,
   });
 
   final TaskCatalogController tasks;
   final SpaceOverviewController space;
   final SettingsController settings;
+  final RadarController? radar;
   final String deviceName;
   final String connectionLabel;
   final NsStatusTone connectionTone;
   final VoidCallback? onContinueTask;
+  final ValueChanged<bool>? onRadarReadyChanged;
+  final ValueChanged<RadarDevice>? onRadarDevicePressed;
 
   @override
   State<NearSendAppShell> createState() => _NearSendAppShellState();
@@ -48,7 +55,11 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge(<Listenable>[widget.tasks, widget.settings]),
+      listenable: Listenable.merge(<Listenable>[
+        widget.tasks,
+        widget.settings,
+        if (widget.radar != null) widget.radar!,
+      ]),
       builder: (BuildContext context, Widget? child) => LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final bool desktop = _isDesktop(context);
@@ -131,6 +142,12 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
           .where((TaskOverview task) => task.isRecoverable)
           .length,
       onContinue: widget.onContinueTask,
+      radarReady: widget.radar?.ready ?? false,
+      radarBusy: widget.radar?.isBusy ?? false,
+      radarFailureReason: widget.radar?.failureReason,
+      onRadarReadyChanged: widget.onRadarReadyChanged,
+      radarDevices: widget.radar?.devices ?? const <RadarDevice>[],
+      onRadarDevicePressed: widget.onRadarDevicePressed,
     ),
     1 => TaskOverviewPage(controller: widget.tasks),
     2 => SpaceOverviewPage(controller: widget.space),

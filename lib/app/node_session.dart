@@ -114,6 +114,7 @@ class NodeSession extends ChangeNotifier {
   String? _failureReason;
   String? _discoveryFailureReason;
   Future<void>? _attempt;
+  bool _discoveryEnabled = false;
   bool _disposed = false;
 
   NodePhase get phase => _phase;
@@ -179,7 +180,7 @@ class NodeSession extends ChangeNotifier {
       _discoveryFailureReason = null;
       final MdnsDiscoveryGateway? mdns = discovery;
       final PairingPayload? payload = node.payload;
-      if (mdns != null && payload != null) {
+      if (_discoveryEnabled && mdns != null && payload != null) {
         try {
           await mdns.start(
             MdnsPublication(
@@ -205,6 +206,35 @@ class NodeSession extends ChangeNotifier {
     }
   }
 
+  Future<void> setDiscoveryEnabled(bool enabled) async {
+    _discoveryEnabled = enabled;
+    final MdnsDiscoveryGateway? mdns = discovery;
+    if (mdns == null) return;
+    if (!enabled) {
+      await mdns.stop();
+      _discoveryFailureReason = null;
+      notifyListeners();
+      return;
+    }
+    final NearSendNode? running = node;
+    final PairingPayload? currentPayload = payload;
+    if (phase != NodePhase.ready || running == null || currentPayload == null) {
+      return;
+    }
+    try {
+      await mdns.start(
+        MdnsPublication(
+          instanceId: currentPayload.sessionId,
+          port: running.server.boundPort,
+        ),
+      );
+      _discoveryFailureReason = null;
+    } on Object {
+      _discoveryFailureReason = '局域网自动发现不可用，仍可使用手动连接。';
+    }
+    notifyListeners();
+  }
+
   /// Closes the node, waiting for an in-flight open so a stop cannot be undone by it.
   Future<void> stop() async {
     final Future<void>? inFlight = _attempt;
@@ -214,6 +244,7 @@ class NodeSession extends ChangeNotifier {
     final NodeRuntime? running = _runtime;
     _runtime = null;
     _payload = null;
+    _discoveryEnabled = false;
     _discoveryFailureReason = null;
     try {
       await discovery?.stop();

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/app_settings_repository.dart';
+import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/app/application/settings_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/application/task_catalog_controller.dart';
@@ -17,6 +18,7 @@ import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/peer_repository.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/features/about/presentation/about_page.dart';
@@ -37,6 +39,8 @@ import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_network_gateway.dart';
 import 'package:nearsend/platform/qr_image_gateway.dart';
 import 'package:nearsend/platform/storage_location.dart';
+import 'package:nearsend/platform/ble_control_gateway.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 /// NearSend application root.
 ///
@@ -70,6 +74,7 @@ class NearSendApp extends StatefulWidget {
     this.transferIdFactory,
     this.storageGateway,
     this.networkGateway,
+    this.bleGateway,
   });
 
   /// This device's node, when the application has one.
@@ -87,6 +92,7 @@ class NearSendApp extends StatefulWidget {
 
   final PlatformStorageGateway? storageGateway;
   final PlatformNetworkGateway? networkGateway;
+  final BleControlGateway? bleGateway;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
@@ -124,6 +130,11 @@ class _NearSendAppState extends State<NearSendApp> {
     gateway: widget.storageGateway,
   );
   late final SettingsController _settings = SettingsController();
+  late final RadarController _radar = RadarController();
+  StreamSubscription<MdnsDiscoveryEvent>? _radarDiscovery;
+  StreamSubscription<BleControlEvent>? _radarBle;
+  Future<void> _radarTransition = Future<void>.value();
+  bool _radarDesired = false;
   late final PlatformNetworkGateway _networkGateway =
       widget.networkGateway ??
       ((defaultTargetPlatform == TargetPlatform.android ||
@@ -151,6 +162,7 @@ class _NearSendAppState extends State<NearSendApp> {
   @override
   void initState() {
     super.initState();
+    _radarBle = widget.bleGateway?.events.listen(_radar.handleBle);
     // Not awaited: the first frame must not wait for a socket and a database, and the session
     // publishes its own phases for the screen to render in the meantime.
     unawaited(_openNode());
@@ -174,6 +186,11 @@ class _NearSendAppState extends State<NearSendApp> {
     );
     _tasks.attach(node.database);
     _settings.attach(AppSettingsRepository(node.database));
+    _radar.attach(PeerRepository(node.database));
+    final MdnsDiscoveryGateway? discovery = session.discovery;
+    if (discovery != null) {
+      _radarDiscovery = discovery.events.listen(_radar.handleMdns);
+    }
     unawaited(_space.refresh());
     if (mounted) {
       setState(() {});
@@ -196,11 +213,72 @@ class _NearSendAppState extends State<NearSendApp> {
     _tasks.dispose();
     _space.dispose();
     _settings.dispose();
+    unawaited(_radarDiscovery?.cancel());
+    unawaited(_radarBle?.cancel());
+    unawaited(widget.bleGateway?.stop());
+    _radar.dispose();
     final JoinedWifiLease? joinedWifi = _joinedWifi;
     if (joinedWifi != null) {
       unawaited(_releaseJoinedWifi(joinedWifi));
     }
     super.dispose();
+  }
+
+  void _requestRadarReady(bool value) {
+    _radarDesired = value;
+    _radarTransition = _radarTransition.then((_) => _applyRadarReady(value));
+  }
+
+  Future<void> _applyRadarReady(bool value) async {
+    final NodeSession? session = widget.session;
+    if (!value) {
+      _radar.markStopping();
+      await Future.wait<void>(<Future<void>>[
+        if (session != null) session.setDiscoveryEnabled(false),
+        if (widget.bleGateway != null) widget.bleGateway!.stop(),
+      ]);
+      _radar.markOff();
+      return;
+    }
+
+    if (session?.phase != NodePhase.ready || session?.payload == null) {
+      _radar.markError('本机节点尚未就绪，请稍后重试。');
+      return;
+    }
+    _radar.markStarting();
+    bool started = false;
+    final List<String> failures = <String>[];
+    if (session!.discovery != null) {
+      await session.setDiscoveryEnabled(true);
+      if (session.discovery!.isRunning) {
+        started = true;
+      } else if (session.discoveryFailureReason != null) {
+        failures.add(session.discoveryFailureReason!);
+      }
+    }
+    final BleControlGateway? ble = widget.bleGateway;
+    if (ble != null) {
+      try {
+        if (await ble.requestAuthorization()) {
+          await ble.start(
+            BlePublication.fromInstanceId(session.payload!.sessionId),
+          );
+          started = ble.isRunning || started;
+        } else {
+          failures.add('蓝牙权限未授予。');
+        }
+      } on Object {
+        failures.add('蓝牙发现不可用。');
+      }
+    }
+    if (!_radarDesired) return;
+    if (started) {
+      _radar.markReady();
+    } else {
+      _radar.markError(
+        failures.isEmpty ? '当前平台没有可用的附近设备发现渠道。' : failures.join(' '),
+      );
+    }
   }
 
   /// Pairs with the device that published [payload], and prepares for either direction.
@@ -404,11 +482,15 @@ class _NearSendAppState extends State<NearSendApp> {
               tasks: _tasks,
               space: _space,
               settings: _settings,
+              radar: _radar,
               deviceName: _settings.settings.deviceName,
               connectionLabel: _connectionLabel,
               connectionTone: _connectionTone,
               onContinueTask: () =>
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
+              onRadarReadyChanged: _requestRadarReady,
+              onRadarDevicePressed: (RadarDevice _) =>
+                  Navigator.of(context).pushNamed(NearSendApp.connectRoute),
             ),
             NearSendApp.aboutRoute: (_) => const AboutPage(),
             NearSendApp.tasksRoute: (_) => TaskOverviewPage(controller: _tasks),

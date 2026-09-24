@@ -212,24 +212,30 @@ void main() {
     },
   );
 
-  test('mDNS publishes only after the node has a real endpoint', () async {
-    final _DiscoveryAdapter adapter = _DiscoveryAdapter();
-    final NodeSession session = NodeSession(
-      resolveDirectory: () async => directory(),
-      candidateAddresses: const <String>['127.0.0.1'],
-      discovery: MdnsDiscoveryGateway(adapter: adapter),
-    );
+  test(
+    'mDNS stays off until enabled and then publishes the real endpoint',
+    () async {
+      final _DiscoveryAdapter adapter = _DiscoveryAdapter();
+      final NodeSession session = NodeSession(
+        resolveDirectory: () async => directory(),
+        candidateAddresses: const <String>['127.0.0.1'],
+        discovery: MdnsDiscoveryGateway(adapter: adapter),
+      );
 
-    await session.start();
+      await session.start();
 
-    expect(adapter.publication, isNotNull);
-    expect(adapter.publication!.port, session.node!.server.boundPort);
-    expect(adapter.publication!.instanceId, session.payload!.sessionId);
-    expect(session.discoveryFailureReason, isNull);
+      expect(adapter.publication, isNull);
+      await session.setDiscoveryEnabled(true);
 
-    await session.stop();
-    expect(adapter.session.stops, 1);
-  });
+      expect(adapter.publication, isNotNull);
+      expect(adapter.publication!.port, session.node!.server.boundPort);
+      expect(adapter.publication!.instanceId, session.payload!.sessionId);
+      expect(session.discoveryFailureReason, isNull);
+
+      await session.stop();
+      expect(adapter.session.stops, 1);
+    },
+  );
 
   test('mDNS failure is reported without disabling manual pairing', () async {
     final NodeSession session = NodeSession(
@@ -239,6 +245,8 @@ void main() {
     );
 
     await session.start();
+
+    await session.setDiscoveryEnabled(true);
 
     expect(session.phase, NodePhase.ready);
     expect(session.payload, isNotNull);

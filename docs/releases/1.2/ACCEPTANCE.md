@@ -50,6 +50,11 @@
 | V12-09 Windows 图片导入编译 | 受阻 | 当前主机非 Windows；IFileOpenDialog/有界读取通道需 Windows CI/主机编译 |
 | V12-09 全量测试 | 通过 | `fvm flutter test --reporter compact`，1353 项全部通过 |
 | V12-09 统一入口定向测试 | 通过 | 连接页 25 项通过；bootstrap 扫描值进入网络感知回调，旧 `lft-pair` 保持原路径 |
+| V12-10 雷达定向测试 | 通过 | 22 项通过；覆盖默认关闭、显式 mDNS 启停、BLE/mDNS 候选无灯、新鲜授权证明绿灯、过期/撤销熄灯、窄屏长名称和响应式壳 |
+| V12-10 静态分析 | 通过 | `fvm flutter analyze`，`No issues found` |
+| V12-10 应用流程回归 | 通过 | `test/app/app_test.dart` 6 项通过；发送、接收、节点失败和真实 TLS 文件流程保持可用 |
+| V12-10 全量回归 | 通过 | 修正首页主操作顺序和新增测试滚动后，`fvm flutter test --reporter compact` 1361 项通过；此前失败运行保留为修复过程 |
+| V12-10 BLE/mDNS 生产挑战 | 受阻 | 安全挑战实现尚未接入生产控制消息；PAKE 无合格跨平台实现，不能从未认证候选静默建立信任 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
@@ -80,6 +85,33 @@
 | A18 历史设备离线后熄灯 | 未执行 | V12-10 尚未实现 |
 | A19 QR 过期、复用和篡改 | 未执行 | V12-09 尚未实现 |
 | A20 热点会话结束或取消后的清理 | 未执行 | V12-08/V12-11 尚未实现 |
+
+## V12-10 首页雷达证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm dart format --output=none --set-exit-if-changed .
+结果：223 files，0 changed
+
+fvm flutter test test/app/application/radar_controller_test.dart \
+  test/features/home/home_page_test.dart \
+  test/app/presentation/app_shell_test.dart \
+  test/app/node_session_test.dart --reporter compact
+结果：22 tests passed
+
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test test/app/app_test.dart --reporter compact
+结果：6 tests passed
+
+fvm flutter test --reporter compact
+结果：1361 tests passed
+```
+
+没有执行 Android/Windows 双机雷达、BLE 权限/适配器关闭、后台恢复和生产挑战交换。自动化中的
+模拟事件只验证状态边界，不构成无线发现、绿灯或可信配对的实机证据。
 
 ## V12-01 自动化证据
 
