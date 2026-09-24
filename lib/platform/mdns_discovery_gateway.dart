@@ -11,7 +11,13 @@ const String nearSendMdnsServiceType = '_nearsend._tcp';
 const String mdnsDiscoveryCapability = 'discovery.mdns.v1';
 
 class MdnsPublication {
-  MdnsPublication({required this.instanceId, required this.port}) {
+  MdnsPublication({
+    required this.instanceId,
+    required this.port,
+    String deviceName = 'NearSend',
+    String platform = 'unknown',
+  }) : displayName = _normalizePublishedDisplayName(deviceName),
+       platform = _normalizePublishedPlatform(platform) {
     uuidToBytes(instanceId, 'mDNS instance id');
     if (port < 1 || port > ProtocolLimits.maxPort) {
       throw ArgumentError.value(port, 'port', 'must be 1..65535');
@@ -20,6 +26,8 @@ class MdnsPublication {
 
   final String instanceId;
   final int port;
+  final String displayName;
+  final String platform;
 
   String get serviceName => 'NearSend-${instanceId.substring(0, 8)}';
 
@@ -28,6 +36,8 @@ class MdnsPublication {
     'min': '${ProtocolLimits.protocolMinor}',
     'iid': instanceId,
     'caps': mdnsDiscoveryCapability,
+    'dn': displayName,
+    'pf': platform,
   };
 }
 
@@ -54,6 +64,8 @@ class MdnsDiscoveredPeer {
     required this.capabilities,
     required this.addresses,
     required this.port,
+    this.displayName,
+    this.platform,
   });
 
   static const int maxAddresses = 16;
@@ -66,6 +78,8 @@ class MdnsDiscoveredPeer {
   final Set<String> capabilities;
   final List<String> addresses;
   final int port;
+  final String? displayName;
+  final String? platform;
 
   bool get isProtocolCompatible =>
       protocolMajor == ProtocolLimits.protocolMajor;
@@ -95,6 +109,14 @@ class MdnsDiscoveredPeer {
         !capabilities.contains(mdnsDiscoveryCapability)) {
       return null;
     }
+    final String? displayName = _parseOptionalDisplayName(
+      wire.attributes['dn'],
+    );
+    final String? platform = _parseOptionalPlatform(wire.attributes['pf']);
+    if ((wire.attributes.containsKey('dn') && displayName == null) ||
+        (wire.attributes.containsKey('pf') && platform == null)) {
+      return null;
+    }
 
     final List<String> addresses = <String>[];
     for (final String raw in wire.hostAddresses.take(maxAddresses * 2)) {
@@ -113,6 +135,8 @@ class MdnsDiscoveredPeer {
       capabilities: Set<String>.unmodifiable(capabilities),
       addresses: List<String>.unmodifiable(addresses),
       port: wire.port,
+      displayName: displayName,
+      platform: platform,
     );
   }
 
@@ -163,6 +187,47 @@ class MdnsDiscoveredPeer {
     return true;
   }
 }
+
+const int _maxDiscoveryDisplayNameBytes = 64;
+
+String _normalizePublishedDisplayName(String value) {
+  final String trimmed = value.trim();
+  if (trimmed.isEmpty || _containsControlCharacter(trimmed)) return 'NearSend';
+  final StringBuffer bounded = StringBuffer();
+  for (final int rune in trimmed.runes) {
+    final String candidate =
+        '${bounded.toString()}${String.fromCharCode(rune)}';
+    if (utf8.encode(candidate).length > _maxDiscoveryDisplayNameBytes) break;
+    bounded.writeCharCode(rune);
+  }
+  return bounded.isEmpty ? 'NearSend' : bounded.toString();
+}
+
+String _normalizePublishedPlatform(String value) {
+  final String normalized = value.trim().toLowerCase();
+  return RegExp(r'^[a-z0-9][a-z0-9._-]{0,23}$').hasMatch(normalized)
+      ? normalized
+      : 'unknown';
+}
+
+String? _parseOptionalDisplayName(String? value) {
+  if (value == null) return null;
+  if (value.isEmpty ||
+      value.trim() != value ||
+      utf8.encode(value).length > _maxDiscoveryDisplayNameBytes ||
+      _containsControlCharacter(value)) {
+    return null;
+  }
+  return value;
+}
+
+String? _parseOptionalPlatform(String? value) {
+  if (value == null) return null;
+  return RegExp(r'^[a-z0-9][a-z0-9._-]{0,23}$').hasMatch(value) ? value : null;
+}
+
+bool _containsControlCharacter(String value) =>
+    value.runes.any((int rune) => rune < 0x20 || rune == 0x7f);
 
 sealed class MdnsDiscoveryEvent {
   const MdnsDiscoveryEvent();

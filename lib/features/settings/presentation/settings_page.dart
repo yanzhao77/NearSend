@@ -5,6 +5,7 @@ import 'package:nearsend/app/application/settings_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 import 'package:nearsend/platform/storage_location.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -12,10 +13,12 @@ class SettingsPage extends StatefulWidget {
     super.key,
     required this.controller,
     required this.space,
+    this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
   });
 
   final SettingsController controller;
   final SpaceOverviewController space;
+  final PlatformPermissionGateway permissionGateway;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -87,6 +90,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _pickReceiveLocation() async {
     try {
+      final PlatformPermissionState permission = await ensurePlatformPermission(
+        widget.permissionGateway,
+        PlatformPermissionKind.files,
+      );
+      if (!permission.allowsUse) {
+        if (mounted) {
+          setState(() {
+            _locationError = '无法访问系统目录选择器，请检查系统权限后重试。';
+          });
+        }
+        return;
+      }
       final StorageLocationRef? location = await widget.space.gateway
           .pickReceiveDirectory();
       if (!mounted || location == null) return;

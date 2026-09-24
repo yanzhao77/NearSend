@@ -1,10 +1,13 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr/qr.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:nearsend/platform/qr_image_gateway.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
+import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
 
 void main() {
   test('decodes a bounded QR image without logging its content', () async {
@@ -46,4 +49,61 @@ void main() {
       expect(decodeQrImage(bytes), throwsA(isA<QrImageDecodeException>()));
     }
   });
+
+  testWidgets('image import checks file access before opening the picker', (
+    tester,
+  ) async {
+    final _PermissionGateway permissions = _PermissionGateway();
+    final _QrGateway gateway = _QrGateway();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PairingImageImportButton(
+            gateway: gateway,
+            permissionGateway: permissions,
+            onDecoded: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('从图片导入'));
+    await tester.pump();
+
+    expect(permissions.checks, 1);
+    expect(permissions.requests, 1);
+    expect(gateway.picks, 0);
+    expect(find.textContaining('无法访问系统文件选择器'), findsOneWidget);
+  });
+}
+
+class _PermissionGateway implements PlatformPermissionGateway {
+  int checks = 0;
+  int requests = 0;
+
+  @override
+  Future<PlatformPermissionState> check(
+    PlatformPermissionKind permission,
+  ) async {
+    checks++;
+    return PlatformPermissionState.denied;
+  }
+
+  @override
+  Future<PlatformPermissionState> request(
+    PlatformPermissionKind permission,
+  ) async {
+    requests++;
+    return PlatformPermissionState.denied;
+  }
+}
+
+class _QrGateway implements QrImageGateway {
+  int picks = 0;
+
+  @override
+  Future<Uint8List?> pickImage() async {
+    picks++;
+    return null;
+  }
 }

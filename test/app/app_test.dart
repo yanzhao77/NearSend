@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/app.dart';
+import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
@@ -25,6 +26,7 @@ import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/features/home/presentation/home_page.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
 
@@ -150,7 +152,7 @@ void main() {
     );
   });
 
-  testWidgets('backgrounding turns off radar resources', (tester) async {
+  testWidgets('backgrounding turns off Bluetooth resources', (tester) async {
     final NodeSession node = session();
     final _LifecycleBleAdapter adapter = _LifecycleBleAdapter();
     final BleControlGateway ble = BleControlGateway(adapter: adapter);
@@ -160,19 +162,23 @@ void main() {
       NearSendApp(session: node, peer: PeerSession(), bleGateway: ble),
     );
     await tester.pump();
-    await tester.scrollUntilVisible(find.text('附近设备雷达'), 300);
-    await tester.tap(find.byType(Switch));
+    final Finder bluetoothSwitch = find.byKey(
+      const ValueKey<String>('bluetooth-discovery-switch'),
+    );
+    await tester.scrollUntilVisible(bluetoothSwitch, 300);
+    await tester.tap(bluetoothSwitch);
     await settle(
       tester,
       () =>
           adapter.starts == 1 &&
-          tester.widget<Switch>(find.byType(Switch)).value,
+          tester.widget<SwitchListTile>(bluetoothSwitch).value,
     );
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isTrue);
+    expect(adapter.publication?.displayName, 'NearSend');
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await settle(tester, () => adapter.session.stops == 1);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isFalse);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
 
     await tester.pumpWidget(const SizedBox());
@@ -187,6 +193,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(ConnectionPage.emptySessionNote), findsOneWidget);
+  });
+
+  testWidgets('a radar device route shows the selected peer, not local info', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const NearSendApp());
+
+    Navigator.of(tester.element(find.byType(HomePage))).pushNamed(
+      NearSendApp.connectRoute,
+      arguments: const RadarDevice(
+        id: 'remote-session',
+        name: '客厅手机',
+        detail: 'android · 局域网候选 · 1 个地址',
+        isKnown: false,
+        isReady: false,
+        isRevoked: false,
+        platform: 'android',
+        discoveryMethod: '局域网发现',
+        connectionDetail: '192.168.1.8:8443',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('对方连接信息'), findsNWidgets(2));
+    expect(find.text('客厅手机'), findsOneWidget);
+    expect(find.text('192.168.1.8:8443'), findsOneWidget);
+    expect(find.text('发现信息尚未验证'), findsOneWidget);
+    expect(find.text('本机连接信息'), findsNothing);
   });
 
   testWidgets('a node that could not start states the reason', (tester) async {
@@ -694,6 +728,7 @@ void main() {
 class _LifecycleBleAdapter implements BlePlatformAdapter {
   final _LifecycleBleSession session = _LifecycleBleSession();
   int starts = 0;
+  BlePublication? publication;
 
   @override
   Future<bool> requestAuthorization() async => true;
@@ -701,6 +736,7 @@ class _LifecycleBleAdapter implements BlePlatformAdapter {
   @override
   Future<BlePlatformSession> start(BlePublication publication) async {
     starts++;
+    this.publication = publication;
     return session;
   }
 }

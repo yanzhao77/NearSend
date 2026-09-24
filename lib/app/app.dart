@@ -38,6 +38,7 @@ import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_network_gateway.dart';
 import 'package:nearsend/platform/platform_file_actions.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 import 'package:nearsend/platform/qr_image_gateway.dart';
 import 'package:nearsend/platform/storage_location.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
@@ -77,6 +78,7 @@ class NearSendApp extends StatefulWidget {
     this.networkGateway,
     this.bleGateway,
     this.fileActions,
+    this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
   });
 
   /// This device's node, when the application has one.
@@ -96,6 +98,7 @@ class NearSendApp extends StatefulWidget {
   final PlatformNetworkGateway? networkGateway;
   final BleControlGateway? bleGateway;
   final PlatformFileActions? fileActions;
+  final PlatformPermissionGateway permissionGateway;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
@@ -136,8 +139,10 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   late final RadarController _radar = RadarController();
   StreamSubscription<MdnsDiscoveryEvent>? _radarDiscovery;
   StreamSubscription<BleControlEvent>? _radarBle;
-  Future<void> _radarTransition = Future<void>.value();
-  bool _radarDesired = false;
+  Future<void> _wifiTransition = Future<void>.value();
+  Future<void> _bluetoothTransition = Future<void>.value();
+  bool _wifiDesired = false;
+  bool _bluetoothDesired = false;
   bool _disposing = false;
   late final PlatformNetworkGateway _networkGateway =
       widget.networkGateway ??
@@ -205,7 +210,8 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     _disposing = true;
-    _radarDesired = false;
+    _wifiDesired = false;
+    _bluetoothDesired = false;
     WidgetsBinding.instance.removeObserver(this);
     final NodeSession? session = widget.session;
     if (session != null) {
@@ -234,74 +240,117 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_disposing && state != AppLifecycleState.resumed && _radarDesired) {
-      _requestRadarReady(false);
+    if (_disposing || state == AppLifecycleState.resumed) return;
+    if (_wifiDesired) {
+      _requestWifiReady(false);
+    }
+    if (_bluetoothDesired) {
+      _requestBluetoothReady(false);
     }
   }
 
-  void _requestRadarReady(bool value) {
+  void _requestWifiReady(bool value) {
     if (_disposing) return;
-    _radarDesired = value;
-    _radarTransition = _radarTransition
+    _wifiDesired = value;
+    _wifiTransition = _wifiTransition
         .catchError((Object _) {})
-        .then((_) => _applyRadarReady(value));
+        .then((_) => _applyWifiReady(value));
   }
 
-  Future<void> _applyRadarReady(bool value) async {
+  Future<void> _applyWifiReady(bool value) async {
     final NodeSession? session = widget.session;
     if (!value) {
-      _radar.markStopping();
-      await Future.wait<void>(<Future<void>>[
-        if (session != null)
-          session.setDiscoveryEnabled(false).catchError((Object _) {}),
-        if (widget.bleGateway != null)
-          widget.bleGateway!.stop().catchError((Object _) {}),
-      ]);
-      if (!_disposing) _radar.markOff();
+      _radar.markWifiStopping();
+      if (session != null) {
+        await session.setDiscoveryEnabled(false).catchError((Object _) {});
+      }
+      if (!_disposing) _radar.markWifiOff();
       return;
     }
 
     if (session?.phase != NodePhase.ready || session?.payload == null) {
-      _radar.markError('本机节点尚未就绪，请稍后重试。');
+      _radar.markWifiError('本机节点尚未就绪，请稍后重试。');
       return;
     }
-    _radar.markStarting();
-    bool started = false;
-    final List<String> failures = <String>[];
-    if (session!.discovery != null) {
-      try {
-        await session.setDiscoveryEnabled(true);
-        if (session.discovery!.isRunning) {
-          started = true;
-        } else if (session.discoveryFailureReason != null) {
-          failures.add(session.discoveryFailureReason!);
-        }
-      } on Object {
-        failures.add('局域网发现不可用。');
-      }
+    if (session!.discovery == null) {
+      _radar.markWifiError('当前平台没有可用的 Wi-Fi 局域网发现渠道。');
+      return;
     }
-    final BleControlGateway? ble = widget.bleGateway;
-    if (ble != null) {
-      try {
-        if (await ble.requestAuthorization()) {
-          await ble.start(
-            BlePublication.fromInstanceId(session.payload!.sessionId),
-          );
-          started = ble.isRunning || started;
-        } else {
-          failures.add('蓝牙权限未授予。');
-        }
-      } on Object {
-        failures.add('蓝牙发现不可用。');
-      }
-    }
-    if (_disposing || !_radarDesired) return;
-    if (started) {
-      _radar.markReady();
-    } else {
-      _radar.markError(
-        failures.isEmpty ? '当前平台没有可用的附近设备发现渠道。' : failures.join(' '),
+    _radar.markWifiStarting();
+    try {
+      await session.setDiscoveryEnabled(
+        true,
+        deviceName: _settings.settings.deviceName,
+        platform: defaultTargetPlatform.name,
       );
+    } on Object {
+      if (!_disposing && _wifiDesired) {
+        _radar.markWifiError('Wi-Fi 局域网发现不可用。');
+      }
+      return;
+    }
+    if (_disposing || !_wifiDesired) return;
+    if (session.discovery!.isRunning) {
+      _radar.markWifiReady();
+    } else {
+      _radar.markWifiError(session.discoveryFailureReason ?? 'Wi-Fi 局域网发现不可用。');
+    }
+  }
+
+  void _requestBluetoothReady(bool value) {
+    if (_disposing) return;
+    _bluetoothDesired = value;
+    _bluetoothTransition = _bluetoothTransition
+        .catchError((Object _) {})
+        .then((_) => _applyBluetoothReady(value));
+  }
+
+  Future<void> _applyBluetoothReady(bool value) async {
+    final NodeSession? session = widget.session;
+    final BleControlGateway? ble = widget.bleGateway;
+    if (!value) {
+      _radar.markBluetoothStopping();
+      if (ble != null) {
+        await ble.stop().catchError((Object _) {});
+      }
+      if (!_disposing) _radar.markBluetoothOff();
+      return;
+    }
+
+    final String? sessionId = session?.payload?.sessionId;
+    if (session?.phase != NodePhase.ready || sessionId == null) {
+      _radar.markBluetoothError('本机节点尚未就绪，请稍后重试。');
+      return;
+    }
+    if (ble == null) {
+      _radar.markBluetoothError('当前平台没有可用的蓝牙发现渠道。');
+      return;
+    }
+    _radar.markBluetoothStarting();
+    try {
+      if (!await ble.requestAuthorization()) {
+        if (!_disposing && _bluetoothDesired) {
+          _radar.markBluetoothError('蓝牙权限未授予。');
+        }
+        return;
+      }
+      await ble.start(
+        BlePublication.fromInstanceId(
+          sessionId,
+          deviceName: _settings.settings.deviceName,
+        ),
+      );
+    } on Object {
+      if (!_disposing && _bluetoothDesired) {
+        _radar.markBluetoothError('蓝牙发现不可用。');
+      }
+      return;
+    }
+    if (_disposing || !_bluetoothDesired) return;
+    if (ble.isRunning) {
+      _radar.markBluetoothReady();
+    } else {
+      _radar.markBluetoothError('蓝牙发现不可用。');
     }
   }
 
@@ -329,7 +378,10 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       session: SendingSession(engine: node.engine, wire: peer.client!),
       // The gateway is the platform's own, and null on a platform whose files are paths - which is
       // what makes the send screen offer a path field there instead of a picker that cannot work.
-      selection: FileSelectionController(gateway: widget.session?.gateway),
+      selection: FileSelectionController(
+        gateway: widget.session?.gateway,
+        permissionGateway: widget.permissionGateway,
+      ),
       now: () => DateTime.now().millisecondsSinceEpoch,
       transferIdFactory: widget.transferIdFactory,
       // Asked at send time, not now: the peer may pair with this device after this screen exists,
@@ -413,6 +465,19 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     NodePhase.failed => NsStatusTone.error,
     NodePhase.stopped || null => NsStatusTone.warning,
   };
+
+  Future<StorageLocationRef?> _pickReceiveDirectory() async {
+    final PlatformStorageGateway? gateway = widget.storageGateway;
+    if (gateway == null || !gateway.supportsDirectorySelection) return null;
+    final PlatformPermissionState permission = await ensurePlatformPermission(
+      widget.permissionGateway,
+      PlatformPermissionKind.files,
+    );
+    if (!permission.allowsUse) {
+      throw StateError('system directory access is unavailable');
+    }
+    return gateway.pickReceiveDirectory();
+  }
 
   /// The storage context a pushed transfer is accepted with.
   ///
@@ -512,16 +577,21 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               connectionTone: _connectionTone,
               onContinueTask: () =>
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
-              onRadarReadyChanged: _requestRadarReady,
-              onRadarDevicePressed: (RadarDevice _) =>
-                  Navigator.of(context).pushNamed(NearSendApp.connectRoute),
+              onWifiReadyChanged: _requestWifiReady,
+              onBluetoothReadyChanged: _requestBluetoothReady,
+              onRadarDevicePressed: (RadarDevice device) =>
+                  Navigator.of(context)
+                      .pushNamed(NearSendApp.connectRoute, arguments: device),
             ),
             NearSendApp.aboutRoute: (_) => const AboutPage(),
             NearSendApp.tasksRoute: (_) => TaskOverviewPage(controller: _tasks),
             NearSendApp.spaceRoute: (_) =>
                 SpaceOverviewPage(controller: _space),
-            NearSendApp.settingsRoute: (_) =>
-                SettingsPage(controller: _settings, space: _space),
+            NearSendApp.settingsRoute: (_) => SettingsPage(
+              controller: _settings,
+              space: _space,
+              permissionGateway: widget.permissionGateway,
+            ),
             NearSendApp.taskDetailRoute: (BuildContext context) {
               final Object? argument = ModalRoute.of(context)
                   ?.settings
@@ -543,9 +613,14 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
             NearSendApp.connectRoute: (BuildContext context) {
               // Which action the user came here for, so one connection screen can lead to the send flow
               // or the receive flow without duplicating itself.
+              final Object? routeArgument = ModalRoute.of(context)
+                  ?.settings
+                  .arguments;
               final bool receiving =
-                  ModalRoute.of(context)?.settings.arguments ==
-                  NearSendApp.receiveArgument;
+                  routeArgument == NearSendApp.receiveArgument;
+              final RadarDevice? selectedDevice = routeArgument is RadarDevice
+                  ? routeArgument
+                  : null;
               return ListenableBuilder(
                 // Both sessions: the published payload arrives asynchronously, and a connection attempt
                 // changes without any navigation happening.
@@ -575,6 +650,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                         defaultTargetPlatform == TargetPlatform.windows
                         ? MethodChannelQrImageGateway()
                         : null,
+                    permissionGateway: widget.permissionGateway,
                     onContinue: _continueTarget(receiving) == null
                         ? null
                         : () =>
@@ -585,6 +661,16 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                         : ConnectionPage.continueLabelSend,
                     localDeviceName: _settings.settings.deviceName,
                     localPlatform: defaultTargetPlatform.name,
+                    peerDeviceName: selectedDevice?.name ?? '对端设备名称未提供',
+                    peerPlatform: selectedDevice?.platform ?? '对端平台未提供',
+                    selectedPeerName: selectedDevice?.name,
+                    selectedPeerPlatform: selectedDevice?.platform,
+                    selectedPeerDiscoveryMethod:
+                        selectedDevice?.discoveryMethod,
+                    selectedPeerDetail: selectedDevice?.detail,
+                    selectedPeerConnectionDetail:
+                        selectedDevice?.connectionDetail,
+                    selectedPeerReady: selectedDevice?.isReady ?? false,
                     persistentLocalIdentity:
                         session?.hasPersistentIdentity ?? false,
                   );
@@ -649,7 +735,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                       widget.storageGateway == null ||
                           !widget.storageGateway!.supportsDirectorySelection
                       ? null
-                      : widget.storageGateway!.pickReceiveDirectory,
+                      : _pickReceiveDirectory,
                   onValidateLocation:
                       widget.storageGateway?.validateReceiveLocation,
                   onRememberDefault: _settings.updateDefaultReceiveLocation,

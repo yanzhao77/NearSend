@@ -31,7 +31,7 @@ void main() {
   test('advertisements never produce a ready light', () {
     final RadarController radar = RadarController(clock: () => now)
       ..attach(peers)
-      ..markReady();
+      ..markWifiReady();
     radar.handleMdns(
       MdnsPeerUpserted(
         const MdnsDiscoveredPeer(
@@ -42,12 +42,17 @@ void main() {
           capabilities: <String>{mdnsDiscoveryCapability},
           addresses: <String>['192.168.1.2'],
           port: 8443,
+          displayName: '客厅电脑',
+          platform: 'windows',
         ),
       ),
     );
 
-    expect(radar.devices.single.isKnown, isFalse);
-    expect(radar.devices.single.isReady, isFalse);
+    expect(radar.wifiDevices.single.isKnown, isFalse);
+    expect(radar.wifiDevices.single.isReady, isFalse);
+    expect(radar.wifiDevices.single.name, '客厅电脑');
+    expect(radar.wifiDevices.single.platform, 'windows');
+    expect(radar.wifiDevices.single.connectionDetail, '192.168.1.2:8443');
   });
 
   test('only a fresh ready proof lights an authorized peer', () {
@@ -60,7 +65,7 @@ void main() {
     );
     final RadarController radar = RadarController(clock: () => now)
       ..attach(peers)
-      ..markReady();
+      ..markWifiReady();
 
     radar.recordVerified(
       const VerifiedPeerSession(
@@ -72,10 +77,10 @@ void main() {
         expiresAtMillis: 31000,
       ),
     );
-    expect(radar.devices.single.isReady, isTrue);
+    expect(radar.pairedDevices.single.isReady, isTrue);
 
     now = 31000;
-    expect(radar.devices.single.isReady, isFalse);
+    expect(radar.pairedDevices.single.isReady, isFalse);
   });
 
   test('ready off clears proof and revoked peers stay unlit', () {
@@ -87,7 +92,7 @@ void main() {
     );
     final RadarController radar = RadarController(clock: () => now)
       ..attach(peers)
-      ..markReady();
+      ..markWifiReady();
     radar.recordVerified(
       const VerifiedPeerSession(
         peerId: peerId,
@@ -99,20 +104,21 @@ void main() {
       ),
     );
 
-    radar.markOff();
-    expect(radar.devices.single.isReady, isFalse);
-    radar.markReady();
-    expect(radar.devices.single.isReady, isFalse);
+    radar.markWifiOff();
+    expect(radar.pairedDevices.single.isReady, isFalse);
+    radar.markWifiReady();
+    expect(radar.pairedDevices.single.isReady, isFalse);
     radar.revoke(peerId);
-    expect(radar.devices.single.isRevoked, isTrue);
-    expect(radar.devices.single.isReady, isFalse);
+    expect(radar.pairedDevices.single.isRevoked, isTrue);
+    expect(radar.pairedDevices.single.isReady, isFalse);
   });
 
   test('starts off and BLE advertisements remain unverified candidates', () {
     final RadarController radar = RadarController(clock: () => now)
       ..attach(peers);
 
-    expect(radar.phase, RadarReadinessPhase.off);
+    expect(radar.wifiPhase, RadarReadinessPhase.off);
+    expect(radar.bluetoothPhase, RadarReadinessPhase.off);
     expect(radar.ready, isFalse);
     radar.handleBle(
       BlePeerDiscovered(
@@ -123,11 +129,12 @@ void main() {
           instanceTag: Uint8List.fromList(<int>[1, 2, 3, 4, 5, 6]),
         ),
         rssi: -50,
+        displayName: '附近手机',
       ),
     );
-    expect(radar.devices, isEmpty);
+    expect(radar.bluetoothDevices, isEmpty);
 
-    radar.markStarting();
+    radar.markBluetoothStarting();
     radar.handleBle(
       BlePeerDiscovered(
         peerId: 'platform-peer',
@@ -137,9 +144,83 @@ void main() {
           instanceTag: Uint8List.fromList(<int>[1, 2, 3, 4, 5, 6]),
         ),
         rssi: -50,
+        displayName: '附近手机',
       ),
     );
-    expect(radar.devices.single.detail, '蓝牙候选');
-    expect(radar.devices.single.isReady, isFalse);
+    expect(radar.bluetoothDevices.single.detail, '蓝牙候选');
+    expect(radar.bluetoothDevices.single.name, '附近手机');
+    expect(radar.bluetoothDevices.single.isReady, isFalse);
+  });
+
+  test('matching mDNS and BLE candidates stay in their transport lists', () {
+    final RadarController radar = RadarController(clock: () => now)
+      ..attach(peers)
+      ..markWifiReady()
+      ..markBluetoothReady();
+    radar.handleBle(
+      BlePeerDiscovered(
+        peerId: 'platform-peer',
+        advertisement: BleAdvertisement(
+          protocolMajor: 1,
+          protocolMinor: 0,
+          instanceTag: Uint8List.fromList(<int>[
+            0xaa,
+            0xaa,
+            0xaa,
+            0xaa,
+            0xaa,
+            0xaa,
+          ]),
+        ),
+        rssi: -50,
+      ),
+    );
+    radar.handleMdns(
+      const MdnsPeerUpserted(
+        MdnsDiscoveredPeer(
+          serviceName: 'NearSend-aaaaaaaa',
+          instanceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          protocolMajor: 1,
+          protocolMinor: 0,
+          capabilities: <String>{mdnsDiscoveryCapability},
+          addresses: <String>['fe80::1234%wlan0'],
+          port: 8443,
+          displayName: '客厅手机',
+          platform: 'android',
+        ),
+      ),
+    );
+
+    expect(radar.wifiDevices.single.name, '客厅手机');
+    expect(
+      radar.wifiDevices.single.connectionDetail,
+      '[fe80::1234%wlan0]:8443',
+    );
+    expect(radar.bluetoothDevices.single.name, '未命名蓝牙设备');
+  });
+
+  test('turning Wi-Fi off does not clear active Bluetooth candidates', () {
+    final RadarController radar = RadarController(clock: () => now)
+      ..attach(peers)
+      ..markWifiReady()
+      ..markBluetoothReady();
+    radar.handleBle(
+      BlePeerDiscovered(
+        peerId: 'platform-peer',
+        advertisement: BleAdvertisement(
+          protocolMajor: 1,
+          protocolMinor: 0,
+          instanceTag: Uint8List.fromList(<int>[1, 2, 3, 4, 5, 6]),
+        ),
+        rssi: -50,
+        displayName: '蓝牙手机',
+      ),
+    );
+
+    radar.markWifiOff();
+
+    expect(radar.wifiReady, isFalse);
+    expect(radar.bluetoothReady, isTrue);
+    expect(radar.bluetoothDevices.single.name, '蓝牙手机');
   });
 }

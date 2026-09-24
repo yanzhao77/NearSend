@@ -6,6 +6,7 @@ import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 import 'package:nearsend/platform/qr_image_gateway.dart';
 
 /// The connection screen: what this device publishes, and how to reach another one.
@@ -91,6 +92,8 @@ class ConnectionPage extends StatefulWidget {
     this.onConnectBootstrap,
     this.enableCameraScanner = false,
     this.qrImageGateway,
+    this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
+    this.cameraScannerPageBuilder,
     this.starting = false,
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
@@ -100,6 +103,12 @@ class ConnectionPage extends StatefulWidget {
     this.localPlatform = '当前平台',
     this.peerDeviceName = '对端设备名称未提供',
     this.peerPlatform = '对端平台未提供',
+    this.selectedPeerName,
+    this.selectedPeerPlatform,
+    this.selectedPeerDiscoveryMethod,
+    this.selectedPeerDetail,
+    this.selectedPeerConnectionDetail,
+    this.selectedPeerReady = false,
     this.persistentLocalIdentity = false,
   });
 
@@ -115,6 +124,8 @@ class ConnectionPage extends StatefulWidget {
   final void Function(BootstrapPairingPayload payload)? onConnectBootstrap;
   final bool enableCameraScanner;
   final QrImageGateway? qrImageGateway;
+  final PlatformPermissionGateway permissionGateway;
+  final WidgetBuilder? cameraScannerPageBuilder;
 
   /// Whether this device's own node is still starting.
   final bool starting;
@@ -144,6 +155,12 @@ class ConnectionPage extends StatefulWidget {
   final String localPlatform;
   final String peerDeviceName;
   final String peerPlatform;
+  final String? selectedPeerName;
+  final String? selectedPeerPlatform;
+  final String? selectedPeerDiscoveryMethod;
+  final String? selectedPeerDetail;
+  final String? selectedPeerConnectionDetail;
+  final bool selectedPeerReady;
   final bool persistentLocalIdentity;
 
   static const String pasteHint = '粘贴对方设备显示的连接信息';
@@ -173,6 +190,8 @@ class ConnectionPage extends StatefulWidget {
 class _ConnectionPageState extends State<ConnectionPage> {
   final TextEditingController _controller = TextEditingController();
   PairingImportState _import = const PairingImportState();
+  bool _checkingCameraPermission = false;
+  String? _cameraPermissionError;
 
   @override
   void dispose() {
@@ -207,12 +226,42 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   Future<void> _scan() async {
-    final String? value = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) => const MobilePairingScannerPage(),
-      ),
-    );
-    if (value != null && mounted) _acceptImportedText(value);
+    if (_checkingCameraPermission) return;
+    setState(() {
+      _checkingCameraPermission = true;
+      _cameraPermissionError = null;
+    });
+    try {
+      final PlatformPermissionState permission = await ensurePlatformPermission(
+        widget.permissionGateway,
+        PlatformPermissionKind.camera,
+      );
+      if (!mounted) return;
+      if (permission != PlatformPermissionState.granted) {
+        setState(() {
+          _cameraPermissionError = permission == PlatformPermissionState.denied
+              ? '摄像头权限未授予。请授权后再次点击扫描，或改用图片导入。'
+              : '当前无法检查或使用摄像头权限，请改用图片导入。';
+        });
+        return;
+      }
+      final String? value = await Navigator.of(context).push<String>(
+        MaterialPageRoute<String>(
+          builder:
+              widget.cameraScannerPageBuilder ??
+              (_) => const MobilePairingScannerPage(),
+        ),
+      );
+      if (value != null && mounted) _acceptImportedText(value);
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _cameraPermissionError = '摄像头权限检查失败，请重试或改用图片导入。';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _checkingCameraPermission = false);
+    }
   }
 
   void _connectImported() {
@@ -233,7 +282,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     final ConnectionAttempt attempt = widget.connection;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('连接信息')),
+      appBar: AppBar(
+        title: Text(widget.selectedPeerName == null ? '连接信息' : '对方连接信息'),
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -249,7 +300,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   // to at all, and if not, why. "Not started yet" and "could not start" are different
                   // answers, and showing the first while the second is true would send them looking
                   // for a fault in the other device.
-                  if (widget.unavailableReason != null)
+                  if (widget.selectedPeerName != null)
+                    _DiscoveredPeerPreview(
+                      name: widget.selectedPeerName!,
+                      platform: widget.selectedPeerPlatform ?? '平台未知',
+                      discoveryMethod:
+                          widget.selectedPeerDiscoveryMethod ?? '发现方式未知',
+                      detail: widget.selectedPeerDetail ?? '等待连接',
+                      connectionDetail: widget.selectedPeerConnectionDetail,
+                      verifiedReady: widget.selectedPeerReady,
+                    )
+                  else if (widget.unavailableReason != null)
                     _Notice(
                       text: widget.unavailableReason!,
                       palette: palette,
@@ -296,9 +357,18 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       children: <Widget>[
                         if (widget.enableCameraScanner)
                           OutlinedButton.icon(
-                            onPressed: _scan,
-                            icon: const Icon(Icons.qr_code_scanner),
-                            label: const Text('扫描二维码'),
+                            onPressed: _checkingCameraPermission ? null : _scan,
+                            icon: _checkingCameraPermission
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.qr_code_scanner),
+                            label: Text(
+                              _checkingCameraPermission ? '正在检查权限' : '扫描二维码',
+                            ),
                           ),
                         if (widget.qrImageGateway != null)
                           SizedBox(
@@ -306,10 +376,18 @@ class _ConnectionPageState extends State<ConnectionPage> {
                             child: PairingImageImportButton(
                               gateway: widget.qrImageGateway!,
                               onDecoded: _acceptImportedText,
+                              permissionGateway: widget.permissionGateway,
                             ),
                           ),
                       ],
                     ),
+                  if (_cameraPermissionError != null) ...<Widget>[
+                    const SizedBox(height: NearSendSpacing.sm),
+                    NsPermissionExplainer(
+                      title: '需要摄像头权限',
+                      message: _cameraPermissionError!,
+                    ),
+                  ],
                   if (_import.error != null)
                     _Notice(
                       text: _import.error!,
@@ -399,6 +477,77 @@ class _ConnectionPageState extends State<ConnectionPage> {
       return reason;
     }
     return '$reason\n对方出示的指纹：$presented';
+  }
+}
+
+class _DiscoveredPeerPreview extends StatelessWidget {
+  const _DiscoveredPeerPreview({
+    required this.name,
+    required this.platform,
+    required this.discoveryMethod,
+    required this.detail,
+    required this.connectionDetail,
+    required this.verifiedReady,
+  });
+
+  final String name;
+  final String platform;
+  final String discoveryMethod;
+  final String detail;
+  final String? connectionDetail;
+  final bool verifiedReady;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(NearSendSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                const Icon(Icons.devices_outlined),
+                const SizedBox(width: NearSendSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '对方连接信息',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                NsStatusBadge(
+                  label: verifiedReady ? '已验证并就绪' : '待验证',
+                  tone: verifiedReady
+                      ? NsStatusTone.success
+                      : NsStatusTone.warning,
+                ),
+              ],
+            ),
+            const SizedBox(height: NearSendSpacing.sm),
+            _Field(label: '设备名称', value: name),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '平台', value: platform),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '发现方式', value: discoveryMethod),
+            const SizedBox(height: NearSendSpacing.xs),
+            _Field(label: '发现状态', value: detail),
+            if (connectionDetail != null &&
+                connectionDetail!.isNotEmpty) ...<Widget>[
+              const SizedBox(height: NearSendSpacing.xs),
+              _Field(label: '候选地址', value: connectionDetail!),
+            ],
+            if (!verifiedReady) ...<Widget>[
+              const SizedBox(height: NearSendSpacing.sm),
+              const NsInfoBanner(
+                title: '发现信息尚未验证',
+                message: '设备名称、平台和候选地址只用于发现。完成实时身份与指纹验证前，不能将其视为可信设备。',
+                tone: NsStatusTone.warning,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

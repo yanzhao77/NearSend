@@ -115,6 +115,8 @@ class NodeSession extends ChangeNotifier {
   String? _discoveryFailureReason;
   Future<void>? _attempt;
   bool _discoveryEnabled = false;
+  String _discoveryDeviceName = 'NearSend';
+  String _discoveryPlatform = 'unknown';
   bool _disposed = false;
 
   NodePhase get phase => _phase;
@@ -186,6 +188,8 @@ class NodeSession extends ChangeNotifier {
             MdnsPublication(
               instanceId: payload.sessionId,
               port: node.server.boundPort,
+              deviceName: _discoveryDeviceName,
+              platform: _discoveryPlatform,
             ),
           );
         } on Object {
@@ -206,8 +210,16 @@ class NodeSession extends ChangeNotifier {
     }
   }
 
-  Future<void> setDiscoveryEnabled(bool enabled) async {
+  Future<void> setDiscoveryEnabled(
+    bool enabled, {
+    String deviceName = 'NearSend',
+    String platform = 'unknown',
+  }) async {
     _discoveryEnabled = enabled;
+    if (enabled) {
+      _discoveryDeviceName = deviceName;
+      _discoveryPlatform = platform;
+    }
     final MdnsDiscoveryGateway? mdns = discovery;
     if (mdns == null) return;
     if (!enabled) {
@@ -226,6 +238,8 @@ class NodeSession extends ChangeNotifier {
         MdnsPublication(
           instanceId: currentPayload.sessionId,
           port: running.server.boundPort,
+          deviceName: _discoveryDeviceName,
+          platform: _discoveryPlatform,
         ),
       );
       _discoveryFailureReason = null;

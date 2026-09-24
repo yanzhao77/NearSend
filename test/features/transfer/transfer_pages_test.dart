@@ -10,6 +10,7 @@ import 'package:nearsend/core/security/tls_identity.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 
 /// The transfer screen's figures.
 ///
@@ -223,6 +224,68 @@ void main() {
         ),
       );
       expect(find.text(ConnectionPage.emptySessionNote), findsOneWidget);
+    });
+
+    testWidgets('camera permission is requested before opening the scanner', (
+      tester,
+    ) async {
+      final _PermissionGateway permissions = _PermissionGateway(
+        checked: PlatformPermissionState.notDetermined,
+        requested: PlatformPermissionState.denied,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildNearSendTheme(Brightness.light),
+          home: ConnectionPage(
+            payload: null,
+            enableCameraScanner: true,
+            permissionGateway: permissions,
+            cameraScannerPageBuilder: (_) =>
+                const Scaffold(body: Text('scanner opened')),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('扫描二维码'));
+      await tester.pumpAndSettle();
+
+      expect(permissions.checks, 1);
+      expect(permissions.requests, 1);
+      expect(find.text('scanner opened'), findsNothing);
+      expect(find.text('需要摄像头权限'), findsOneWidget);
+      expect(find.textContaining('摄像头权限未授予'), findsOneWidget);
+    });
+
+    testWidgets('camera permission is rechecked for every scanner use', (
+      tester,
+    ) async {
+      final _PermissionGateway permissions = _PermissionGateway(
+        checked: PlatformPermissionState.granted,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildNearSendTheme(Brightness.light),
+          home: ConnectionPage(
+            payload: null,
+            enableCameraScanner: true,
+            permissionGateway: permissions,
+            cameraScannerPageBuilder: (_) =>
+                const Scaffold(body: Text('scanner opened')),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('扫描二维码'));
+      await tester.pumpAndSettle();
+      expect(find.text('scanner opened'), findsOneWidget);
+      Navigator.of(tester.element(find.text('scanner opened'))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('扫描二维码'));
+      await tester.pumpAndSettle();
+
+      expect(permissions.checks, 2);
+      expect(permissions.requests, 0);
+      expect(find.text('scanner opened'), findsOneWidget);
     });
 
     testWidgets('shows the pin, the candidates and the session', (
@@ -495,6 +558,31 @@ void main() {
       },
     );
   });
+}
+
+class _PermissionGateway implements PlatformPermissionGateway {
+  _PermissionGateway({required this.checked, this.requested});
+
+  final PlatformPermissionState checked;
+  final PlatformPermissionState? requested;
+  int checks = 0;
+  int requests = 0;
+
+  @override
+  Future<PlatformPermissionState> check(
+    PlatformPermissionKind permission,
+  ) async {
+    checks++;
+    return checked;
+  }
+
+  @override
+  Future<PlatformPermissionState> request(
+    PlatformPermissionKind permission,
+  ) async {
+    requests++;
+    return requested ?? checked;
+  }
 }
 
 void _noopPairing(PairingPayload _) {}

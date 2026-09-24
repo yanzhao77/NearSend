@@ -178,6 +178,8 @@ class MainActivity : FlutterActivity() {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(intent, pickRequestCode)
     }
@@ -196,14 +198,49 @@ class MainActivity : FlutterActivity() {
             pending.success(emptyList<Map<String, Any?>>())
             return
         }
-        val picked = ArrayList<Map<String, Any?>>()
-        data.clipData?.let { clip ->
-            for (index in 0 until clip.itemCount) {
-                picked.add(probe(clip.getItemAt(index).uri))
+        try {
+            val picked = ArrayList<Map<String, Any?>>()
+            data.clipData?.let { clip ->
+                for (index in 0 until clip.itemCount) {
+                    val uri = clip.getItemAt(index).uri
+                    persistReadPermission(uri, data.flags)
+                    picked.add(probe(uri))
+                }
             }
+            data.data?.let {
+                persistReadPermission(it, data.flags)
+                picked.add(probe(it))
+            }
+            pending.success(picked)
+        } catch (_: SecurityException) {
+            pending.error(
+                "NS-SAF-PERMISSION",
+                "the selected document permission could not be retained",
+                null,
+            )
+        } catch (error: Exception) {
+            pending.error("NS-SAF", error.javaClass.simpleName, null)
         }
-        data.data?.let { picked.add(probe(it)) }
-        pending.success(picked)
+    }
+
+    private fun persistReadPermission(uri: Uri, resultFlags: Int) {
+        if (resultFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) {
+            throw SecurityException("the selected document did not grant read access")
+        }
+        contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+        )
+        requireReadablePermission(uri)
+    }
+
+    private fun requireReadablePermission(uri: Uri) {
+        val granted = contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission
+        }
+        if (!granted) {
+            throw SecurityException("the persisted document permission is unavailable")
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -224,6 +261,7 @@ class MainActivity : FlutterActivity() {
 
     /** What the Dart side needs to build a manifest entry, and nothing else. */
     private fun probe(uri: Uri): Map<String, Any?> {
+        requireReadablePermission(uri)
         var name: String? = null
         var size = -1L
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -254,6 +292,7 @@ class MainActivity : FlutterActivity() {
      * this can occupy is bounded by a value the Dart side chooses and the protocol fixes.
      */
     private fun readChunk(uri: Uri, offset: Long, length: Int): ByteArray {
+        requireReadablePermission(uri)
         if (length <= 0) {
             return ByteArray(0)
         }

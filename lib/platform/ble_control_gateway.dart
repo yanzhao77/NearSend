@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -14,15 +15,22 @@ const String nearSendBleControlCharacteristicUuid =
 const String bleDiscoveryCapability = 'discovery.ble.v1';
 
 class BlePublication {
-  BlePublication({required this.instanceId, required Uint8List instanceTag})
-    : instanceTag = Uint8List.fromList(instanceTag) {
+  BlePublication({
+    required this.instanceId,
+    required Uint8List instanceTag,
+    String deviceName = 'NearSend',
+  }) : instanceTag = Uint8List.fromList(instanceTag),
+       displayName = _normalizePublishedPeripheralName(deviceName) {
     uuidToBytes(instanceId, 'BLE instance id');
     if (instanceTag.length != BleAdvertisement.instanceTagBytes) {
       throw ArgumentError.value(instanceTag.length, 'instanceTag.length');
     }
   }
 
-  factory BlePublication.fromInstanceId(String instanceId) {
+  factory BlePublication.fromInstanceId(
+    String instanceId, {
+    String deviceName = 'NearSend',
+  }) {
     final Uint8List bytes = uuidToBytes(instanceId, 'BLE instance id');
     return BlePublication(
       instanceId: instanceId,
@@ -31,11 +39,13 @@ class BlePublication {
         0,
         BleAdvertisement.instanceTagBytes,
       ),
+      deviceName: deviceName,
     );
   }
 
   final String instanceId;
   final Uint8List instanceTag;
+  final String displayName;
 
   int get controlSessionTag =>
       ByteData.sublistView(instanceTag).getUint32(0, Endian.big);
@@ -104,11 +114,13 @@ class BlePeerDiscovered extends BleControlEvent {
     required this.peerId,
     required this.advertisement,
     required this.rssi,
+    this.displayName,
   });
 
   final String peerId;
   final BleAdvertisement advertisement;
   final int rssi;
+  final String? displayName;
 }
 
 class BlePeerConnected extends BleControlEvent {
@@ -146,11 +158,13 @@ class BlePlatformPeerDiscovered extends BlePlatformEvent {
     required this.peerId,
     required this.advertisement,
     required this.rssi,
+    this.displayName,
   });
 
   final String peerId;
   final BleAdvertisement advertisement;
   final int rssi;
+  final String? displayName;
 }
 
 class BlePlatformPeerConnected extends BlePlatformEvent {
@@ -321,6 +335,7 @@ class BleControlGateway {
               peerId: event.peerId,
               advertisement: event.advertisement,
               rssi: event.rssi,
+              displayName: event.displayName,
             ),
           );
         }
@@ -529,6 +544,7 @@ class _BluetoothLowEnergyPlatformSession implements BlePlatformSession {
     await _peripheralManager.addService(_localService);
     await _peripheralManager.startAdvertising(
       Advertisement(
+        name: Platform.isWindows ? null : _publication.displayName,
         serviceData: <UUID, Uint8List>{
           _serviceUuid: _publication.advertisement.encode(),
         },
@@ -549,6 +565,12 @@ class _BluetoothLowEnergyPlatformSession implements BlePlatformSession {
     if (bytes == null) return;
     final BleAdvertisement? advertisement = BleAdvertisement.tryDecode(bytes);
     if (advertisement == null) return;
+    String? displayName;
+    try {
+      displayName = _boundedPeripheralName(event.advertisement.name);
+    } on UnsupportedError {
+      displayName = null;
+    }
     final String peerId = _peerId(event.peripheral);
     _discovered[peerId] = event.peripheral;
     _events.add(
@@ -556,6 +578,7 @@ class _BluetoothLowEnergyPlatformSession implements BlePlatformSession {
         peerId: peerId,
         advertisement: advertisement,
         rssi: event.rssi,
+        displayName: displayName,
       ),
     );
   }
@@ -756,6 +779,32 @@ class _BluetoothLowEnergyPlatformSession implements BlePlatformSession {
   }
 
   static String _peerId(BluetoothLowEnergyPeer peer) => peer.uuid.toString();
+}
+
+String? _boundedPeripheralName(String? value) {
+  final String? trimmed = value?.trim();
+  if (trimmed == null ||
+      trimmed.isEmpty ||
+      utf8.encode(trimmed).length > 64 ||
+      trimmed.runes.any((int rune) => rune < 0x20 || rune == 0x7f)) {
+    return null;
+  }
+  return trimmed;
+}
+
+String _normalizePublishedPeripheralName(String value) {
+  final String trimmed = value.trim();
+  if (trimmed.isEmpty ||
+      trimmed.runes.any((int rune) => rune < 0x20 || rune == 0x7f)) {
+    return 'NearSend';
+  }
+  final StringBuffer bounded = StringBuffer();
+  for (final int rune in trimmed.runes) {
+    final String next = '${bounded.toString()}${String.fromCharCode(rune)}';
+    if (utf8.encode(next).length > 20) break;
+    bounded.writeCharCode(rune);
+  }
+  return bounded.isEmpty ? 'NearSend' : bounded.toString();
 }
 
 class _ConnectedPeripheral {
