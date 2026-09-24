@@ -59,13 +59,17 @@
 | V12-11 生命周期测试 | 通过 | 应用进入 `paused` 后雷达返回关闭且 BLE 会话释放；扫码控制器改为显式页面生命周期所有权 |
 | V12-11 静态分析 | 通过 | `fvm flutter analyze`，`No issues found` |
 | V12-11 全量回归 | 通过 | `fvm flutter test --reporter compact`，1369 项全部通过 |
-| V12-11 Android Kotlin 编译 | 受阻 | Maven Central 下载 `kotlinx-coroutines-core-jvm 1.10.2` 时 TLS 握手中断，失败发生在 `mobile_scanner` 依赖解析，未进入本次新增 Kotlin 编译 |
+| V12-11 Android Kotlin/APK 编译 | 通过 | 首次 Maven TLS 下载失败；`fvm flutter build apk --debug` 自动重试后成功，新增 SAF/FileProvider 代码完成编译，产出 `app-debug.apk` |
 | V12-11 Windows Shell 编译 | 受阻 | 当前主机不是 Windows；`ShellExecuteW` 与 `SHOpenFolderAndSelectItems` 需 Windows CI/主机编译和实测 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
-| Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
-| macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
+| Android APK 构建 | 通过 | `fvm flutter build apk --debug` 首次 Maven TLS 下载失败后自动重试成功，产出 `build/app/outputs/flutter-apk/app-debug.apk` |
+| macOS 构建 | 不适用 | 仓库没有 macOS desktop target；SDK 下载重试后 Flutter 明确报告未配置，未伪报构建通过 |
 | Windows 构建 | 受阻 | 当前主机不是 Windows；由 GitHub Actions 或 Windows 主机执行 |
 | iOS 构建 | 部分通过 | Simulator 构建通过；设备无签名构建受 Development Team/Provisioning 阻断，不能替代真机 |
+| V12-12 Markdown 链接 | 通过 | 严格检查 104 个跟踪 Markdown 文件、548 个相对链接，无断链 |
+| V12-12 敏感信息扫描 | 通过 | 506 个跟踪文件未发现凭证材料 |
+| V12-12 CI 工作流约束 | 通过 | Action 固定 SHA、无 `continue-on-error`、只读权限、Flutter 版本一致 |
+| V12-12 S0 Python 探针 | 部分通过 | 协议/存储 21 项通过；Xcode Python 3.9/LibreSSL 2.8.3 不支持 TLS 1.3，TLS 测试类初始化受阻 |
 
 ## 实机矩阵
 
@@ -113,6 +117,9 @@ cd android
 
 未执行 Windows C++ 编译、Android/Windows 系统打开与定位、Android SAF 撤权、真实后台切换和热点
 资源回收实测。macOS 自动化只验证 Dart 契约、状态机和真实本地文件导出，不构成平台 Shell/Intent 证据。
+
+后续 V12-12 重试中 `fvm flutter build apk --debug` 自动重试 Maven 下载后成功，因此上表将 Android
+编译更新为通过；这不改变系统动作和权限生命周期仍缺真机证据的结论。
 
 ## V12-10 首页雷达证据
 

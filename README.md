@@ -45,7 +45,7 @@ NearSend 的重点是可靠性：文件通过流式读写和有界缓冲处理�
 | 协议与数据模型 | `LFTM1` / `LFTC1` 清单编码、状态模型、错误模型和固定向量已有 Dart 独立实现；协议仍是草案，尚未冻结 |
 | 安全控制面 | TLS 1.3 下限、证书指纹绑定、一次性配对令牌、会话授权和控制端点已有实现与测试 |
 | 数据面 | SQLite manifest staging、授权、分块读写、终检与导出编排已有代码级测试；断点恢复的应用层编排仍在进行 |
-| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立并合并到 `master`；平台文件端口、真实设备双向流程和完整错误体验仍需验证 |
+| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；1.2 开发分支已接入系统目录/文件动作、接收确认、mDNS/BLE、二维码、雷达和热点引导边界，目标设备双向流程仍需验证 |
 | 自动化发布 | `master` 的 CI 成功后自动构建 Android、Windows、macOS、Linux 并创建 GitHub Release，附带 release notes 与 SHA-256 清单 |
 
 **当前没有承诺的能力**：互联网远程传输、云端中转、BLE 文件承载、目录实时同步、后台无限运行、Windows MSIX、Android Play/AAB、正式代码签名和 iOS 发布。
@@ -99,6 +99,9 @@ NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协
 - T12 UI 全平台改造已通过 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) squash 合并到 `master`，合并提交为 `880dfb8`；共享主题、组件、响应式应用壳、真实任务/空间/设置读模型、配对/发送/接收/任务页面和平台适配代码已进入主干。
 - UI 代码级验收已归档，覆盖 Light/Dark、动态字体 200%、窄屏、长文案、空间 `sufficient`/`insufficient`/`unknown`、五阶段传输状态和真实数据库读模型；这些结果不替代目标设备验收。
 - 控制面、数据面和界面已有“真实两个节点 + 真实 TLS”的代码级测试，覆盖清单、授权、分块、校验和导出路径。
+- NearSend 1.2 升级已按 [开发计划](docs/releases/1.2/PLAN.md) 推进至 V12-12 当前环境验收；
+  [状态](docs/releases/1.2/STATUS.md) 和 [验收记录](docs/releases/1.2/ACCEPTANCE.md) 分别记录已实现能力与
+  未完成的 PAKE、指定网络绑定、Windows 自动入网和真实双机矩阵，不把自动化结果写成实机结论。
 - Android、Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器仍需目标设备证据；Windows/iOS UI 构建、截图、键盘/生命周期和屏幕阅读器验证也仍受环境限制，当前不能宣称跨平台产品闭环已验收。
 - Android 当前使用 debug signing；macOS 未签名、未 notarization；Linux 仅构建 amd64。正式签名材料必须通过受保护的 GitHub Environment 注入，不能提交到仓库。
 
@@ -125,6 +128,7 @@ NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协
 - [系统架构](docs/architecture/SYSTEM_ARCHITECTURE.md) · [应用与端侧服务设计](docs/architecture/APP_AND_SERVICE_DESIGN.md)
 - [UI/UX 与视觉规范](docs/ui/UI_UX_SPEC.md) · [质量与验收策略](docs/testing/QUALITY_AND_ACCEPTANCE.md)
 - [GitHub Actions 自动发版](docs/releases/GITHUB_ACTION_RELEASES.md)
+- [NearSend 1.2 计划](docs/releases/1.2/PLAN.md) · [开发状态](docs/releases/1.2/STATUS.md) · [验收记录](docs/releases/1.2/ACCEPTANCE.md)
 - [AI 与贡献者开发规则](AGENTS.md) · [开发流程](docs/DEVELOPMENT_WORKFLOW.md)
 
 `AGENTS.md` 是本项目对 Codex、Cursor、Claude Code 等 AI 编码工具的最高优先级规则，包含架构边界、安全要求、目录规范、开发工作流和必做检查。

@@ -36,16 +36,16 @@
 | V12-08 热点与数据通道 | 部分完成，路由绑定受阻 | 已实现认证端点优先的有界网络选择、Android LocalOnlyHotspot/系统确认入网 lease 与资源释放、Windows 系统设置回退；凭据不持久化/不输出 | Android 真机验证热点与指定 Network socket；Windows 主机验证 Native Wi-Fi 事件/profile/恢复后再开放自动加入 |
 | V12-09 二维码入口 | 进行中 | 严格 `nearsend-bootstrap` v1、旧码兼容、真实会话二维码、移动离线摄像头、Windows 有界图片导入及扫码后系统入网→TLS pin 配对协调已实现 | 补 Android/Windows 构建和摄像头/导图/热点二维码实测；向用户呈现平台入网错误 |
 | V12-10 首页雷达与在线历史 | 部分完成 | 默认关闭的就绪状态机已真实启停 mDNS/BLE；首页合并历史、mDNS、BLE 候选，只有新鲜已授权证明显示绿色状态 | 将已知设备挑战接入生产 BLE/mDNS 控制链路；完成首次 PAKE、候选点击配对和双机实测 |
-| V12-11 系统打开与异常收尾 | 代码与当前环境自动化完成，平台验证受阻 | 保存结果和任务详情只在真实最终句柄存在时提供系统打开/定位；Android 使用 SAF/FileProvider，Windows 使用 Shell API；后台关闭雷达，扫码、BLE、mDNS、热点/入网 lease 均有收尾路径；1369 项全量测试通过 | Android 重试原生构建并真机验证 SAF/FileProvider；Windows 编译和 Shell 实测；补后台切换、权限撤销和热点清理实机证据 |
-| V12-12 回归与发布准备 | 未开始 | 验收矩阵已建立 | 集成后执行自动化、构建和可用设备验证 |
+| V12-11 系统打开与异常收尾 | 代码与当前环境自动化完成，平台验证受阻 | 保存结果和任务详情只在真实最终句柄存在时提供系统打开/定位；Android 使用 SAF/FileProvider，Windows 使用 Shell API；后台关闭雷达，扫码、BLE、mDNS、热点/入网 lease 均有收尾路径；1369 项全量测试及 Android APK 构建通过 | Android 真机验证 SAF/FileProvider；Windows 编译和 Shell 实测；补后台切换、权限撤销和热点清理实机证据 |
+| V12-12 回归与发布准备 | 当前环境完成，目标设备验收受阻 | 格式、分析、1369 项测试、Android debug APK、iOS Simulator、文档链接、敏感信息和 CI 工作流检查通过；README、状态、验收和台账已收口 | Windows CI/主机及 Android/Windows 双机执行剩余矩阵；补 PAKE、指定网络绑定、热点和大文件证据后才能发布 |
 
 ## 当前环境限制
 
 - 当前主机为 macOS；不能在本机生成 Windows 构建或代替 Windows 10/11 BLE、WLAN 和 Shell 实测。
 - 尚未取得本轮 Android 与 Windows 双机、不同 Wi-Fi、无路由器或热点传输证据。
 - iOS、Windows 的新增平台能力不能在当前环境标记通过。
-- Android 完整 APK 构建当前被 `sqlite3 3.6.0` GitHub Release 二进制下载的 TLS 握手中断阻塞；
-  `:app:compileDebugKotlin` 已在排除 Flutter Native Assets 任务后成功，不能替代 APK 构建通过。
+- Android debug APK 本轮首次 Maven 下载握手中断，Flutter 自动重试后构建成功；这只证明可构建，
+  不替代安装、SAF、BLE、热点、指定 Network 和双机传输真机验证。
 
 ## V12-01 阶段记录
 
@@ -209,9 +209,26 @@
   关闭热点 reservation、入网 callback 和待处理权限请求；应用销毁继续释放入网 lease。
 - `fvm dart format --output=none --set-exit-if-changed .`、`fvm flutter analyze` 通过；文件动作、
   接收结果、任务详情、SQLite 最终句柄、双向接收流程和后台雷达定向测试通过；完整回归 1369 项通过。
-- Android Kotlin 重试在 `mobile_scanner` 的 Maven 依赖下载阶段因 TLS 握手中断，尚未进入本次新增
-  Kotlin 源码编译；Windows 构建与 Android/Windows 系统动作、撤权和后台切换实测均未执行，
-  因此 V12-11 不标记为平台验收完成。
+- Android Kotlin 首次重试在 `mobile_scanner` 的 Maven 依赖下载阶段因 TLS 握手中断；V12-12 的
+  `flutter build apk --debug` 自动重试后成功并产出 APK。Windows 构建与 Android/Windows 系统
+  动作、撤权和后台切换实测均未执行，因此 V12-11 不标记为平台验收完成。
+
+## V12-12 回归与发布准备阶段记录
+
+- 使用 FVM Flutter 3.47.5 / Dart 3.13.4 执行全仓格式检查、静态分析和完整测试；226 个 Dart 文件
+  无格式差异，静态分析无问题，1369 项测试通过。Android debug APK 在首次 Maven TLS 下载失败后
+  由 Flutter 自动重试成功，iOS Simulator 构建成功。
+- macOS desktop 未在仓库配置；SDK 下载重试成功后 Flutter 明确报告 `No macOS desktop project
+  configured`，因此不将其记为应用构建失败或通过。Windows 代码在当前 macOS 主机无法编译，必须
+  由 Windows CI/主机验证。
+- Markdown 严格链接检查覆盖 104 个跟踪文件和 548 个链接；敏感信息扫描覆盖 506 个跟踪文件；
+  CI 工作流检查确认 Action SHA 固定、无 `continue-on-error`、只读权限和 Flutter 版本一致。
+- S0 Python 协议/存储 21 项通过；TLS 测试类因 Xcode Python 3.9 链接 LibreSSL 2.8.3 且不支持
+  TLS 1.3 而无法初始化。未降低 TLS 要求，也未把 21 项写成完整 24 项通过。
+- 当前环境证据归档在
+  `docs/testing/evidence/2026-09-24/v1.2-upgrade/summary.md`。未执行的 Android/Windows 双机、
+  不同 Wi-Fi、无路由热点、大文件、权限撤销、IP 改变、身份伪装和后台资源矩阵继续保持未通过。
+- 本分支只准备实现和证据，不合并 `master`、不创建正式版本、不发布 Release。
 
 ## 人工重点复核
 
