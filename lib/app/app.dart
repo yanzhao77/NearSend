@@ -200,10 +200,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     }
     if (_disposing || widget.peer?.client != client) return;
     _outgoingRecent = recent;
-    if (recent)
+    if (recent) {
       _outgoingAge
         ..reset()
         ..start();
+    }
     _syncPairingPresence();
   }
 
@@ -432,10 +433,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       displayLabel: _settings.settings.deviceName,
     );
     _outgoingRecent = connected;
-    if (connected)
+    if (connected) {
       _outgoingAge
         ..reset()
         ..start();
+    }
     _outgoingName = displayName;
     _syncPairingPresence();
     final NearSendNode? node = widget.session?.node;

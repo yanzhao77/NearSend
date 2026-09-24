@@ -64,7 +64,7 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
           paired &&
           (widget.session?.node?.pairing.pairedClients.any(
                 (client) =>
-                    client.sessionId == payload!.sessionId && client.isRecent,
+                    client.sessionId == payload.sessionId && client.isRecent,
               ) ??
               false);
       final expired =

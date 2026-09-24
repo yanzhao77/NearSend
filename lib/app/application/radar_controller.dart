@@ -62,7 +62,7 @@ class RadarController extends ChangeNotifier {
           isRevoked: false,
           discoveryMethod: '二维码配对',
         ),
-      if (outgoing != null) outgoing,
+      ?outgoing,
     ];
     if (next.length == _qrDevices.length &&
         List.generate(
@@ -71,8 +71,9 @@ class RadarController extends ChangeNotifier {
               next[i].id == _qrDevices[i].id &&
               next[i].name == _qrDevices[i].name &&
               next[i].isReady == _qrDevices[i].isReady,
-        ).every((same) => same))
+        ).every((same) => same)) {
       return;
+    }
     _qrDevices = next;
     notifyListeners();
   }
