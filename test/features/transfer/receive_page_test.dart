@@ -5,10 +5,13 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/task_authorization_repository.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 /// The receiving screen.
 ///
@@ -32,13 +35,21 @@ void main() {
     String? failureReason,
     List<String> savedPaths = const <String>[],
     Future<void> Function()? onRefresh,
-    Future<bool> Function(OfferSummary, String)? onAccept,
+    Future<List<ReceiveFilePreview>> Function(OfferSummary)? onPreview,
+    Future<bool> Function(OfferSummary, ReceiveConfirmation)? onAccept,
     List<ServerOffer> pushOffers = const <ServerOffer>[],
     ServerReceivePhase pushPhase = ServerReceivePhase.waiting,
     SpaceVerdict? pushSpaceVerdict,
     String? pushFailureReason,
     List<String> pushSavedPaths = const <String>[],
-    Future<bool> Function(ServerOffer, String)? onAcceptPush,
+    Future<List<ReceiveFilePreview>> Function(ServerOffer)? onPreviewPush,
+    Future<bool> Function(ServerOffer, ReceiveConfirmation)? onAcceptPush,
+    StorageLocationRef? initialLocation,
+    Future<StorageLocationRef?> Function()? onPickLocation,
+    Future<StorageLocationRef> Function(StorageLocationRef)? onValidateLocation,
+    void Function(StorageLocationRef)? onRememberDefault,
+    Future<SpaceEstimateSnapshot?> Function(ServerOffer, StorageLocationRef)?
+    onCheckPushSpace,
   }) => tester.pumpWidget(
     MaterialApp(
       theme: buildNearSendTheme(Brightness.light),
@@ -56,11 +67,36 @@ void main() {
         pushSpaceVerdict: pushSpaceVerdict,
         pushFailureReason: pushFailureReason,
         pushSavedPaths: pushSavedPaths,
+        initialLocation: initialLocation,
+        onPickLocation: onPickLocation,
+        onValidateLocation: onValidateLocation,
+        onRememberDefault: onRememberDefault,
+        onCheckPushSpace: onCheckPushSpace,
         onAcceptPush: onAcceptPush,
         // Long enough that a test never trips it by accident; the polling behaviour has its own
         // case below.
         refreshInterval: const Duration(seconds: 30),
         onRefresh: onRefresh ?? () async {},
+        onPreview:
+            onPreview ??
+            (OfferSummary offered) async => List<ReceiveFilePreview>.generate(
+              offered.fileCount,
+              (int index) => ReceiveFilePreview(
+                fileId: 'file-$index',
+                originalPath: 'received-$index.bin',
+                sizeBytes: offered.totalBytes ~/ offered.fileCount,
+              ),
+            ),
+        onPreviewPush:
+            onPreviewPush ??
+            (ServerOffer offered) async => List<ReceiveFilePreview>.generate(
+              offered.fileCount,
+              (int index) => ReceiveFilePreview(
+                fileId: 'push-file-$index',
+                originalPath: 'pushed-$index.bin',
+                sizeBytes: offered.totalBytes ~/ offered.fileCount,
+              ),
+            ),
         onAccept: onAccept ?? (_, _) async => true,
       ),
     ),
@@ -98,14 +134,14 @@ void main() {
     'a named location makes the offer acceptable, and it is passed on',
     (tester) async {
       OfferSummary? accepted;
-      String? location;
+      ReceiveConfirmation? confirmation;
       await pump(
         tester,
         phase: ReceivePhase.offered,
         offers: <OfferSummary>[offer],
-        onAccept: (OfferSummary o, String where) async {
+        onAccept: (OfferSummary o, ReceiveConfirmation selected) async {
           accepted = o;
-          location = where;
+          confirmation = selected;
           return true;
         },
       );
@@ -120,10 +156,12 @@ void main() {
 
       await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
       await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+      await tester.pump();
 
       expect(accepted?.transferId, offer.transferId);
       expect(
-        location,
+        confirmation?.location.opaqueValue,
         '/tmp/received',
         reason: 'a path pasted with whitespace is the same path',
       );
@@ -157,6 +195,184 @@ void main() {
 
     await tester.pump(const Duration(seconds: 31));
     expect(refreshes, greaterThanOrEqualTo(2), reason: 'and it keeps asking');
+    await unmount(tester);
+  });
+
+  testWidgets('default opaque location is displayed without exposing its URI', (
+    tester,
+  ) async {
+    const StorageLocationRef location = StorageLocationRef(
+      kind: StorageLocationKind.androidDocumentTree,
+      opaqueValue: 'content://provider/tree/primary%3ADownload',
+      displayName: '下载 / NearSend',
+      permissionState: StoragePermissionState.granted,
+    );
+    await pump(
+      tester,
+      phase: ReceivePhase.offered,
+      offers: <OfferSummary>[offer],
+      initialLocation: location,
+    );
+
+    expect(find.text('下载 / NearSend'), findsOneWidget);
+    expect(find.textContaining('content://'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pump();
+    expect(find.text('确认接收文件'), findsOneWidget);
+    expect(find.text('下载 / NearSend'), findsWidgets);
+    expect(find.textContaining('content://'), findsNothing);
+    await unmount(tester);
+  });
+
+  testWidgets('multiple output names are confirmed in one modal', (
+    tester,
+  ) async {
+    ReceiveConfirmation? accepted;
+    const StorageLocationRef location = StorageLocationRef(
+      kind: StorageLocationKind.nativeDirectory,
+      opaqueValue: '/tmp/received',
+      displayName: 'received',
+      permissionState: StoragePermissionState.granted,
+    );
+    await pump(
+      tester,
+      phase: ReceivePhase.offered,
+      offers: <OfferSummary>[offer],
+      initialLocation: location,
+      onPreview: (_) async => const <ReceiveFilePreview>[
+        ReceiveFilePreview(
+          fileId: 'first',
+          originalPath: '相册/照片.jpg',
+          sizeBytes: 1024,
+        ),
+        ReceiveFilePreview(
+          fileId: 'second',
+          originalPath: '报告.pdf',
+          sizeBytes: 2048,
+        ),
+      ],
+      onAccept: (_, ReceiveConfirmation confirmation) async {
+        accepted = confirmation;
+        return true;
+      },
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pump();
+    expect(find.text('照片.jpg'), findsOneWidget);
+    expect(find.text('报告.pdf'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('receive-output-name-second')),
+      '最终报告.pdf',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+    await tester.pump();
+
+    expect(accepted?.outputNames, <String, String>{
+      'first': '照片.jpg',
+      'second': '最终报告.pdf',
+    });
+    await unmount(tester);
+  });
+
+  testWidgets('cancel and invalid names never accept the offer', (
+    tester,
+  ) async {
+    int accepts = 0;
+    const StorageLocationRef location = StorageLocationRef(
+      kind: StorageLocationKind.nativeDirectory,
+      opaqueValue: '/tmp/received',
+      displayName: 'received',
+    );
+    await pump(
+      tester,
+      phase: ReceivePhase.offered,
+      offers: <OfferSummary>[offer],
+      initialLocation: location,
+      onAccept: (_, _) async {
+        accepts++;
+        return true;
+      },
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, '取消'));
+    await tester.pump();
+    expect(accepts, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('receive-output-name-file-0')),
+      '../escape.txt',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+    await tester.pump();
+    expect(find.textContaining('文件名不能包含目录分隔符'), findsOneWidget);
+    expect(accepts, 0);
+    await unmount(tester);
+  });
+
+  testWidgets('revoked location blocks acceptance and offers reselection', (
+    tester,
+  ) async {
+    int accepts = 0;
+    const StorageLocationRef location = StorageLocationRef(
+      kind: StorageLocationKind.androidDocumentTree,
+      opaqueValue: 'content://provider/tree/revoked',
+      displayName: '旧目录',
+    );
+    await pump(
+      tester,
+      phase: ReceivePhase.offered,
+      offers: <OfferSummary>[offer],
+      initialLocation: location,
+      onPickLocation: () async => null,
+      onValidateLocation: (StorageLocationRef selected) async =>
+          selected.withPermissionState(StoragePermissionState.denied),
+      onAccept: (_, _) async {
+        accepts++;
+        return true;
+      },
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+    await tester.pump();
+    expect(find.text('保存位置不可用'), findsOneWidget);
+    expect(find.text('重新选择'), findsOneWidget);
+    expect(accepts, 0);
+    await unmount(tester);
+  });
+
+  testWidgets('confirmed location can be persisted as the new default', (
+    tester,
+  ) async {
+    StorageLocationRef? remembered;
+    const StorageLocationRef location = StorageLocationRef(
+      kind: StorageLocationKind.nativeDirectory,
+      opaqueValue: '/tmp/received',
+      displayName: 'received',
+      permissionState: StoragePermissionState.granted,
+    );
+    await pump(
+      tester,
+      phase: ReceivePhase.offered,
+      offers: <OfferSummary>[offer],
+      initialLocation: location,
+      onRememberDefault: (StorageLocationRef selected) {
+        remembered = selected;
+      },
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pump();
+    await tester.tap(find.text('设为默认接收位置'));
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+    await tester.pump();
+    expect(remembered, location);
     await unmount(tester);
   });
 
@@ -225,7 +441,7 @@ void main() {
     'a transfer being pushed to this device is shown and answerable',
     (tester) async {
       ServerOffer? answered;
-      String? location;
+      ReceiveConfirmation? confirmation;
       await pump(
         tester,
         phase: ReceivePhase.idle,
@@ -239,9 +455,9 @@ void main() {
           ),
         ],
         pushSpaceVerdict: SpaceVerdict.sufficient,
-        onAcceptPush: (ServerOffer o, String where) async {
+        onAcceptPush: (ServerOffer o, ReceiveConfirmation selected) async {
           answered = o;
-          location = where;
+          confirmation = selected;
           return true;
         },
       );
@@ -271,9 +487,11 @@ void main() {
       await tester.pump();
       await tester.tap(acceptButton);
       await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+      await tester.pump();
 
       expect(answered?.transferId, '55555555-6666-4777-8888-999999999999');
-      expect(location, '/tmp/pushed');
+      expect(confirmation?.location.opaqueValue, '/tmp/pushed');
       await unmount(tester);
     },
   );

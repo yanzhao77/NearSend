@@ -24,6 +24,7 @@ import 'package:nearsend/features/space/presentation/space_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_detail_page.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
@@ -264,18 +265,14 @@ class _NearSendAppState extends State<NearSendApp> {
   /// the estimate is recorded as unknown, the flow refuses only a *proven* shortfall, and the screen
   /// says out loud that no pre-check was done. Adding the measurement is a platform task, and until
   /// it exists this is the honest arrangement.
-  Future<ReceiverStorageContext> _storageContext(String saveLocation) async {
+  Future<ReceiverStorageContext> _storageContext(
+    StorageLocationRef saveLocation,
+  ) async {
     const VolumeId appPrivate = VolumeId('app-private');
     final PlatformStorageGateway gateway =
         widget.storageGateway ?? const UnknownPlatformStorageGateway();
     final StorageMeasurement measurement = await gateway.measureFreeSpace(
-      location: StorageLocationRef(
-        kind: saveLocation.startsWith('content://')
-            ? StorageLocationKind.androidDocumentTree
-            : StorageLocationKind.nativeDirectory,
-        opaqueValue: saveLocation,
-        displayName: '本次保存位置',
-      ),
+      location: saveLocation,
     );
     return ReceiverStorageContext(
       stagingVolume: appPrivate,
@@ -285,13 +282,13 @@ class _NearSendAppState extends State<NearSendApp> {
         appPrivate: const VolumeAvailability.unknown(),
         measurement.volume: measurement.availability,
       },
-      saveLocationRef: saveLocation,
+      saveLocationRef: saveLocation.opaqueValue,
     );
   }
 
   Future<SpaceEstimateSnapshot?> _measureIncomingSpace(
     ServerOffer offer,
-    String saveLocation,
+    StorageLocationRef saveLocation,
   ) async {
     final ServerReceivingFlow? incoming = _incoming;
     if (incoming == null) {
@@ -447,10 +444,14 @@ class _NearSendAppState extends State<NearSendApp> {
                     await receiving?.refresh();
                     await incoming?.refresh();
                   },
-                  onAccept: (offer, saveLocation) async =>
+                  onPreview: (offer) async =>
+                      await receiving?.preview(offer) ??
+                      const <ReceiveFilePreview>[],
+                  onAccept: (offer, confirmation) async =>
                       await receiving?.accept(
                         offer,
-                        saveLocationRef: saveLocation,
+                        saveLocationRef: confirmation.location.opaqueValue,
+                        outputNames: confirmation.outputNames,
                       ) ??
                       false,
                   pushOffers: incoming?.pending ?? const <ServerOffer>[],
@@ -460,20 +461,25 @@ class _NearSendAppState extends State<NearSendApp> {
                   pushFailureReason: incoming?.failureReason,
                   pushSavedPaths: incoming?.savedPaths ?? const <String>[],
                   onCheckPushSpace: _measureIncomingSpace,
+                  onPreviewPush: incoming == null
+                      ? null
+                      : (offer) async => incoming.preview(offer),
+                  initialLocation: _settings.settings.defaultReceiveLocation,
                   onPickLocation:
                       widget.storageGateway == null ||
                           !widget.storageGateway!.supportsDirectorySelection
                       ? null
-                      : () async =>
-                            (await widget.storageGateway!
-                                    .pickReceiveDirectory())
-                                ?.opaqueValue,
+                      : widget.storageGateway!.pickReceiveDirectory,
+                  onValidateLocation:
+                      widget.storageGateway?.validateReceiveLocation,
+                  onRememberDefault: _settings.updateDefaultReceiveLocation,
                   onAcceptPush: incoming == null
                       ? null
-                      : (offer, saveLocation) async => incoming.accept(
+                      : (offer, confirmation) async => incoming.accept(
                           offer,
-                          context: await _storageContext(saveLocation),
-                          targetRef: saveLocation,
+                          context: await _storageContext(confirmation.location),
+                          targetRef: confirmation.location.opaqueValue,
+                          outputNames: confirmation.outputNames,
                         ),
                 ),
               );

@@ -436,6 +436,10 @@ void main() {
       await tester.enterText(find.byType(TextField), saveTo.path);
       await tester.pump();
       await tapText(tester, '接收并保存');
+      await settle(tester, () => visible('确认接收文件'));
+      expect(find.text('确认接收文件'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+      await tester.pump();
 
       await settle(
         tester,
@@ -605,6 +609,12 @@ void main() {
       await tapText(tester, ReceivePage.unknownSpaceAcknowledgement);
       expect(find.text(ReceivePage.spaceUnknownNote), findsOneWidget);
       await tapText(tester, '接收并保存');
+      await settle(tester, () => visible('确认接收文件'));
+      expect(find.text('确认接收文件'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
+      await tester.pumpAndSettle();
+      expect(find.text('无法确认剩余空间'), findsOneWidget);
+      await tapText(tester, '仍然接收');
 
       await settle(
         tester,

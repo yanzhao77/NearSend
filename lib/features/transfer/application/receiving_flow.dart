@@ -10,6 +10,7 @@ import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/transfer_flow.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// The receiving side, from an offer the peer made to a file on this device.
@@ -92,6 +93,8 @@ class ReceivingFlow extends ChangeNotifier {
       _flow == null || _offer == null ? null : _currentFileNames[_currentIndex];
 
   final List<String> _currentFileNames = <String>[];
+  final Map<String, FrozenManifest> _previewedManifests =
+      <String, FrozenManifest>{};
 
   bool get isBusy =>
       _phase == ReceivePhase.accepting || _phase == ReceivePhase.receiving;
@@ -120,6 +123,20 @@ class ReceivingFlow extends ChangeNotifier {
     }
   }
 
+  Future<List<ReceiveFilePreview>> preview(OfferSummary offer) async {
+    final FrozenManifest manifest = await wire.readManifest(offer.transferId);
+    _validateOffer(offer, manifest);
+    _previewedManifests[offer.transferId] = manifest;
+    return <ReceiveFilePreview>[
+      for (final ManifestFile file in manifest.files)
+        ReceiveFilePreview(
+          fileId: file.fileId,
+          originalPath: file.relativePath,
+          sizeBytes: file.sizeBytes,
+        ),
+    ];
+  }
+
   /// Accepts [offer] and pulls it to [saveLocationRef].
   ///
   /// [saveLocationRef] is the directory the files are written into, and it is required rather than
@@ -145,12 +162,10 @@ class ReceivingFlow extends ChangeNotifier {
       // File metadata is deliberately read before the decision. The session is bound to this task,
       // and §6 requires the receiver to show and persist the exact output mapping before any task
       // credential can make file bytes available.
-      final FrozenManifest manifest = await wire.readManifest(offer.transferId);
-      if (manifest.manifestDigest != offer.manifestDigest ||
-          manifest.fileCount != offer.fileCount ||
-          manifest.totalBytes != offer.totalBytes) {
-        throw ReceivingRefused('对方提供的文件清单已经变化，请刷新后重新确认。');
-      }
+      final FrozenManifest manifest =
+          _previewedManifests.remove(offer.transferId) ??
+          await wire.readManifest(offer.transferId);
+      _validateOffer(offer, manifest);
       _createOutputPlans(
         transferId: offer.transferId,
         files: manifest.files,
@@ -289,6 +304,14 @@ class ReceivingFlow extends ChangeNotifier {
       _flow?.applyFailure(_failureReason!, atMillis: now());
       _set(ReceivePhase.failed);
       return false;
+    }
+  }
+
+  static void _validateOffer(OfferSummary offer, FrozenManifest manifest) {
+    if (manifest.manifestDigest != offer.manifestDigest ||
+        manifest.fileCount != offer.fileCount ||
+        manifest.totalBytes != offer.totalBytes) {
+      throw ReceivingRefused('对方提供的文件清单已经变化，请刷新后重新确认。');
     }
   }
 

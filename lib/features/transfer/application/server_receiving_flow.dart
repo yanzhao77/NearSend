@@ -10,6 +10,7 @@ import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/transfer_flow.dart';
+import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// An offer this device was asked to accept, as its own user sees it.
@@ -179,6 +180,15 @@ class ServerReceivingFlow extends ChangeNotifier {
     }
     return _pending;
   }
+
+  List<ReceiveFilePreview> preview(ServerOffer offer) => <ReceiveFilePreview>[
+    for (final ManifestFile file in _manifestOf(offer))
+      ReceiveFilePreview(
+        fileId: file.fileId,
+        originalPath: file.relativePath,
+        sizeBytes: file.sizeBytes,
+      ),
+  ];
 
   /// Accepts [offer] and waits for the bytes to arrive, then verifies and saves them.
   ///
