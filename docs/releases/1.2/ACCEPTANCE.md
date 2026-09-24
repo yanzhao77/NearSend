@@ -55,6 +55,12 @@
 | V12-10 应用流程回归 | 通过 | `test/app/app_test.dart` 6 项通过；发送、接收、节点失败和真实 TLS 文件流程保持可用 |
 | V12-10 全量回归 | 通过 | 修正首页主操作顺序和新增测试滚动后，`fvm flutter test --reporter compact` 1361 项通过；此前失败运行保留为修复过程 |
 | V12-10 BLE/mDNS 生产挑战 | 受阻 | 安全挑战实现尚未接入生产控制消息；PAKE 无合格跨平台实现，不能从未认证候选静默建立信任 |
+| V12-11 文件动作定向测试 | 通过 | 平台通道、引用边界、结构化错误、接收结果、任务详情、SQLite 最终句柄和双向导出句柄共 29 项通过 |
+| V12-11 生命周期测试 | 通过 | 应用进入 `paused` 后雷达返回关闭且 BLE 会话释放；扫码控制器改为显式页面生命周期所有权 |
+| V12-11 静态分析 | 通过 | `fvm flutter analyze`，`No issues found` |
+| V12-11 全量回归 | 通过 | `fvm flutter test --reporter compact`，1369 项全部通过 |
+| V12-11 Android Kotlin 编译 | 受阻 | Maven Central 下载 `kotlinx-coroutines-core-jvm 1.10.2` 时 TLS 握手中断，失败发生在 `mobile_scanner` 依赖解析，未进入本次新增 Kotlin 编译 |
+| V12-11 Windows Shell 编译 | 受阻 | 当前主机不是 Windows；`ShellExecuteW` 与 `SHOpenFolderAndSelectItems` 需 Windows CI/主机编译和实测 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
@@ -79,12 +85,34 @@
 | A12 单/多文件、同名、中文和长名称 | 未执行 | 单弹框多文件改名、中文改名、同名自动重命名和非法名阻断已有自动化；仍需 Android/Windows 实机组合验证 |
 | A13 目录授权撤销或目录删除 | 未执行 | 接收前撤权阻断和设置修复入口、输出失败持久化与保留暂存已有自动化；仍需真机撤权/删除目录验证 |
 | A14 拒绝、超时和撤销邀请 | 未执行 | 拒绝不创建内容/输出计划已有自动化；超时、撤销与真机资源清理仍待验证 |
-| A15 关闭就绪、后台和断网 | 未执行 | V12-10/V12-11 尚未实现 |
+| A15 关闭就绪、后台和断网 | 自动化部分通过 | 默认关闭、显式关闭、证明过期熄灯和进入后台停止 BLE 雷达已有自动化；真实 BLE/mDNS、网络切换及系统后台限制仍需目标设备 |
 | A16 大文件和大量小文件 | 未执行 | 集成后执行，需含超过 4 GiB 样本 |
 | A17 Android ↔ Android，不同网络 | 未执行 | 需要两台 Android 设备 |
 | A18 历史设备离线后熄灯 | 未执行 | V12-10 尚未实现 |
 | A19 QR 过期、复用和篡改 | 未执行 | V12-09 尚未实现 |
-| A20 热点会话结束或取消后的清理 | 未执行 | V12-08/V12-11 尚未实现 |
+| A20 热点会话结束或取消后的清理 | 自动化部分通过 | Dart lease 失败/销毁释放及 Android Activity `close()` 路径已有代码与网关测试；真实热点 reservation、系统确认取消和原网络恢复仍需双机实测 |
+
+## V12-11 系统动作与生命周期证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm dart format --output=none --set-exit-if-changed .
+结果：226 files，0 changed
+
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test --reporter compact
+结果：1369 tests passed
+
+cd android
+./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
+结果：失败；Maven Central TLS 握手中断，未进入本次 Kotlin 源码编译
+```
+
+未执行 Windows C++ 编译、Android/Windows 系统打开与定位、Android SAF 撤权、真实后台切换和热点
+资源回收实测。macOS 自动化只验证 Dart 契约、状态机和真实本地文件导出，不构成平台 Shell/Intent 证据。
 
 ## V12-10 首页雷达证据
 

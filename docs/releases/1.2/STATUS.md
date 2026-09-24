@@ -36,7 +36,7 @@
 | V12-08 热点与数据通道 | 部分完成，路由绑定受阻 | 已实现认证端点优先的有界网络选择、Android LocalOnlyHotspot/系统确认入网 lease 与资源释放、Windows 系统设置回退；凭据不持久化/不输出 | Android 真机验证热点与指定 Network socket；Windows 主机验证 Native Wi-Fi 事件/profile/恢复后再开放自动加入 |
 | V12-09 二维码入口 | 进行中 | 严格 `nearsend-bootstrap` v1、旧码兼容、真实会话二维码、移动离线摄像头、Windows 有界图片导入及扫码后系统入网→TLS pin 配对协调已实现 | 补 Android/Windows 构建和摄像头/导图/热点二维码实测；向用户呈现平台入网错误 |
 | V12-10 首页雷达与在线历史 | 部分完成 | 默认关闭的就绪状态机已真实启停 mDNS/BLE；首页合并历史、mDNS、BLE 候选，只有新鲜已授权证明显示绿色状态 | 将已知设备挑战接入生产 BLE/mDNS 控制链路；完成首次 PAKE、候选点击配对和双机实测 |
-| V12-11 系统打开与异常收尾 | 未开始 | 无完整打开/定位与资源回收适配 | 在纵向流程完成后补齐 |
+| V12-11 系统打开与异常收尾 | 代码与当前环境自动化完成，平台验证受阻 | 保存结果和任务详情只在真实最终句柄存在时提供系统打开/定位；Android 使用 SAF/FileProvider，Windows 使用 Shell API；后台关闭雷达，扫码、BLE、mDNS、热点/入网 lease 均有收尾路径；1369 项全量测试通过 | Android 重试原生构建并真机验证 SAF/FileProvider；Windows 编译和 Shell 实测；补后台切换、权限撤销和热点清理实机证据 |
 | V12-12 回归与发布准备 | 未开始 | 验收矩阵已建立 | 集成后执行自动化、构建和可用设备验证 |
 
 ## 当前环境限制
@@ -191,6 +191,27 @@
   测试滚动后完整回归 1361 项通过。
 - 已知设备挑战目前只有安全实现和受控 `recordVerified` 入口，尚未在生产 BLE/mDNS 控制消息上交换；
   未知候选也仍受成熟 PAKE 缺失阻塞。因此候选点击仅进入现有连接页，V12-10 不标记完成。
+
+## V12-11 系统打开与异常收尾阶段记录
+
+- 接收流程保留平台导出返回的 `createdTargetRef`，并与安全展示名分开建模。结果页和任务详情只在
+  SQLite `receive_output_plans.final_target_ref` 或本次真实导出结果存在时提供“打开”和“显示位置”，
+  没有句柄时不显示不可执行动作。MethodChannel 拒绝空白、控制字符及超过 8192 UTF-8 字节的引用，
+  错误只返回结构化状态，不在提示或对象文本中输出 URI/路径。
+- Android 对 SAF `content://` URI 复查可读权限后用 `ACTION_VIEW`；应用私有默认接收目录只通过
+  非导出的 `FileProvider` 暴露 `files/received/` 子目录，不暴露整个 `filesDir`，也不生成
+  `file://` URI。SAF 文档尝试交给系统显示目录；应用私有文件无法定位时诚实报告不支持。
+- Windows 只接受实际存在的普通文件，使用 `ShellExecuteW` 打开，并使用
+  `SHParseDisplayName`/`SHOpenFolderAndSelectItems` 定位；不拼接 shell 命令。当前 macOS 不能编译或
+  实测该 C++ 路径。
+- 应用进入非前台状态时撤销雷达期望并停止 mDNS/BLE；异步停止失败不阻断另一资源的清理，也不会
+  让切换队列永久失败。移动扫码控制器改为页面生命周期内单例并在销毁时释放。Activity 销毁继续
+  关闭热点 reservation、入网 callback 和待处理权限请求；应用销毁继续释放入网 lease。
+- `fvm dart format --output=none --set-exit-if-changed .`、`fvm flutter analyze` 通过；文件动作、
+  接收结果、任务详情、SQLite 最终句柄、双向接收流程和后台雷达定向测试通过；完整回归 1369 项通过。
+- Android Kotlin 重试在 `mobile_scanner` 的 Maven 依赖下载阶段因 TLS 握手中断，尚未进入本次新增
+  Kotlin 源码编译；Windows 构建与 Android/Windows 系统动作、撤权和后台切换实测均未执行，
+  因此 V12-11 不标记为平台验收完成。
 
 ## 人工重点复核
 

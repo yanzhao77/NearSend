@@ -3,6 +3,7 @@
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <wrl/client.h>
 
@@ -154,6 +155,48 @@ EncodableValue MeasureFreeSpace(const std::string& path_utf8) {
   return EncodableValue(result);
 }
 
+EncodableValue ActionResult(const char* status) {
+  return EncodableValue(EncodableMap{
+      {EncodableValue("status"), EncodableValue(status)},
+  });
+}
+
+bool IsRegularFile(const std::wstring& path) {
+  const DWORD attributes =
+      path.empty() ? INVALID_FILE_ATTRIBUTES : ::GetFileAttributesW(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES &&
+         (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+EncodableValue OpenSavedFile(const std::string& path_utf8) {
+  const std::wstring path = Utf16FromUtf8(path_utf8);
+  if (!IsRegularFile(path)) {
+    return ActionResult("unavailable");
+  }
+  const INT_PTR opened = reinterpret_cast<INT_PTR>(::ShellExecuteW(
+      nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+  if (opened > 32) {
+    return ActionResult("completed");
+  }
+  return ActionResult(opened == SE_ERR_NOASSOC ? "unsupported" : "failed");
+}
+
+EncodableValue RevealSavedFile(const std::string& path_utf8) {
+  const std::wstring path = Utf16FromUtf8(path_utf8);
+  if (!IsRegularFile(path)) {
+    return ActionResult("unavailable");
+  }
+  PIDLIST_ABSOLUTE item = nullptr;
+  const HRESULT parsed =
+      ::SHParseDisplayName(path.c_str(), nullptr, &item, 0, nullptr);
+  if (FAILED(parsed) || item == nullptr) {
+    return ActionResult("failed");
+  }
+  const HRESULT shown = ::SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
+  ::CoTaskMemFree(item);
+  return ActionResult(SUCCEEDED(shown) ? "completed" : "failed");
+}
+
 }  // namespace
 
 void RegisterPlatformStorageChannel(flutter::FlutterEngine* engine,
@@ -194,6 +237,24 @@ void RegisterPlatformStorageChannel(flutter::FlutterEngine* engine,
         }
         if (call.method_name() == "measureFreeSpace") {
           result->Success(MeasureFreeSpace(Argument(call, "locationRef")));
+          return;
+        }
+        if (call.method_name() == "openSavedFile") {
+          const std::string target_ref = Argument(call, "targetRef");
+          if (target_ref.empty()) {
+            result->Error("NS-STORAGE", "a targetRef argument is required");
+          } else {
+            result->Success(OpenSavedFile(target_ref));
+          }
+          return;
+        }
+        if (call.method_name() == "revealSavedFile") {
+          const std::string target_ref = Argument(call, "targetRef");
+          if (target_ref.empty()) {
+            result->Error("NS-STORAGE", "a targetRef argument is required");
+          } else {
+            result->Success(RevealSavedFile(target_ref));
+          }
           return;
         }
         result->NotImplemented();

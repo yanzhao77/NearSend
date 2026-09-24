@@ -43,7 +43,23 @@ class MobilePairingScannerPage extends StatefulWidget {
 }
 
 class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
+  late final MobileScannerController _controller;
   bool _handled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController(
+      formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
+      detectionSpeed: DetectionSpeed.noDuplicates,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   void _detected(BarcodeCapture capture) {
     if (_handled) return;
@@ -69,10 +85,7 @@ class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
     body: SafeArea(
       child: MobileScanner(
         onDetect: _detected,
-        controller: MobileScannerController(
-          formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
-          detectionSpeed: DetectionSpeed.noDuplicates,
-        ),
+        controller: _controller,
         errorBuilder: (BuildContext context, MobileScannerException error) =>
             const Center(child: Text('无法使用摄像头，请检查权限或改用图片导入。')),
       ),

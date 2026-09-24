@@ -1,12 +1,15 @@
 package com.nearsend.app
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.StatFs
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 /** Owns Android receive-directory grants and documents created under those grants. */
 class AndroidStorageLocations(private val activity: Activity) {
@@ -179,6 +182,78 @@ class AndroidStorageLocations(private val activity: Activity) {
             DocumentsContract.deleteDocument(activity.contentResolver, uri)
         }
     }
+
+    fun openSavedFile(targetRef: String): Map<String, String> {
+        val uri = readableTargetUri(targetRef) ?: return actionResult("unavailable")
+        return try {
+            activity.contentResolver.openAssetFileDescriptor(uri, "r")?.use { }
+                ?: return actionResult("unavailable")
+            val type = activity.contentResolver.getType(uri) ?: "application/octet-stream"
+            activity.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, type)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                },
+            )
+            actionResult("completed")
+        } catch (_: SecurityException) {
+            actionResult("permissionDenied")
+        } catch (_: ActivityNotFoundException) {
+            actionResult("unsupported")
+        } catch (_: Exception) {
+            actionResult("failed")
+        }
+    }
+
+    fun revealSavedFile(targetRef: String): Map<String, String> {
+        val documentUri = Uri.parse(targetRef)
+        if (documentUri.scheme != "content" || !DocumentsContract.isDocumentUri(activity, documentUri)) {
+            return actionResult("unsupported")
+        }
+        return try {
+            val treeUri = DocumentsContract.buildTreeDocumentUri(
+                documentUri.authority ?: return actionResult("unavailable"),
+                DocumentsContract.getTreeDocumentId(documentUri),
+            )
+            activity.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(treeUri, DocumentsContract.Document.MIME_TYPE_DIR)
+                    addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                },
+            )
+            actionResult("completed")
+        } catch (_: SecurityException) {
+            actionResult("permissionDenied")
+        } catch (_: ActivityNotFoundException) {
+            actionResult("unsupported")
+        } catch (_: Exception) {
+            actionResult("failed")
+        }
+    }
+
+    private fun readableTargetUri(targetRef: String): Uri? {
+        val parsed = Uri.parse(targetRef)
+        if (parsed.scheme == "content") return parsed
+        if (parsed.scheme != null || targetRef.isBlank()) return null
+        return try {
+            val root = File(activity.filesDir, "received").canonicalFile
+            val target = File(targetRef).canonicalFile
+            if (!target.isFile || !target.path.startsWith(root.path + File.separator)) return null
+            FileProvider.getUriForFile(
+                activity,
+                activity.packageName + ".fileprovider",
+                target,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun actionResult(status: String): Map<String, String> =
+        mapOf("status" to status)
 
     private fun requireGranted(treeUri: Uri) {
         if (validateReceiveDirectory(treeUri)["permissionState"] != "granted") {

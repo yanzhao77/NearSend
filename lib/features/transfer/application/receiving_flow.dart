@@ -7,6 +7,7 @@ import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/transfer_resume_request.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
+import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/transfer_flow.dart';
@@ -64,6 +65,7 @@ class ReceivingFlow extends ChangeNotifier {
   String? _failureReason;
   TransferFlow? _flow;
   final List<String> _savedPaths = <String>[];
+  final List<SavedFileReference> _savedFiles = <SavedFileReference>[];
   int _currentIndex = 0;
   int _fileCount = 0;
 
@@ -82,6 +84,9 @@ class ReceivingFlow extends ChangeNotifier {
 
   /// Where the files that were written ended up, in the order they were written.
   List<String> get savedPaths => List<String>.unmodifiable(_savedPaths);
+
+  List<SavedFileReference> get savedFiles =>
+      List<SavedFileReference>.unmodifiable(_savedFiles);
 
   /// Which file of the transfer is in flight, one-based; 0 when none is.
   int get currentFileNumber => _flow == null ? 0 : _currentIndex + 1;
@@ -154,6 +159,7 @@ class ReceivingFlow extends ChangeNotifier {
     _offer = offer;
     _failureReason = null;
     _savedPaths.clear();
+    _savedFiles.clear();
     _currentFileNames.clear();
     _currentIndex = 0;
     _set(ReceivePhase.accepting);
@@ -273,6 +279,12 @@ class ReceivingFlow extends ChangeNotifier {
         final String? savedPath = outcome.savedPath;
         if (savedPath != null) {
           _savedPaths.add(savedPath);
+          _savedFiles.add(
+            SavedFileReference(
+              displayName: savedPath,
+              targetRef: outcome.export?.createdTargetRef,
+            ),
+          );
         }
         _flow?.applyCompleted(atMillis: now());
         _notify();

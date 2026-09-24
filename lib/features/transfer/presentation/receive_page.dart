@@ -7,12 +7,14 @@ import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/relative_path.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
 import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 import 'package:nearsend/platform/storage_location.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
 
 /// The receiving screen: who is offering what, where it will go, and how far it has got.
 ///
@@ -43,6 +45,7 @@ class ReceivePage extends StatefulWidget {
     this.fileCount = 0,
     this.failureReason,
     this.savedPaths = const <String>[],
+    this.savedFiles = const <SavedFileReference>[],
     this.refreshInterval = const Duration(seconds: 2),
     this.pushOffers = const <ServerOffer>[],
     this.pushPhase = ServerReceivePhase.waiting,
@@ -50,6 +53,8 @@ class ReceivePage extends StatefulWidget {
     this.pushSpaceEstimate,
     this.pushFailureReason,
     this.pushSavedPaths = const <String>[],
+    this.pushSavedFiles = const <SavedFileReference>[],
+    this.fileActions,
     this.onCheckPushSpace,
     this.onPreviewPush,
     this.onPickLocation,
@@ -81,6 +86,7 @@ class ReceivePage extends StatefulWidget {
   final int fileCount;
   final String? failureReason;
   final List<String> savedPaths;
+  final List<SavedFileReference> savedFiles;
   final Duration refreshInterval;
 
   /// What **this** device is being asked to accept, from its own database.
@@ -102,6 +108,8 @@ class ReceivePage extends StatefulWidget {
 
   final String? pushFailureReason;
   final List<String> pushSavedPaths;
+  final List<SavedFileReference> pushSavedFiles;
+  final PlatformFileActions? fileActions;
   final Future<SpaceEstimateSnapshot?> Function(
     ServerOffer offer,
     StorageLocationRef saveLocation,
@@ -474,15 +482,15 @@ class _ReceivePageState extends State<ReceivePage> {
                         tone: NsStatusTone.warning,
                       ),
                     ),
-                  for (final String path in widget.pushSavedPaths)
-                    Padding(
-                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: NsInfoBanner(
-                        title: '已保存',
-                        message: '已保存：$path',
-                        tone: NsStatusTone.success,
+                  if (widget.pushSavedFiles.isNotEmpty)
+                    for (final SavedFileReference file in widget.pushSavedFiles)
+                      _SavedFileCard(file: file, actions: widget.fileActions)
+                  else
+                    for (final String path in widget.pushSavedPaths)
+                      _SavedFileCard(
+                        file: SavedFileReference(displayName: path),
+                        actions: widget.fileActions,
                       ),
-                    ),
                   if (widget.pushFailureReason != null)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.sm),
@@ -501,6 +509,8 @@ class _ReceivePageState extends State<ReceivePage> {
                   fileCount: widget.fileCount,
                   failureReason: widget.failureReason,
                   savedPaths: widget.savedPaths,
+                  savedFiles: widget.savedFiles,
+                  fileActions: widget.fileActions,
                 ),
               ],
             ),
@@ -1025,6 +1035,8 @@ class _PhaseSection extends StatelessWidget {
     required this.fileCount,
     required this.failureReason,
     required this.savedPaths,
+    required this.savedFiles,
+    required this.fileActions,
   });
 
   final ReceivePhase phase;
@@ -1034,6 +1046,8 @@ class _PhaseSection extends StatelessWidget {
   final int fileCount;
   final String? failureReason;
   final List<String> savedPaths;
+  final List<SavedFileReference> savedFiles;
+  final PlatformFileActions? fileActions;
 
   @override
   Widget build(BuildContext context) {
@@ -1059,22 +1073,15 @@ class _PhaseSection extends StatelessWidget {
           _Stat(label: '速度', value: figures.speedLabel),
           _Stat(label: '剩余时间', value: figures.remainingLabel),
         ],
-        for (final String path in savedPaths)
-          Padding(
-            padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(NearSendSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    const SizedBox(width: NearSendSpacing.sm),
-                    Expanded(child: Text('已保存：$path')),
-                  ],
-                ),
-              ),
+        if (savedFiles.isNotEmpty)
+          for (final SavedFileReference file in savedFiles)
+            _SavedFileCard(file: file, actions: fileActions)
+        else
+          for (final String path in savedPaths)
+            _SavedFileCard(
+              file: SavedFileReference(displayName: path),
+              actions: fileActions,
             ),
-          ),
         if (failureReason != null)
           Padding(
             padding: const EdgeInsets.only(top: NearSendSpacing.sm),
@@ -1085,6 +1092,74 @@ class _PhaseSection extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _SavedFileCard extends StatelessWidget {
+  const _SavedFileCard({required this.file, required this.actions});
+
+  final SavedFileReference file;
+  final PlatformFileActions? actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final String? targetRef = file.targetRef;
+    return Padding(
+      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(NearSendSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('已保存：${file.displayName}'),
+              if (targetRef != null && actions != null) ...<Widget>[
+                const SizedBox(height: NearSendSpacing.xs),
+                Wrap(
+                  spacing: NearSendSpacing.xs,
+                  children: <Widget>[
+                    if (actions!.supportsOpen)
+                      TextButton.icon(
+                        onPressed: () => _run(
+                          context,
+                          actions!.open(targetRef),
+                          reveal: false,
+                        ),
+                        icon: const Icon(Icons.open_in_new),
+                        label: const Text('打开'),
+                      ),
+                    if (actions!.supportsReveal)
+                      TextButton.icon(
+                        onPressed: () => _run(
+                          context,
+                          actions!.reveal(targetRef),
+                          reveal: true,
+                        ),
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('显示位置'),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _run(
+    BuildContext context,
+    Future<PlatformFileActionResult> operation, {
+    required bool reveal,
+  }) async {
+    final PlatformFileActionResult result = await operation;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(platformFileActionMessage(result, reveal: reveal)),
+      ),
     );
   }
 }

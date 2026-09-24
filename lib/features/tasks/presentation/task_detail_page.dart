@@ -5,6 +5,7 @@ import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
 
 typedef TaskAction = VoidCallback;
 
@@ -18,6 +19,7 @@ class TaskDetailPage extends StatelessWidget {
     this.onCancel,
     this.onReconnect,
     this.onRetryFailed,
+    this.fileActions,
   });
 
   final TaskCatalogController controller;
@@ -27,6 +29,7 @@ class TaskDetailPage extends StatelessWidget {
   final TaskAction? onCancel;
   final TaskAction? onReconnect;
   final TaskAction? onRetryFailed;
+  final PlatformFileActions? fileActions;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +53,7 @@ class TaskDetailPage extends StatelessWidget {
           onCancel: onCancel,
           onReconnect: onReconnect,
           onRetryFailed: onRetryFailed,
+          fileActions: fileActions,
         );
       },
     );
@@ -64,6 +68,7 @@ class _TaskDetailView extends StatelessWidget {
     this.onCancel,
     this.onReconnect,
     this.onRetryFailed,
+    this.fileActions,
   });
 
   final TaskDetail detail;
@@ -72,6 +77,7 @@ class _TaskDetailView extends StatelessWidget {
   final TaskAction? onCancel;
   final TaskAction? onReconnect;
   final TaskAction? onRetryFailed;
+  final PlatformFileActions? fileActions;
 
   static const List<String> _stages = <String>['准备', '连接', '传输', '校验', '保存'];
 
@@ -134,13 +140,47 @@ class _TaskDetailView extends StatelessWidget {
                 for (final TaskFileOverview file in detail.files)
                   Padding(
                     padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
-                    child: NsFileRow(
-                      fileName: file.relativePath,
-                      sizeLabel: formatBytes(file.sizeBytes),
-                      statusLabel: _fileLabel(file),
-                      progress: file.progress,
-                      statusTone: _fileTone(file),
-                      icon: _fileIcon(file),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        NsFileRow(
+                          fileName: file.relativePath,
+                          sizeLabel: formatBytes(file.sizeBytes),
+                          statusLabel: _fileLabel(file),
+                          progress: file.progress,
+                          statusTone: _fileTone(file),
+                          icon: _fileIcon(file),
+                        ),
+                        if (file.isSaved &&
+                            file.finalTargetRef != null &&
+                            fileActions != null)
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: NearSendSpacing.xs,
+                            children: <Widget>[
+                              if (fileActions!.supportsOpen)
+                                TextButton.icon(
+                                  onPressed: () => _runFileAction(
+                                    context,
+                                    fileActions!.open(file.finalTargetRef!),
+                                    reveal: false,
+                                  ),
+                                  icon: const Icon(Icons.open_in_new),
+                                  label: const Text('打开'),
+                                ),
+                              if (fileActions!.supportsReveal)
+                                TextButton.icon(
+                                  onPressed: () => _runFileAction(
+                                    context,
+                                    fileActions!.reveal(file.finalTargetRef!),
+                                    reveal: true,
+                                  ),
+                                  icon: const Icon(Icons.folder_open),
+                                  label: const Text('显示位置'),
+                                ),
+                            ],
+                          ),
+                      ],
                     ),
                   ),
                 if (detail.files.isEmpty)
@@ -244,6 +284,20 @@ class _TaskDetailView extends StatelessWidget {
       ),
     );
     if (confirmed == true) onCancel?.call();
+  }
+
+  Future<void> _runFileAction(
+    BuildContext context,
+    Future<PlatformFileActionResult> operation, {
+    required bool reveal,
+  }) async {
+    final PlatformFileActionResult result = await operation;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(platformFileActionMessage(result, reveal: reveal)),
+      ),
+    );
   }
 
   static String _subtitle(TaskOverview task) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -25,6 +26,7 @@ import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/ble_control_gateway.dart';
 
 /// The application, assembled: a node with a lifetime, a connection screen showing it, and a send
 /// screen that ends with bytes on the other device.
@@ -146,6 +148,35 @@ void main() {
           'a session handed to the application is the application\'s to close; a node left '
           'listening after the frame that owned it is gone has no owner at all',
     );
+  });
+
+  testWidgets('backgrounding turns off radar resources', (tester) async {
+    final NodeSession node = session();
+    final _LifecycleBleAdapter adapter = _LifecycleBleAdapter();
+    final BleControlGateway ble = BleControlGateway(adapter: adapter);
+    await tester.runAsync(() => node.start());
+
+    await tester.pumpWidget(
+      NearSendApp(session: node, peer: PeerSession(), bleGateway: ble),
+    );
+    await tester.pump();
+    await tester.scrollUntilVisible(find.text('附近设备雷达'), 300);
+    await tester.tap(find.byType(Switch));
+    await settle(
+      tester,
+      () =>
+          adapter.starts == 1 &&
+          tester.widget<Switch>(find.byType(Switch)).value,
+    );
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await settle(tester, () => adapter.session.stops == 1);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester, () => node.phase == NodePhase.stopped);
   });
 
   testWidgets('a build with no node says so rather than showing a fake pin', (
@@ -658,4 +689,41 @@ void main() {
       });
     },
   );
+}
+
+class _LifecycleBleAdapter implements BlePlatformAdapter {
+  final _LifecycleBleSession session = _LifecycleBleSession();
+  int starts = 0;
+
+  @override
+  Future<bool> requestAuthorization() async => true;
+
+  @override
+  Future<BlePlatformSession> start(BlePublication publication) async {
+    starts++;
+    return session;
+  }
+}
+
+class _LifecycleBleSession implements BlePlatformSession {
+  final StreamController<BlePlatformEvent> _events =
+      StreamController<BlePlatformEvent>.broadcast();
+  int stops = 0;
+
+  @override
+  Stream<BlePlatformEvent> get events => _events.stream;
+
+  @override
+  Future<void> connect(String peerId) async {}
+
+  @override
+  Future<int> maximumFrameBytes(String peerId) async => 20;
+
+  @override
+  Future<void> sendFrame(String peerId, Uint8List frame) async {}
+
+  @override
+  Future<void> stop() async {
+    stops++;
+  }
 }

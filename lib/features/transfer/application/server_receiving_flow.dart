@@ -6,6 +6,7 @@ import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
+import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
@@ -101,6 +102,7 @@ class ServerReceivingFlow extends ChangeNotifier {
   String? _failureReason;
   TransferFlow? _flow;
   final List<String> _savedPaths = <String>[];
+  final List<SavedFileReference> _savedFiles = <SavedFileReference>[];
   int _currentIndex = 0;
   int _fileCount = 0;
   SpaceVerdict? _spaceVerdict;
@@ -126,6 +128,9 @@ class ServerReceivingFlow extends ChangeNotifier {
   TransferProgress? get progress => _flow?.progress;
 
   List<String> get savedPaths => List<String>.unmodifiable(_savedPaths);
+
+  List<SavedFileReference> get savedFiles =>
+      List<SavedFileReference>.unmodifiable(_savedFiles);
 
   int get currentFileNumber => _flow == null ? 0 : _currentIndex + 1;
 
@@ -205,6 +210,7 @@ class ServerReceivingFlow extends ChangeNotifier {
     }
     _failureReason = null;
     _savedPaths.clear();
+    _savedFiles.clear();
     _currentIndex = 0;
     _phase = ServerReceivePhase.accepting;
     _notify();
@@ -292,6 +298,12 @@ class ServerReceivingFlow extends ChangeNotifier {
         final String? savedPath = outcome.savedPath;
         if (savedPath != null) {
           _savedPaths.add(savedPath);
+          _savedFiles.add(
+            SavedFileReference(
+              displayName: savedPath,
+              targetRef: outcome.export?.createdTargetRef,
+            ),
+          );
         }
       }
 

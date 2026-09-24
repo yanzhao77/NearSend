@@ -203,6 +203,11 @@ void main() {
     expect(await received, isTrue);
     expect(receiving.phase, ServerReceivePhase.saved);
     expect(receiving.savedPaths, hasLength(1));
+    expect(receiving.savedFiles, hasLength(1));
+    expect(
+      receiving.savedFiles.single.displayName,
+      receiving.savedPaths.single,
+    );
     expect(observedPreAcceptancePlan, isTrue);
     expect(
       host.authorizations.read(transferId)!.saveLocationRef,
@@ -215,6 +220,7 @@ void main() {
         .whereType<File>()
         .where((File f) => !f.path.endsWith('.nearsend-part'))
         .single;
+    expect(receiving.savedFiles.single.targetRef, written.path);
     expect(
       sha256.convert(written.readAsBytesSync()).toString(),
       sha256.convert(payload).toString(),

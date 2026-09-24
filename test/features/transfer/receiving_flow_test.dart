@@ -175,6 +175,9 @@ void main() {
       reason:
           'a file that verified and saved has a location, and it is reported',
     );
+    expect(subject.savedFiles, hasLength(1));
+    expect(subject.savedFiles.single.displayName, subject.savedPaths.single);
+    expect(subject.savedFiles.single.targetRef, writtenFile(exports).path);
     expect(
       sha256.convert(writtenFile(exports).readAsBytesSync()).toString(),
       sha256.convert(payload).toString(),

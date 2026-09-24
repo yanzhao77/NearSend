@@ -37,6 +37,7 @@ import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_network_gateway.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
 import 'package:nearsend/platform/qr_image_gateway.dart';
 import 'package:nearsend/platform/storage_location.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
@@ -75,6 +76,7 @@ class NearSendApp extends StatefulWidget {
     this.storageGateway,
     this.networkGateway,
     this.bleGateway,
+    this.fileActions,
   });
 
   /// This device's node, when the application has one.
@@ -93,6 +95,7 @@ class NearSendApp extends StatefulWidget {
   final PlatformStorageGateway? storageGateway;
   final PlatformNetworkGateway? networkGateway;
   final BleControlGateway? bleGateway;
+  final PlatformFileActions? fileActions;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
@@ -124,7 +127,7 @@ class NearSendApp extends StatefulWidget {
   State<NearSendApp> createState() => _NearSendAppState();
 }
 
-class _NearSendAppState extends State<NearSendApp> {
+class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   late final TaskCatalogController _tasks = TaskCatalogController();
   late final SpaceOverviewController _space = SpaceOverviewController(
     gateway: widget.storageGateway,
@@ -135,6 +138,7 @@ class _NearSendAppState extends State<NearSendApp> {
   StreamSubscription<BleControlEvent>? _radarBle;
   Future<void> _radarTransition = Future<void>.value();
   bool _radarDesired = false;
+  bool _disposing = false;
   late final PlatformNetworkGateway _networkGateway =
       widget.networkGateway ??
       ((defaultTargetPlatform == TargetPlatform.android ||
@@ -162,6 +166,7 @@ class _NearSendAppState extends State<NearSendApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _radarBle = widget.bleGateway?.events.listen(_radar.handleBle);
     // Not awaited: the first frame must not wait for a socket and a database, and the session
     // publishes its own phases for the screen to render in the meantime.
@@ -199,6 +204,9 @@ class _NearSendAppState extends State<NearSendApp> {
 
   @override
   void dispose() {
+    _disposing = true;
+    _radarDesired = false;
+    WidgetsBinding.instance.removeObserver(this);
     final NodeSession? session = widget.session;
     if (session != null) {
       // Stopped before it is disposed, because `stop` is what closes the listener and the database
@@ -224,9 +232,19 @@ class _NearSendAppState extends State<NearSendApp> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_disposing && state != AppLifecycleState.resumed && _radarDesired) {
+      _requestRadarReady(false);
+    }
+  }
+
   void _requestRadarReady(bool value) {
+    if (_disposing) return;
     _radarDesired = value;
-    _radarTransition = _radarTransition.then((_) => _applyRadarReady(value));
+    _radarTransition = _radarTransition
+        .catchError((Object _) {})
+        .then((_) => _applyRadarReady(value));
   }
 
   Future<void> _applyRadarReady(bool value) async {
@@ -234,10 +252,12 @@ class _NearSendAppState extends State<NearSendApp> {
     if (!value) {
       _radar.markStopping();
       await Future.wait<void>(<Future<void>>[
-        if (session != null) session.setDiscoveryEnabled(false),
-        if (widget.bleGateway != null) widget.bleGateway!.stop(),
+        if (session != null)
+          session.setDiscoveryEnabled(false).catchError((Object _) {}),
+        if (widget.bleGateway != null)
+          widget.bleGateway!.stop().catchError((Object _) {}),
       ]);
-      _radar.markOff();
+      if (!_disposing) _radar.markOff();
       return;
     }
 
@@ -249,11 +269,15 @@ class _NearSendAppState extends State<NearSendApp> {
     bool started = false;
     final List<String> failures = <String>[];
     if (session!.discovery != null) {
-      await session.setDiscoveryEnabled(true);
-      if (session.discovery!.isRunning) {
-        started = true;
-      } else if (session.discoveryFailureReason != null) {
-        failures.add(session.discoveryFailureReason!);
+      try {
+        await session.setDiscoveryEnabled(true);
+        if (session.discovery!.isRunning) {
+          started = true;
+        } else if (session.discoveryFailureReason != null) {
+          failures.add(session.discoveryFailureReason!);
+        }
+      } on Object {
+        failures.add('局域网发现不可用。');
       }
     }
     final BleControlGateway? ble = widget.bleGateway;
@@ -271,7 +295,7 @@ class _NearSendAppState extends State<NearSendApp> {
         failures.add('蓝牙发现不可用。');
       }
     }
-    if (!_radarDesired) return;
+    if (_disposing || !_radarDesired) return;
     if (started) {
       _radar.markReady();
     } else {
@@ -510,7 +534,11 @@ class _NearSendAppState extends State<NearSendApp> {
                   ),
                 );
               }
-              return TaskDetailPage(controller: _tasks, taskId: argument);
+              return TaskDetailPage(
+                controller: _tasks,
+                taskId: argument,
+                fileActions: widget.fileActions,
+              );
             },
             NearSendApp.connectRoute: (BuildContext context) {
               // Which action the user came here for, so one connection screen can lead to the send flow
@@ -587,6 +615,7 @@ class _NearSendAppState extends State<NearSendApp> {
                   fileCount: receiving?.fileCount ?? 0,
                   failureReason: receiving?.failureReason,
                   savedPaths: receiving?.savedPaths ?? const <String>[],
+                  savedFiles: receiving?.savedFiles ?? const [],
                   // Both halves are asked, because §6 announces neither: a client's view of what the
                   // peer offers, and this device's own view of what is being pushed to it.
                   onRefresh: () async {
@@ -609,6 +638,8 @@ class _NearSendAppState extends State<NearSendApp> {
                   pushSpaceEstimate: incoming?.spaceEstimate,
                   pushFailureReason: incoming?.failureReason,
                   pushSavedPaths: incoming?.savedPaths ?? const <String>[],
+                  pushSavedFiles: incoming?.savedFiles ?? const [],
+                  fileActions: widget.fileActions,
                   onCheckPushSpace: _measureIncomingSpace,
                   onPreviewPush: incoming == null
                       ? null

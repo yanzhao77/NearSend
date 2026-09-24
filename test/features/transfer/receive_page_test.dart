@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
+import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/features/transfer/application/receive_confirmation.dart';
@@ -12,6 +13,7 @@ import 'package:nearsend/features/transfer/application/server_receiving_flow.dar
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 import 'package:nearsend/platform/storage_location.dart';
+import 'package:nearsend/platform/platform_file_actions.dart';
 
 /// The receiving screen.
 ///
@@ -34,6 +36,7 @@ void main() {
     TransferProgress? progress,
     String? failureReason,
     List<String> savedPaths = const <String>[],
+    List<SavedFileReference> savedFiles = const <SavedFileReference>[],
     Future<void> Function()? onRefresh,
     Future<List<ReceiveFilePreview>> Function(OfferSummary)? onPreview,
     Future<bool> Function(OfferSummary, ReceiveConfirmation)? onAccept,
@@ -42,6 +45,8 @@ void main() {
     SpaceVerdict? pushSpaceVerdict,
     String? pushFailureReason,
     List<String> pushSavedPaths = const <String>[],
+    List<SavedFileReference> pushSavedFiles = const <SavedFileReference>[],
+    PlatformFileActions? fileActions,
     Future<List<ReceiveFilePreview>> Function(ServerOffer)? onPreviewPush,
     Future<bool> Function(ServerOffer, ReceiveConfirmation)? onAcceptPush,
     StorageLocationRef? initialLocation,
@@ -62,11 +67,14 @@ void main() {
         fileCount: 2,
         failureReason: failureReason,
         savedPaths: savedPaths,
+        savedFiles: savedFiles,
         pushOffers: pushOffers,
         pushPhase: pushPhase,
         pushSpaceVerdict: pushSpaceVerdict,
         pushFailureReason: pushFailureReason,
         pushSavedPaths: pushSavedPaths,
+        pushSavedFiles: pushSavedFiles,
+        fileActions: fileActions,
         initialLocation: initialLocation,
         onPickLocation: onPickLocation,
         onValidateLocation: onValidateLocation,
@@ -541,4 +549,102 @@ void main() {
     expect(find.text(ReceivePage.spaceInsufficientNote), findsOneWidget);
     await unmount(tester);
   });
+
+  testWidgets('saved file actions use the real target reference', (
+    tester,
+  ) async {
+    final _RecordingFileActions actions = _RecordingFileActions();
+    await pump(
+      tester,
+      phase: ReceivePhase.saved,
+      savedFiles: const <SavedFileReference>[
+        SavedFileReference(
+          displayName: '报告.txt',
+          targetRef: 'content://documents/saved-file',
+        ),
+      ],
+      fileActions: actions,
+    );
+
+    expect(find.text('已保存：报告.txt'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '打开'));
+    await tester.pump();
+    expect(actions.opened, <String>['content://documents/saved-file']);
+    expect(find.text('已交给系统打开。'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '显示位置'));
+    await tester.pump();
+    expect(actions.revealed, <String>['content://documents/saved-file']);
+    await unmount(tester);
+  });
+
+  testWidgets('missing target references do not offer misleading actions', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      phase: ReceivePhase.saved,
+      savedFiles: const <SavedFileReference>[
+        SavedFileReference(displayName: '仅有显示名称.bin'),
+      ],
+      fileActions: _RecordingFileActions(),
+    );
+
+    expect(find.text('已保存：仅有显示名称.bin'), findsOneWidget);
+    expect(find.text('打开'), findsNothing);
+    expect(find.text('显示位置'), findsNothing);
+    await unmount(tester);
+  });
+
+  testWidgets(
+    'file action failures are explained without exposing the target',
+    (tester) async {
+      final _RecordingFileActions actions = _RecordingFileActions(
+        openStatus: PlatformFileActionStatus.permissionDenied,
+      );
+      await pump(
+        tester,
+        phase: ReceivePhase.saved,
+        savedFiles: const <SavedFileReference>[
+          SavedFileReference(
+            displayName: '私密文件.bin',
+            targetRef: 'content://private/opaque-token',
+          ),
+        ],
+        fileActions: actions,
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, '打开'));
+      await tester.pump();
+      expect(find.text('保存位置权限已失效，请重新选择或授权。'), findsOneWidget);
+      expect(find.textContaining('opaque-token'), findsNothing);
+      await unmount(tester);
+    },
+  );
+}
+
+class _RecordingFileActions implements PlatformFileActions {
+  _RecordingFileActions({this.openStatus = PlatformFileActionStatus.completed});
+
+  final PlatformFileActionStatus openStatus;
+  final List<String> opened = <String>[];
+  final List<String> revealed = <String>[];
+
+  @override
+  bool get supportsOpen => true;
+
+  @override
+  bool get supportsReveal => true;
+
+  @override
+  Future<PlatformFileActionResult> open(String targetRef) async {
+    opened.add(targetRef);
+    return PlatformFileActionResult(openStatus);
+  }
+
+  @override
+  Future<PlatformFileActionResult> reveal(String targetRef) async {
+    revealed.add(targetRef);
+    return const PlatformFileActionResult(PlatformFileActionStatus.completed);
+  }
 }

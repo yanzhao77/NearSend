@@ -117,6 +117,12 @@ class MainActivity : FlutterActivity() {
                             ?: throw IllegalArgumentException("a displayName argument is required"),
                     ),
                 )
+                "openSavedFile" -> result.success(
+                    storageLocations.openSavedFile(targetRefOf(call)),
+                )
+                "revealSavedFile" -> result.success(
+                    storageLocations.revealSavedFile(targetRefOf(call)),
+                )
                 "pickFiles" -> pickFiles(result)
                 "probe" -> result.success(probe(uriOf(call)))
                 "readChunk" -> result.success(
@@ -155,6 +161,10 @@ class MainActivity : FlutterActivity() {
             ?: throw IllegalArgumentException("a locationRef argument is required")
         return Uri.parse(value)
     }
+
+    private fun targetRefOf(call: MethodCall): String =
+        call.argument<String>("targetRef")
+            ?: throw IllegalArgumentException("a targetRef argument is required")
 
     // --- picking ------------------------------------------------------------------------------
 
