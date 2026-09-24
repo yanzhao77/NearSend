@@ -178,6 +178,8 @@ void main() {
     );
 
     await tester.scrollUntilVisible(find.text('书房电脑'), 300);
+    await tester.ensureVisible(find.text('书房电脑'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('书房电脑'));
     expect(selected, same(wifi));
 

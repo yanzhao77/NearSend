@@ -674,11 +674,7 @@ void main() {
       await tapText(tester, '传输');
       await tapText(tester, '接收文件');
       await tester.pumpAndSettle();
-      // The authenticated incoming session opens reception directly from the transfer tab.
-      // No artificial self-pairing is needed to accept a peer's push.
-      await settle(tester, () => visible(ConnectionPage.connectedNote));
-      await tapText(tester, ConnectionPage.continueLabelReceive);
-
+      // Authenticated incoming session opens reception directly; no self-pairing required.
       await settle(
         tester,
         () =>
