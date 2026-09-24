@@ -5,6 +5,7 @@ import 'package:nearsend/core/protocol/manifest.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
@@ -70,11 +71,14 @@ class ServerReceivingFlow extends ChangeNotifier {
   ServerReceivingFlow({
     required this.engine,
     required this.now,
+    ReceiveOutputPlanRepository? outputPlans,
     this.commitPollInterval = const Duration(milliseconds: 500),
     this.commitTimeout = const Duration(seconds: 300),
-  });
+  }) : outputPlans =
+           outputPlans ?? ReceiveOutputPlanRepository(engine.database);
 
   final TransferEngine engine;
+  final ReceiveOutputPlanRepository outputPlans;
 
   /// The clock, injected so a test can state timestamps instead of racing them.
   final int Function() now;
@@ -184,6 +188,7 @@ class ServerReceivingFlow extends ChangeNotifier {
     ServerOffer offer, {
     required ReceiverStorageContext context,
     String? targetRef,
+    Map<String, String> outputNames = const <String, String>{},
   }) async {
     if (isBusy) {
       return false;
@@ -207,9 +212,31 @@ class ServerReceivingFlow extends ChangeNotifier {
         throw const ServerReceiveRefused('空间不足：已按暂存与导出的峰值计算，需要先清理或更换保存位置。');
       }
 
+      final String? selectedTarget = targetRef ?? context.saveLocationRef;
+      if (selectedTarget == null || selectedTarget.trim().isEmpty) {
+        throw const ServerReceiveRefused('没有有效的保存位置，请重新选择后再接收。');
+      }
+      final List<ManifestFile> manifestFiles = _manifestOf(offer);
+      _createOutputPlans(
+        transferId: offer.transferId,
+        files: manifestFiles,
+        targetRef: selectedTarget,
+        outputNames: outputNames,
+      );
+      final ReceiverStorageContext acceptedContext = ReceiverStorageContext(
+        stagingVolume: context.stagingVolume,
+        exportVolume: context.exportVolume,
+        databaseVolume: context.databaseVolume,
+        availability: context.availability,
+        saveLocationRef: selectedTarget,
+      );
+
       // §6: the acceptance is this device's, and it persists the digest, the location and the space
       // estimate together.
-      engine.acceptLocally(transferId: offer.transferId, context: context);
+      engine.acceptLocally(
+        transferId: offer.transferId,
+        context: acceptedContext,
+      );
       _phase = ServerReceivePhase.receiving;
       _notify();
 
@@ -245,9 +272,9 @@ class ServerReceivingFlow extends ChangeNotifier {
       for (int index = 0; index < files.length; index++) {
         _currentIndex = index;
         _notify();
-        final ReceivedFileOutcome outcome = await engine.finishFile(
+        final ReceivedFileOutcome outcome = await _finishPlannedFile(
+          transferId: offer.transferId,
           fileId: files[index],
-          targetRef: targetRef,
         );
         if (outcome.verification.wholeFileDigestMatches != true) {
           throw const ServerReceiveRefused(failedVerificationReason);
@@ -273,6 +300,76 @@ class ServerReceivingFlow extends ChangeNotifier {
       return false;
     }
   }
+
+  void _createOutputPlans({
+    required String transferId,
+    required List<ManifestFile> files,
+    required String targetRef,
+    required Map<String, String> outputNames,
+  }) {
+    final Set<String> offeredIds = <String>{
+      for (final ManifestFile file in files) file.fileId,
+    };
+    if (!offeredIds.containsAll(outputNames.keys)) {
+      throw ArgumentError.value(
+        outputNames.keys
+            .where((String id) => !offeredIds.contains(id))
+            .toList(),
+        'outputNames',
+        'contains a file that is not in the frozen manifest',
+      );
+    }
+    outputPlans.create(
+      transferId: transferId,
+      targetRef: targetRef,
+      choices: <ReceiveOutputChoice>[
+        for (final ManifestFile file in files)
+          ReceiveOutputChoice(
+            fileId: file.fileId,
+            originalPath: file.relativePath,
+            selectedName:
+                outputNames[file.fileId] ?? _fileNameOf(file.relativePath),
+          ),
+      ],
+    );
+  }
+
+  Future<ReceivedFileOutcome> _finishPlannedFile({
+    required String transferId,
+    required String fileId,
+  }) async {
+    final ReceiveOutputPlan plan = outputPlans.read(transferId, fileId)!;
+    outputPlans.markExporting(transferId, fileId);
+    try {
+      final ReceivedFileOutcome outcome = await engine.finishFile(
+        fileId: fileId,
+        targetRef: plan.targetRef,
+        outputName: plan.selectedName,
+        conflictPolicy: plan.conflictPolicy,
+      );
+      final export = outcome.export;
+      if (export == null || !export.isSaved || outcome.savedPath == null) {
+        outputPlans.markFailed(transferId, fileId);
+        throw const ServerReceiveRefused('文件未能保存，暂存内容已保留，可重试。');
+      }
+      outputPlans.markSaved(
+        transferId: transferId,
+        fileId: fileId,
+        finalName: outcome.savedPath!,
+        finalTargetRef: export.createdTargetRef,
+      );
+      return outcome;
+    } on Object {
+      final ReceiveOutputPlan? current = outputPlans.read(transferId, fileId);
+      if (current?.state == ReceiveOutputState.exporting) {
+        outputPlans.markFailed(transferId, fileId);
+      }
+      rethrow;
+    }
+  }
+
+  static String _fileNameOf(String relativePath) =>
+      relativePath.substring(relativePath.lastIndexOf('/') + 1);
 
   /// Measures an offer with the same planner and opaque storage context used by [accept].
   ///

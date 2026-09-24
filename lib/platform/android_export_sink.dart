@@ -116,7 +116,7 @@ class AndroidDocumentExportSink implements ExportSink {
         }
       }
       await gateway.endWrite(uri: createdUri);
-      return const ExportCommitResult(atomic: false);
+      return ExportCommitResult(atomic: false, createdTargetRef: target.uri);
     } on Object catch (error) {
       if (createdUri != null) {
         try {

@@ -83,6 +83,11 @@ abstract final class StorageMigrations {
       description: 'non-secret application settings are persisted separately from credentials',
       apply: StorageSchema.applyVersion7,
     ),
+    MigrationStep(
+      version: 8,
+      description: 'receiver output names and destinations are persisted before acceptance',
+      apply: StorageSchema.applyVersion8,
+    ),
   ];
 
   /// The version a fresh database reaches by applying every step.

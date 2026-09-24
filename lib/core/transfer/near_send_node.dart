@@ -61,6 +61,7 @@ import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/receiver_mirror_repository.dart';
+import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/storage/storage_failure.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/task_credential_repository.dart';
@@ -152,6 +153,7 @@ class NearSendNode {
     required this.sources,
     required this.ownership,
     required this.mirror,
+    required this.outputPlans,
     required this.windows,
     required this.layout,
     required this.sink,
@@ -178,6 +180,7 @@ class NearSendNode {
   final TaskSourceRepository sources;
   final SqliteTaskOwnership ownership;
   final ReceiverMirrorRepository mirror;
+  final ReceiveOutputPlanRepository outputPlans;
   final ChunkWindowRegistry windows;
   final LocalStagingLayout layout;
   final StagingFileSink sink;
@@ -262,6 +265,9 @@ class NearSendNode {
     final TaskSourceRepository sources = TaskSourceRepository(database);
     final SqliteTaskOwnership ownership = SqliteTaskOwnership(database);
     final ReceiverMirrorRepository mirror = ReceiverMirrorRepository(database);
+    final ReceiveOutputPlanRepository outputPlans = ReceiveOutputPlanRepository(
+      database,
+    );
     final ChunkWindowRegistry windows = ChunkWindowRegistry(tasks: tasks);
     final LocalStagingLayout layout = LocalStagingLayout(
       Directory('${root.path}${Platform.pathSeparator}staging-root'),
@@ -426,6 +432,7 @@ class NearSendNode {
       sources: sources,
       ownership: ownership,
       mirror: mirror,
+      outputPlans: outputPlans,
       windows: windows,
       layout: layout,
       sink: sink,

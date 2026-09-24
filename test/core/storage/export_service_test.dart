@@ -549,6 +549,49 @@ void main() {
       expect(transfers.existingExport(fileId)!.savedPath, 'DCIM/photo.jpg');
     });
 
+    test(
+      'a local output name does not rewrite the frozen manifest path',
+      () async {
+        final FileVerificationResult receipt = await readyToExport(
+          path: 'sender/frozen-name.jpg',
+        );
+
+        final ExportOutcome outcome = await serviceWith().exportFile(
+          fileId: fileId,
+          targetRef: targetRef,
+          verification: receipt,
+          outputName: 'local-name.jpg',
+        );
+
+        expect(outcome.safePath, 'local-name.jpg');
+        expect(sink.commits, <String>['local-name.jpg']);
+        expect(transfers.existingExport(fileId)!.savedPath, 'local-name.jpg');
+        expect(
+          database.db.select(
+            'SELECT relative_path FROM files WHERE file_id = ?;',
+            <Object?>[fileId],
+          ).single['relative_path'],
+          'sender/frozen-name.jpg',
+        );
+      },
+    );
+
+    test(
+      'returns the opaque platform handle created for the saved file',
+      () async {
+        final FileVerificationResult receipt = await readyToExport();
+        sink.createdTargetRef = 'content://provider/document/7';
+
+        final ExportOutcome outcome = await serviceWith().exportFile(
+          fileId: fileId,
+          targetRef: targetRef,
+          verification: receipt,
+        );
+
+        expect(outcome.createdTargetRef, 'content://provider/document/7');
+      },
+    );
+
     test('the recorded path survives being read back', () async {
       final FileVerificationResult receipt = await readyToExport();
       await serviceWith().exportFile(
@@ -601,6 +644,7 @@ class _RecordingSink implements ExportSink {
   bool commitFails = false;
   bool deleteFails = false;
   bool atomic = true;
+  String? createdTargetRef;
 
   /// Called at the moment staging is released, so a test can see what was durable then.
   void Function()? onDelete;
@@ -632,7 +676,10 @@ class _RecordingSink implements ExportSink {
       ...entries,
       TargetEntry(path: safePath, sizeBytes: 0),
     ];
-    return ExportCommitResult(atomic: atomic);
+    return ExportCommitResult(
+      atomic: atomic,
+      createdTargetRef: createdTargetRef,
+    );
   }
 
   @override

@@ -87,6 +87,52 @@ void main() {
     });
   });
 
+  test(
+    'a version 7 database gains output plans without rewriting settings',
+    () {
+      final String path = dbPath('v7-output-plans.db');
+      final Database old = sqlite3.open(path);
+      StorageSchema.applyVersion1(old);
+      StorageSchema.applyVersion2(old);
+      StorageSchema.applyVersion3(old);
+      StorageSchema.applyVersion4(old);
+      StorageSchema.applyVersion5(old);
+      StorageSchema.applyVersion6(old);
+      StorageSchema.applyVersion7(old);
+      old.execute(
+        'INSERT INTO ${StorageSchema.metaTable} (id, version, applied_at) '
+        'VALUES (1, 7, 1);',
+      );
+      old.execute(
+        'INSERT INTO ${StorageSchema.appSettingsTable} '
+        '(setting_key, setting_value, updated_at) VALUES (?, ?, ?);',
+        <Object?>['device_name', 'Office PC', 7],
+      );
+      old.close();
+
+      final NearSendDatabase upgraded = NearSendDatabase.open(path: path);
+      try {
+        expect(upgraded.schemaVersion, 8);
+        expect(
+          upgraded.db.select(
+            'SELECT setting_value FROM ${StorageSchema.appSettingsTable} '
+            'WHERE setting_key = ?;',
+            <Object?>['device_name'],
+          ).single['setting_value'],
+          'Office PC',
+        );
+        expect(
+          upgraded.db.select(
+            'PRAGMA table_info(${StorageSchema.receiveOutputPlansTable});',
+          ),
+          isNotEmpty,
+        );
+      } finally {
+        upgraded.close();
+      }
+    },
+  );
+
   group('a newer schema is refused without modifying the file', () {
     test('opening a version-99 database throws schemaTooNew', () {
       final String path = dbPath('newer.db');

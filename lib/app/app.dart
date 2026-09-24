@@ -156,6 +156,7 @@ class _NearSendAppState extends State<NearSendApp> {
     }
     _incoming = ServerReceivingFlow(
       engine: node.engine,
+      outputPlans: node.outputPlans,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
     _tasks.attach(node.database);
@@ -223,6 +224,7 @@ class _NearSendAppState extends State<NearSendApp> {
     _receiving = ReceivingFlow(
       engine: node.engine,
       wire: peer.client!,
+      outputPlans: node.outputPlans,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
     if (mounted) {

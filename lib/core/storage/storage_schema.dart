@@ -29,7 +29,7 @@ abstract final class StorageSchema {
   /// Monotonic. A database whose stored version is **higher** than this is refused
   /// rather than migrated downwards, because a newer build may have written structures
   /// this one would corrupt by ignoring.
-  static const int currentVersion = 7;
+  static const int currentVersion = 8;
 
   /// The table holding one staging proposal per transfer (§6, ADR-0004).
   static const String manifestStagingTable = 'manifest_staging';
@@ -335,6 +335,9 @@ CREATE TABLE task_receiver_mirror (
   /// The table holding non-secret application settings.
   static const String appSettingsTable = 'app_settings';
 
+  /// The receiver's durable local name and destination for every offered file.
+  static const String receiveOutputPlansTable = 'receive_output_plans';
+
   /// Tables schema version 6 adds.
   static const Map<String, String> version6Tables = <String, String>{
     taskSourcesTable: '''
@@ -362,6 +365,28 @@ CREATE TABLE app_settings (
 
   /// Indexes schema version 7 adds.
   static const Map<String, String> version7Indexes = <String, String>{};
+
+  /// Tables schema version 8 adds: local output choices, separate from the signed manifest.
+  static const Map<String, String> version8Tables = <String, String>{
+    receiveOutputPlansTable: '''
+CREATE TABLE receive_output_plans (
+  transfer_id       TEXT    NOT NULL,
+  file_id           TEXT    NOT NULL,
+  original_path     TEXT    NOT NULL,
+  selected_name     TEXT    NOT NULL,
+  target_ref        TEXT    NOT NULL,
+  conflict_policy   TEXT    NOT NULL CHECK (conflict_policy IN ('ask', 'autoRename', 'skip')),
+  output_state      TEXT    NOT NULL CHECK (output_state IN ('planned', 'exporting', 'saved', 'failed')),
+  final_name        TEXT,
+  final_target_ref  TEXT,
+  updated_at        INTEGER NOT NULL,
+  PRIMARY KEY (transfer_id, file_id)
+);''',
+  };
+
+  static const Map<String, String> version8Indexes = <String, String>{
+    'receive_outputs_by_transfer': 'CREATE INDEX receive_outputs_transfer ON receive_output_plans (transfer_id);',
+  };
 
   /// The indexes this schema version defines.
   static const Map<String, String> indexes = <String, String>{
@@ -466,6 +491,16 @@ CREATE TABLE app_settings (
     }
   }
 
+  /// Applies schema version 8 without rewriting manifests or existing task rows.
+  static void applyVersion8(Database db) {
+    for (final String ddl in version8Tables.values) {
+      db.execute(ddl);
+    }
+    for (final String ddl in version8Indexes.values) {
+      db.execute(ddl);
+    }
+  }
+
   /// The names of every table in this schema version, including the metadata table.
   static Set<String> get tableNames => <String>{
     metaTable,
@@ -474,5 +509,6 @@ CREATE TABLE app_settings (
     ...version5Tables.keys,
     ...version6Tables.keys,
     ...version7Tables.keys,
+    ...version8Tables.keys,
   };
 }
