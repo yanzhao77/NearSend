@@ -25,12 +25,12 @@
 
 | 任务 | 状态 | 当前结果 | 下一步 |
 |---|---|---|---|
-| V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v7、协议草案、现有 Android SAF 通道和平台边界；macOS 分析和 1256 项测试通过 | 继续验证 BLE、PAKE、热点和网络绑定候选 |
+| V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v7、协议草案和平台边界；mDNS 已完成依赖/许可/API 与当前环境构建验证 | 继续验证 BLE、PAKE、热点和网络绑定候选 |
 | V12-01 系统位置与迁移 | 进行中 | 已实现严格版本化 `StorageLocationRef`、旧字符串值迁移、畸形值保留修复状态、Android 系统目录树选择/持久授权复查/有界 SAF 导出，以及 Windows `IFileDialog`/Known Folder/空间查询；28 项定向测试、1267 项全量测试与 Android Kotlin 编译通过 | Android 真机验证重启后写入/撤权；在 Windows CI/主机编译并实测目录选择与写入 |
 | V12-02 接收输出计划 | 当前环境完成 | schema v8 持久化冻结原名、本地改名、目标引用、冲突策略和导出状态；两个真实 TLS 方向均在接受前建计划，改名不改变清单/哈希，1275 项全量测试通过 | Android/Windows 实机验证权限失效、崩溃重试、同名冲突和平台句柄重开 |
 | V12-03 设置与确认 UI | 当前环境完成 | 默认目录选择先复查权限再持久化；单/多文件在一次弹框中确认位置与本地名称；取消、非法名、撤权和空间不足均不会接受；两个真实 TLS 方向已从确认 UI 保存并校验文件 | Android/Windows 实机验证系统选择器、重启授权、撤权修复与多文件保存 |
 | V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据，已绑定身份缺失/错配失败关闭，旧数据库可建立首个稳定身份；peer 历史含撤销与最近实时验证 | 将长期身份绑定到 V12-07 双向认证；Windows 编译及 Android/Windows 重启实测 |
-| V12-05 mDNS 发现 | 未开始 | 无生产发现适配器 | 完成依赖验证后实现 |
+| V12-05 mDNS 发现 | 进行中 | 固定 `bonsoir 7.1.5`；实现最小 TXT、严格候选解析、发布/浏览/更新/丢失/停止生命周期；Android Kotlin 与 iOS Simulator 构建通过 | Android/Windows 同网双机发现并完成身份认证；验证隔离网络与网络切换清理 |
 | V12-06 BLE 控制通道 | 未开始 | 无生产 BLE 适配器 | Android/Windows 双角色 PoC 与分片上限验证 |
 | V12-07 统一安全配对 | 受阻于 V12-00 | 现有 QR 指纹与一次性令牌路径可用；短码 PAKE 尚未选型 | 选择成熟 PAKE 实现并完成向量互操作 |
 | V12-08 热点与数据通道 | 受阻于 V12-00/V12-06/V12-07 | 现有 HTTPS 数据通道可复用 | 验证 Android 热点、Windows 加入和目标网络绑定 |
@@ -99,6 +99,18 @@
   定向测试通过；全量 1301 项测试通过，静态分析无问题。Windows 原生代码尚未在 Windows 编译；
   长期身份尚未绑定到双向认证，故 V12-04
   保持进行中，不能据此点亮在线状态或自动信任历史设备。
+
+## V12-05 mDNS 阶段记录
+
+- `bonsoir 7.1.5` 与项目固定工具链兼容，MIT 许可，依赖及传递依赖摘要写入锁文件。Android 使用
+  NSD，Windows 使用 WinDNS，Darwin 使用 Bonjour；依赖只处理系统发现，不参与身份或 TLS 信任。
+- `_nearsend._tcp` TXT 仅发布协议 major/minor、短期实例 UUID 和 `discovery.mdns.v1`。不发布设备
+  名称、长期身份、公钥、TLS pin、令牌、热点凭据、文件或路径。发现结果始终是未认证候选。
+- 解析限制能力/地址数量，拒绝畸形版本和 UUID，过滤本机回环、未指定及多播地址，保留合法 IPv6
+  zone。HTTPS 节点监听并生成配对会话后才发布；停止时先撤销浏览和广播。
+- 12 项 mDNS/节点生命周期定向测试及 1308 项全量测试通过；Android 主应用和插件 Kotlin 编译通过；iOS Simulator
+  构建通过。iOS 设备无签名构建仍被 Development Team/Provisioning 配置阻断；Android APK 仍被
+  sqlite3 原生库下载 TLS 握手中断阻塞。Windows 构建和 Android/Windows 同网双机发现尚未执行。
 
 ## 人工重点复核
 

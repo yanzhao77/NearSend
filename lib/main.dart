@@ -8,6 +8,7 @@ import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/app_directories.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_identity_store.dart';
 
@@ -47,6 +48,7 @@ Future<void> main() async {
         resolveDirectory: AppDirectories().resolve,
         gateway: gateway,
         identityProvider: identityProvider,
+        discovery: MdnsDiscoveryGateway(),
       ),
       peer: PeerSession(),
       storageGateway: storageGateway,

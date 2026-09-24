@@ -28,6 +28,8 @@
 /// over an existing database.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:nearsend/app/node_runtime.dart';
@@ -35,6 +37,7 @@ import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 /// Where a session is in its life.
 enum NodePhase {
@@ -73,6 +76,7 @@ class NodeSession extends ChangeNotifier {
     this.gateway,
     this.candidateAddresses,
     this.identityProvider = const EphemeralInstallationIdentityProvider(),
+    this.discovery,
     this.openRuntime = NodeRuntime.new,
   });
 
@@ -89,6 +93,7 @@ class NodeSession extends ChangeNotifier {
   final List<String>? candidateAddresses;
 
   final InstallationIdentityProvider identityProvider;
+  final MdnsDiscoveryGateway? discovery;
 
   /// Opens the runtime. Overridable so a test can state its own, and so a failure to open one is
   /// reachable without a broken filesystem.
@@ -107,6 +112,7 @@ class NodeSession extends ChangeNotifier {
   NodeRuntime? _runtime;
   PairingPayload? _payload;
   String? _failureReason;
+  String? _discoveryFailureReason;
   Future<void>? _attempt;
   bool _disposed = false;
 
@@ -128,6 +134,11 @@ class NodeSession extends ChangeNotifier {
 
   /// Why the node is not running, as a sentence a user can act on.
   String? get failureReason => _failureReason;
+
+  String? get discoveryFailureReason => _discoveryFailureReason;
+
+  Stream<MdnsDiscoveryEvent> get discoveryEvents =>
+      discovery?.events ?? const Stream<MdnsDiscoveryEvent>.empty();
 
   /// Opens the node, or returns the attempt already in flight.
   ///
@@ -165,6 +176,21 @@ class NodeSession extends ChangeNotifier {
       final NearSendNode node = await opened.start();
       _runtime = opened;
       _payload = node.payload;
+      _discoveryFailureReason = null;
+      final MdnsDiscoveryGateway? mdns = discovery;
+      final PairingPayload? payload = node.payload;
+      if (mdns != null && payload != null) {
+        try {
+          await mdns.start(
+            MdnsPublication(
+              instanceId: payload.sessionId,
+              port: node.server.boundPort,
+            ),
+          );
+        } on Object {
+          _discoveryFailureReason = '局域网自动发现不可用，仍可使用手动连接。';
+        }
+      }
       _set(phase: NodePhase.ready, failureReason: null);
     } on Object catch (error) {
       // A runtime that opened and then failed to listen holds an open database. Releasing it is not
@@ -188,6 +214,12 @@ class NodeSession extends ChangeNotifier {
     final NodeRuntime? running = _runtime;
     _runtime = null;
     _payload = null;
+    _discoveryFailureReason = null;
+    try {
+      await discovery?.stop();
+    } on Object {
+      // The node still has to close even if the platform failed to withdraw discovery.
+    }
     if (running != null) {
       await _release(running);
     }

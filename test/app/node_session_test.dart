@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:nearsend/app/node_runtime.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/core/security/installation_identity.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 /// The application's node, as the connection screen sees it.
 ///
@@ -209,4 +211,69 @@ void main() {
       await second.stop();
     },
   );
+
+  test('mDNS publishes only after the node has a real endpoint', () async {
+    final _DiscoveryAdapter adapter = _DiscoveryAdapter();
+    final NodeSession session = NodeSession(
+      resolveDirectory: () async => directory(),
+      candidateAddresses: const <String>['127.0.0.1'],
+      discovery: MdnsDiscoveryGateway(adapter: adapter),
+    );
+
+    await session.start();
+
+    expect(adapter.publication, isNotNull);
+    expect(adapter.publication!.port, session.node!.server.boundPort);
+    expect(adapter.publication!.instanceId, session.payload!.sessionId);
+    expect(session.discoveryFailureReason, isNull);
+
+    await session.stop();
+    expect(adapter.session.stops, 1);
+  });
+
+  test('mDNS failure is reported without disabling manual pairing', () async {
+    final NodeSession session = NodeSession(
+      resolveDirectory: () async => directory(),
+      candidateAddresses: const <String>['127.0.0.1'],
+      discovery: MdnsDiscoveryGateway(adapter: _FailingDiscoveryAdapter()),
+    );
+
+    await session.start();
+
+    expect(session.phase, NodePhase.ready);
+    expect(session.payload, isNotNull);
+    expect(session.discoveryFailureReason, contains('手动连接'));
+    await session.stop();
+  });
+}
+
+class _DiscoveryAdapter implements MdnsPlatformAdapter {
+  final _DiscoverySession session = _DiscoverySession();
+  MdnsPublication? publication;
+
+  @override
+  Future<MdnsPlatformSession> start(MdnsPublication publication) async {
+    this.publication = publication;
+    return session;
+  }
+}
+
+class _FailingDiscoveryAdapter implements MdnsPlatformAdapter {
+  @override
+  Future<MdnsPlatformSession> start(MdnsPublication publication) async {
+    throw StateError('mDNS unavailable');
+  }
+}
+
+class _DiscoverySession implements MdnsPlatformSession {
+  int stops = 0;
+
+  @override
+  Stream<MdnsPlatformEvent> get events =>
+      const Stream<MdnsPlatformEvent>.empty();
+
+  @override
+  Future<void> stop() async {
+    stops++;
+  }
 }

@@ -24,11 +24,16 @@
 | V12-04 全量测试 | 通过 | `fvm flutter test --reporter compact`，1301 项全部通过；覆盖旧数据库首次建立身份与已绑定身份丢失后的失败关闭 |
 | V12-04 Android Kotlin 编译 | 通过 | `:app:compileDebugKotlin` 成功，含 Keystore AES-GCM 身份存储 |
 | V12-04 Windows DPAPI 编译 | 受阻 | 当前主机不是 Windows；必须由 Windows CI/主机验证 C++ 编译和当前用户作用域持久化 |
+| V12-05 mDNS 定向测试 | 通过 | TXT 最小化、严格解析、地址过滤、自发现抑制、并发启动、资源撤销及节点生命周期共 12 项通过 |
+| V12-05 全量测试 | 通过 | `fvm flutter test --reporter compact`，1308 项全部通过 |
+| V12-05 Android Kotlin 编译 | 通过 | 主应用及 `bonsoir_android 7.1.3` 编译成功；插件有旧 NSD API 弃用警告 |
+| V12-05 iOS Simulator 构建 | 通过 | `fvm flutter build ios --simulator` 成功，生成 `Runner.app`；验证 Bonjour 声明和 Darwin 插件链接 |
+| V12-05 iOS 设备构建 | 受阻 | `flutter build ios --no-codesign` 进入 Xcode 后仍要求 Development Team/Provisioning Profile，未产出设备包 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
 | Windows 构建 | 受阻 | 当前主机不是 Windows；由 GitHub Actions 或 Windows 主机执行 |
-| iOS 构建 | 未执行 | 非 1.2 首要完整验收组合，仍需保持可编译性 |
+| iOS 构建 | 部分通过 | Simulator 构建通过；设备无签名构建受 Development Team/Provisioning 阻断，不能替代真机 |
 
 ## 实机矩阵
 
@@ -37,7 +42,7 @@
 | A01 Android ↔ Windows，同一 Wi-Fi | 未执行 | 需要本轮双机证据 |
 | A02 Android ↔ Windows，不同 Wi-Fi，BLE 配对与热点 | 未执行 | 需要目标硬件与 Windows 主机 |
 | A03 无路由器、无互联网 | 未执行 | 需要 Android 热点与 Windows 加入实测 |
-| A04 AP 隔离或 mDNS 阻断 | 未执行 | 需要可控网络环境 |
+| A04 AP 隔离或 mDNS 阻断 | 未执行 | 失败状态和手动连接保留已有自动化；仍需要可控网络环境验证真实发现丢失 |
 | A05 蓝牙关闭或拒权后的二维码路径 | 未执行 | 需要目标设备 |
 | A06 Windows 无摄像头导入二维码图片 | 未执行 | 需要 Windows 主机 |
 | A07 Windows 无 BLE 外设能力 | 未执行 | 需要对应蓝牙适配器 |
@@ -139,6 +144,31 @@ fvm flutter test --reporter compact
 
 ./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
 结果：BUILD SUCCESSFUL
+```
+
+## V12-05 mDNS 自动化与构建证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm flutter test test/platform/mdns_discovery_gateway_test.dart \
+  test/app/node_session_test.dart --reporter compact
+结果：12 tests passed
+
+fvm flutter test --reporter compact
+结果：1308 tests passed
+
+./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
+结果：BUILD SUCCESSFUL；bonsoir_android 编译通过，报告旧 NSD API 弃用警告
+
+fvm flutter build ios --simulator
+结果：成功，生成 build/ios/iphonesimulator/Runner.app
+
+fvm flutter build ios --no-codesign
+结果：受阻，Xcode 要求 Development Team 和 Provisioning Profile
+
+fvm flutter build apk --debug
+结果：受阻，sqlite3 3.6.0 Android 原生库下载发生 TLS handshake terminated
 ```
 
 ## 证据规则
