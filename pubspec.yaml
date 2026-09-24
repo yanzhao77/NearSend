@@ -66,6 +66,13 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+hooks:
+  user_defines:
+    sqlite3:
+      source:
+        macos: system
+        default: sqlite3
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
