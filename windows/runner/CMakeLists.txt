@@ -11,6 +11,7 @@ add_executable(${BINARY_NAME} WIN32
   "main.cpp"
   "platform_identity_channel.cpp"
   "platform_network_channel.cpp"
+  "platform_qr_channel.cpp"
   "platform_storage_channel.cpp"
   "utils.cpp"
   "win32_window.cpp"

@@ -43,7 +43,12 @@
 | V12-08 Android 热点传输 | 未执行 | 缺 Android/Windows 双机；指定 Android `Network` 尚未与 Flutter HTTPS socket 完成绑定验证 |
 | V12-08 Windows 自动入网 | 受阻 | 当前主机非 Windows；能力诚实报告为不支持，仅提供系统 Wi-Fi 设置回退 |
 | V12-09 Bootstrap 载荷测试 | 通过 | 7 项通过；覆盖严格分发、旧码兼容、身份绑定、重复/额外字段、热点模式、安全类型、有效期和超限输入 |
-| V12-09 二维码图像与平台导入 | 未执行 | 依赖审查和平台入口尚未完成；文本载荷测试不能替代摄像头/图片扫码 |
+| V12-09 二维码图像与平台导入实机 | 未执行 | 依赖和代码级入口已实现，但文本/组件测试不能替代摄像头和 Windows 图片导入实测 |
+| V12-09 QR 图像定向测试 | 通过 | 真实 QR PNG 生成/ZXing 往返、空/超限/非图片拒绝及连接页回归共 26 项通过 |
+| V12-09 iOS Simulator 构建 | 通过 | `mobile_scanner 7.1.3` Darwin 插件链接并生成 Runner.app；不替代真机摄像头 |
+| V12-09 Android 扫码构建 | 受阻 | 两次均在 Maven 下载 Kotlin 1.8 工件时 TLS 握手中断，未进入插件源码编译 |
+| V12-09 Windows 图片导入编译 | 受阻 | 当前主机非 Windows；IFileOpenDialog/有界读取通道需 Windows CI/主机编译 |
+| V12-09 全量测试 | 通过 | `fvm flutter test --reporter compact`，1353 项全部通过 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |

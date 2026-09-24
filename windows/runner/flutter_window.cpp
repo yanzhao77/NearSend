@@ -5,6 +5,7 @@
 #include "flutter/generated_plugin_registrant.h"
 #include "platform_identity_channel.h"
 #include "platform_network_channel.h"
+#include "platform_qr_channel.h"
 #include "platform_storage_channel.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -31,6 +32,7 @@ bool FlutterWindow::OnCreate() {
   RegisterPlatformStorageChannel(flutter_controller_->engine(), GetHandle());
   RegisterPlatformIdentityChannel(flutter_controller_->engine());
   RegisterPlatformNetworkChannel(flutter_controller_->engine());
+  RegisterPlatformQrChannel(flutter_controller_->engine(), GetHandle());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

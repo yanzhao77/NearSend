@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
+import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 
 /// The connection screen: what this device publishes, and how to reach another one.
@@ -362,6 +363,8 @@ class _PublishedPayload extends StatelessWidget {
           children: <Widget>[
             Text('本机连接信息', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: NearSendSpacing.sm),
+            Center(child: PairingQrView(payload: payload.encode())),
+            const SizedBox(height: NearSendSpacing.md),
             _Field(label: '设备名', value: deviceName),
             const SizedBox(height: NearSendSpacing.xs),
             _Field(label: '平台', value: platform),
