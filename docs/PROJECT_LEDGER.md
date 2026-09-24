@@ -1,10 +1,10 @@
 # NearSend 项目现状与进度台账
 
-更新日期：2026-09-23。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果与 T12 UI 合并状态。后续以本文件最新Git版本为准，不用聊天记录代替状态。
+更新日期：2026-09-24。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果与 T12 UI 合并状态。后续以本文件最新Git版本为准，不用聊天记录代替状态。
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.1`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v6、manifest staging 持久化、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.3`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
 
 ## 1. 状态口径
 
@@ -38,7 +38,7 @@
 | D11 | 质量与验收策略 | 已完成：设计 | [质量策略](testing/QUALITY_AND_ACCEPTANCE.md) | 设备阈值待目标端基线形成后冻结 |
 | D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡统一放在 [docs/tasks/](tasks/README.md)，见 ADR-0001 |
 | R01 | Flutter客户端与原生适配 | 部分完成：工程、核心层、UI 基线与代码级业务链路 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md)、[T12-10](tasks/T12-10.md) | T12 UI 基线已由 PR #61 合并；真实设备文件端口、恢复编排、Windows 取件器、Flutter SDK 复测和完整 UI 平台验收仍未完成 |
-| R02 | 安装包、签名构建及发布CI | 部分完成：自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.1 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.1) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
+| R02 | 安装包、签名构建及发布CI | 部分完成：自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.3 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | CI 门禁和发布流水线均已在 GitHub Actions 验证；发布签名与正式分发仍属 T10 |
 | R04 | 接收方持久化层 | 部分完成：schema v6 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md) | schema v1→v2→v3→v4→v5→v6、块权威、租约、幂等、统一状态 codec、任务/文件状态、导出记录、peer 授权、`SQLITE_FULL` 注入、**manifest staging 落 SQLite（v4）**、**任务凭证按摘要持久化与授权记录（v5）**、**发送端来源引用（v6）** 均已实现并测试；真实 OS `ENOSPC`、真机 `syncData` 与断电耐久性仍未验证 |
 
@@ -76,7 +76,7 @@
 | T07 Android热点集成 | 阻塞于B01/B02 | 无互联网、无路由器端到端完成 |
 | T08 反向/多文件 | 待开始 | 角色矩阵、部分失败、小文件队列通过 |
 | T09 iOS集成 | 待开始，早期探针阻塞 | 六方向与iOS生命周期通过 |
-| T10 安装升级与发布 | **进行中**：GitHub Actions 自动发版和 `v0.1.1` 已完成；签名、升级、迁移兼容和用户独立试用待完成 | 迁移、兼容、签名与用户独立试用通过 |
+| T10 安装升级与发布 | **进行中**：GitHub Actions 自动发版和 `v0.1.3` 已完成；签名、升级、迁移兼容和用户独立试用待完成 | 迁移、兼容、签名与用户独立试用通过 |
 
 ### 4.1 首批可领取任务
 
@@ -1100,3 +1100,11 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
 - 代码级验收证据已归档到 [`docs/testing/evidence/2026-09-22/t12-ui/`](testing/evidence/2026-09-22/t12-ui/)，覆盖 Light/Dark、200% 动态字体、窄宽度、长文案、空间三态、五阶段传输状态和真实数据库状态读取。
 - 合并不等于平台验收完成：当前 Flutter SDK 为 Dart `3.12.2`，项目基线要求 Dart `^3.13.4`；Android 真机截图、Windows 构建/截图、iOS 构建/真机、键盘/生命周期和屏幕阅读器证据仍未补齐。
 - 因此 T12 总任务保持“阻塞（代码已合并）”，不把未运行的构建、截图、真机交互或屏幕阅读器结果写成通过；后续复测必须在满足 SDK 要求并具备对应平台环境的机器上执行。
+
+### 6.6 `v0.1.3` 发布故障修复与验收（2026-09-23）
+
+- `v0.1.2` 之后的 `master` CI 曾因发布门禁兼容性失败；[PR #63](https://github.com/yanzhao77/NearSend/pull/63) 修复门禁后，后续 CI [run 35846171261](https://github.com/yanzhao77/NearSend/actions/runs/35846171261) 成功。
+- [PR #64](https://github.com/yanzhao77/NearSend/pull/64) 为 Flutter 3.47.5 的 macOS AOT windowing 上游问题加入限定范围的 SDK 缓存补丁；首次 Release [run 35846736222](https://github.com/yanzhao77/NearSend/actions/runs/35846736222) 仍失败，因为目标声明为 `final class`，补丁匹配的是 `class`。该次运行没有创建 Release。
+- [PR #65](https://github.com/yanzhao77/NearSend/pull/65) 将五个目标声明的匹配与幂等校验改为 `final class`；合并提交 `ae4a2db3c86963e07376d9521d606de0090859eb`。合并后 CI [run 35848077863](https://github.com/yanzhao77/NearSend/actions/runs/35848077863) 四作业全通过。
+- Release [run 35848571953](https://github.com/yanzhao77/NearSend/actions/runs/35848571953) 的四个平台构建和发布 job 全通过；[macOS job](https://github.com/yanzhao77/NearSend/actions/runs/35848571953/job/107140604091) 日志显示补丁应用成功并构建 `nearsend.app`。GitHub 已发布 [v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)，附 Android APK、Windows/macOS ZIP、Linux DEB/便携包和 `SHA256SUMS.txt`。
+- T10 仍为“进行中”：此次证明 Flutter 3.47.5 的发布流水线可构建并归档，不证明安装升级、正式签名、设备互传或断点恢复；升级 Flutter 时需重新评估临时补丁。
