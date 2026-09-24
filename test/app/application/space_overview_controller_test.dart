@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 void main() {
   test('unknown platform space remains unknown', () async {
@@ -46,13 +47,23 @@ class _FakeStorageGateway implements PlatformStorageGateway {
   bool get supportsDirectorySelection => false;
 
   @override
-  Future<String?> defaultReceiveLocation() async => 'opaque://location';
+  Future<StorageLocationRef?> defaultReceiveLocation() async =>
+      const StorageLocationRef(
+        kind: StorageLocationKind.nativeDirectory,
+        opaqueValue: '/location',
+        displayName: 'location',
+      );
 
   @override
-  Future<String?> pickReceiveDirectory() async => 'opaque://picked';
+  Future<StorageLocationRef?> pickReceiveDirectory() async => null;
+
+  @override
+  Future<StorageLocationRef> validateReceiveLocation(
+    StorageLocationRef location,
+  ) async => location;
 
   @override
   Future<StorageMeasurement> measureFreeSpace({
-    required String? locationRef,
+    required StorageLocationRef? location,
   }) async => measurement;
 }

@@ -32,6 +32,7 @@ import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 /// NearSend application root.
 ///
@@ -266,7 +267,13 @@ class _NearSendAppState extends State<NearSendApp> {
     final PlatformStorageGateway gateway =
         widget.storageGateway ?? const UnknownPlatformStorageGateway();
     final StorageMeasurement measurement = await gateway.measureFreeSpace(
-      locationRef: saveLocation,
+      location: StorageLocationRef(
+        kind: saveLocation.startsWith('content://')
+            ? StorageLocationKind.androidDocumentTree
+            : StorageLocationKind.nativeDirectory,
+        opaqueValue: saveLocation,
+        displayName: '本次保存位置',
+      ),
     );
     return ReceiverStorageContext(
       stagingVolume: appPrivate,
@@ -456,7 +463,9 @@ class _NearSendAppState extends State<NearSendApp> {
                           !widget.storageGateway!.supportsDirectorySelection
                       ? null
                       : () async =>
-                            widget.storageGateway!.pickReceiveDirectory(),
+                            (await widget.storageGateway!
+                                    .pickReceiveDirectory())
+                                ?.opaqueValue,
                   onAcceptPush: incoming == null
                       ? null
                       : (offer, saveLocation) async => incoming.accept(

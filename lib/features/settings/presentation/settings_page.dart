@@ -77,11 +77,16 @@ class _SettingsPageState extends State<SettingsPage> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('默认接收位置'),
-                subtitle: Text(settings.defaultReceiveLocation ?? '未设置'),
+                subtitle: Text(
+                  settings.defaultReceiveLocation?.displayName ??
+                      (settings.defaultReceiveLocationNeedsRepair
+                          ? '原保存位置不可识别，请重新选择'
+                          : '未设置'),
+                ),
                 trailing: widget.space.gateway.supportsDirectorySelection
                     ? IconButton(
                         onPressed: () async {
-                          final String? location = await widget.space.gateway
+                          final location = await widget.space.gateway
                               .pickReceiveDirectory();
                           if (location != null) {
                             widget.controller.updateDefaultReceiveLocation(

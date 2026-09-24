@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:nearsend/app/application/app_settings_repository.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 class SettingsController extends ChangeNotifier {
   AppSettingsRepository? _repository;
@@ -39,7 +40,7 @@ class SettingsController extends ChangeNotifier {
   void updateDeviceName(String value) =>
       update(_settings.copyWith(deviceName: value));
 
-  void updateDefaultReceiveLocation(String? value) => update(
+  void updateDefaultReceiveLocation(StorageLocationRef? value) => update(
     value == null
         ? _settings.copyWith(clearDefaultReceiveLocation: true)
         : _settings.copyWith(defaultReceiveLocation: value),

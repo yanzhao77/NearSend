@@ -18,13 +18,15 @@
 - `flutter test` 首次在 macOS Native Assets 下载 SQLite 动态库时遇到 TLS 握手中断。项目保留
   `sqlite3 3.6.0`，仅将 macOS hook 配置为使用系统 SQLite；Android、Windows 和其他平台继续
   使用锁定依赖的默认二进制。调整后完整测试 1256 项全部通过。
+- 当前数据库权威版本是 schema v7；v7 已包含只保存非机密值的 `app_settings` 表。位置引用的
+  v1 格式在该表内按值迁移，不误写成新的数据库 schema 版本。
 
 ## 任务状态
 
 | 任务 | 状态 | 当前结果 | 下一步 |
 |---|---|---|---|
-| V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v6、协议草案、现有 Android SAF 通道和平台边界；macOS 分析和 1256 项测试通过 | 验证存储、BLE、PAKE、热点和网络绑定候选 |
-| V12-01 系统位置与迁移 | 未开始 | 现有设置仍以可空字符串保存位置；Android 目录选择和导出尚未接通 | 定义版本化位置引用、schema 迁移和平台接口 |
+| V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v7、协议草案、现有 Android SAF 通道和平台边界；macOS 分析和 1256 项测试通过 | 继续验证 BLE、PAKE、热点和网络绑定候选 |
+| V12-01 系统位置与迁移 | 进行中 | 已实现严格版本化 `StorageLocationRef`、旧字符串值迁移、畸形值保留修复状态、Android 系统目录树选择/持久授权复查/有界 SAF 导出，以及 Windows `IFileDialog`/Known Folder/空间查询；28 项定向测试、1267 项全量测试与 Android Kotlin 编译通过 | Android 真机验证重启后写入/撤权；在 Windows CI/主机编译并实测目录选择与写入 |
 | V12-02 接收输出计划 | 未开始 | 现有接收确认未形成持久化本地输出计划 | 实现服务端门控、改名、冲突和导出状态 |
 | V12-03 设置与确认 UI | 未开始 | 设置页有目录入口，但 Android 适配器诚实报告不支持 | 接入真实目录选择和确认流程 |
 | V12-04 稳定身份与历史 | 未开始 | peer 指纹可持久化；节点 TLS 身份每次启动重新生成 | 设计安全存储边界、身份绑定与迁移 |
@@ -42,6 +44,20 @@
 - 当前主机为 macOS；不能在本机生成 Windows 构建或代替 Windows 10/11 BLE、WLAN 和 Shell 实测。
 - 尚未取得本轮 Android 与 Windows 双机、不同 Wi-Fi、无路由器或热点传输证据。
 - iOS、Windows 的新增平台能力不能在当前环境标记通过。
+- Android 完整 APK 构建当前被 `sqlite3 3.6.0` GitHub Release 二进制下载的 TLS 握手中断阻塞；
+  `:app:compileDebugKotlin` 已在排除 Flutter Native Assets 任务后成功，不能替代 APK 构建通过。
+
+## V12-01 阶段记录
+
+- `StorageLocationRef` 只持久化版本、类型、不透明引用和展示名称；运行时权限状态不持久化为承诺。
+- 旧的裸目录字符串在读取时迁移为 v1 JSON。无法解析的 JSON 原值保留，设置页要求重新选择，
+  不静默删除用户设置。
+- Android 使用 `ACTION_OPEN_DOCUMENT_TREE` 和系统实际返回的读写授权调用
+  `takePersistableUriPermission`；每次枚举或创建目标前重新核对持久授权。
+- SAF 导出从应用私有暂存块按序以 256 KiB 有界缓冲写入。完成后才结束写入；失败只清理该次
+  创建且尚未提交的文档，已保存文件没有删除入口。文档提供方导出明确报告为非原子。
+- Android 真机上的提供方差异、应用重启后的授权延续、用户撤权、云提供方离线状态和系统自动改名
+  仍需人工验证。Windows 原生适配已实现但尚未在 Windows 环境编译或实测，因此 V12-01 不标记完成。
 
 ## 人工重点复核
 

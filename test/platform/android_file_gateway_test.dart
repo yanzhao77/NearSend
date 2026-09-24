@@ -86,6 +86,51 @@ void main() {
     expect(await gateway.pickFiles(), isEmpty);
   });
 
+  test('directory entries preserve names and unknown sizes', () async {
+    answer('listDirectory', (MethodCall call) {
+      expect(
+        (call.arguments as Map<Object?, Object?>)['locationRef'],
+        'content://provider/tree/root',
+      );
+      return <Map<String, Object?>>[
+        <String, Object?>{
+          'uri': 'content://provider/document/1',
+          'name': 'existing.bin',
+          'sizeBytes': -1,
+          'isDirectory': false,
+        },
+      ];
+    });
+
+    final List<AndroidDirectoryEntry> entries = await gateway.listDirectory(
+      treeUri: 'content://provider/tree/root',
+    );
+    expect(entries.single.displayName, 'existing.bin');
+    expect(entries.single.sizeBytes, isNull);
+    expect(entries.single.isDirectory, isFalse);
+  });
+
+  test('document creation keeps the tree reference opaque', () async {
+    answer('createDocument', (MethodCall call) {
+      final Map<Object?, Object?> args = (call.arguments as Map)
+          .cast<Object?, Object?>();
+      expect(args['locationRef'], 'content://provider/tree/root');
+      expect(args['displayName'], 'report.bin');
+      return <String, Object?>{
+        'uri': 'content://provider/document/2',
+        'name': 'report.bin',
+        'sizeBytes': 0,
+      };
+    });
+
+    final PickedDocument created = await gateway.createDocument(
+      treeUri: 'content://provider/tree/root',
+      displayName: 'report.bin',
+    );
+    expect(created.uri, 'content://provider/document/2');
+    expect(created.displayName, 'report.bin');
+  });
+
   test('a read asks for exactly the bounded length at the offset', () async {
     final Uint8List payload = Uint8List.fromList(
       List<int>.generate(64, (int i) => i),

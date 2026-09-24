@@ -31,6 +31,8 @@ Future<void> main() async {
       : null;
   final PlatformStorageGateway? storageGateway = Platform.isAndroid
       ? MethodChannelAndroidStorageGateway()
+      : Platform.isWindows
+      ? MethodChannelWindowsStorageGateway()
       : null;
 
   runApp(

@@ -54,6 +54,7 @@ import 'package:nearsend/core/security/pairing_service.dart';
 import 'package:nearsend/core/security/tls_identity.dart';
 import 'package:nearsend/core/storage/chunk_repository.dart';
 import 'package:nearsend/core/storage/export_service.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/file_verification.dart';
 import 'package:nearsend/core/storage/idempotency_repository.dart';
 import 'package:nearsend/core/storage/local_file_layer.dart';
@@ -231,6 +232,8 @@ class NearSendNode {
     int port = 0,
     String commonName = 'NearSend',
     SourceBytes Function(String sourceRef, int sizeBytes)? sourceResolver,
+    ExportSink Function(LocalStagingLayout, StagingFileSink)? exportSinkFactory,
+    ExportNamingPolicy exportNaming = const ExportNamingPolicy(),
   }) async {
     final Directory root = Directory(directory);
     if (!root.existsSync()) {
@@ -275,6 +278,9 @@ class NearSendNode {
       ],
     );
 
+    final ExportSink exportSink =
+        exportSinkFactory?.call(layout, sink) ??
+        LocalDirectoryExportSink(layout: layout, staging: sink);
     final TransferEngine engine = TransferEngine(
       database: database,
       transfers: transfers,
@@ -290,8 +296,9 @@ class NearSendNode {
       verifier: FileVerifier(database, reader: reader, chunks: tasks),
       exporter: ExportService(
         database: database,
-        sink: LocalDirectoryExportSink(layout: layout, staging: sink),
+        sink: exportSink,
         transfers: transfers,
+        naming: exportNaming,
       ),
       windows: windows,
       // Omitted on a platform whose files are paths, which is every platform but Android with a

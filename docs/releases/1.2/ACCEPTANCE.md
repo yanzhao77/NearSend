@@ -12,9 +12,12 @@
 | FVM Flutter 版本 | 通过 | Flutter 3.47.5 / Dart 3.13.4 |
 | `flutter analyze` 基线 | 通过 | 2026-09-24，`No issues found` |
 | `flutter test` 基线 | 通过 | macOS 改用系统 SQLite 后，1256 项全部通过 |
-| Markdown 相对链接 | 未执行 | 首批文档完成后执行 |
-| 敏感信息扫描 | 未执行 | 首批文档完成后执行 |
-| Android 构建 | 未执行 | V12-00 平台探针后执行 |
+| Markdown 相对链接 | 通过 | V12-00：95 个文件、534 个链接通过 |
+| 敏感信息扫描 | 通过 | V12-00 基线提交前通过 |
+| V12-01 定向测试 | 通过 | 位置模型、设置迁移、Android/Windows MethodChannel、空间读模型和 SAF 导出共 28 项通过 |
+| V12-01 全量测试 | 通过 | `flutter test`，1267 项全部通过 |
+| Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
+| Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
 | Windows 构建 | 受阻 | 当前主机不是 Windows；由 GitHub Actions 或 Windows 主机执行 |
 | iOS 构建 | 未执行 | 非 1.2 首要完整验收组合，仍需保持可编译性 |
@@ -33,9 +36,32 @@
 | A08 蜂窝网络与无互联网热点并存 | 未执行 | 需要 Android 真机与路由检查 |
 | A09 重启与热点 IP 改变 | 未执行 | 稳定身份尚未实现 |
 | A10 同名设备或身份指纹变化 | 未执行 | 自动化负例与双机实测均待完成 |
-| A11 默认目录重启持久化 | 未执行 | V12-01 尚未实现 |
+| A11 默认目录重启持久化 | 未执行 | Android 代码已实现，仍需真机选择目录、重启并实际写入；Windows 尚未实现 |
 | A12 单/多文件、同名、中文和长名称 | 未执行 | V12-02 尚未实现 |
-| A13 目录授权撤销或目录删除 | 未执行 | V12-01/V12-02 尚未实现 |
+| A13 目录授权撤销或目录删除 | 未执行 | Android 已有授权复查和结构化失败路径，仍需真机撤权/删除目录验证；V12-02 输出计划尚未实现 |
+
+## V12-01 自动化证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test test/platform/storage_location_test.dart \
+  test/platform/platform_storage_gateway_test.dart \
+  test/platform/android_file_gateway_test.dart \
+  test/platform/android_export_sink_test.dart \
+  test/app/application/app_settings_repository_test.dart \
+  test/app/application/space_overview_controller_test.dart
+结果：28 tests passed
+
+./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
+结果：BUILD SUCCESSFUL
+
+fvm flutter build apk --debug
+结果：受阻，下载 libsqlite3.arm.android.so 时 TLS handshake terminated
+```
 | A14 拒绝、超时和撤销邀请 | 未执行 | V12-02 尚未实现 |
 | A15 关闭就绪、后台和断网 | 未执行 | V12-10/V12-11 尚未实现 |
 | A16 大文件和大量小文件 | 未执行 | 集成后执行，需含超过 4 GiB 样本 |

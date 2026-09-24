@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/platform/storage_location.dart';
 
 /// A measured answer from a platform storage provider.
 class StorageMeasurement {
@@ -28,11 +29,17 @@ abstract interface class PlatformStorageGateway {
   /// supported by the write path.
   bool get supportsDirectorySelection => false;
 
-  Future<String?> defaultReceiveLocation();
+  Future<StorageLocationRef?> defaultReceiveLocation();
 
-  Future<String?> pickReceiveDirectory();
+  Future<StorageLocationRef?> pickReceiveDirectory();
 
-  Future<StorageMeasurement> measureFreeSpace({required String? locationRef});
+  Future<StorageLocationRef> validateReceiveLocation(
+    StorageLocationRef location,
+  );
+
+  Future<StorageMeasurement> measureFreeSpace({
+    required StorageLocationRef? location,
+  });
 }
 
 /// Default adapter until a platform has a verified native implementation.
@@ -46,14 +53,19 @@ class UnknownPlatformStorageGateway implements PlatformStorageGateway {
   bool get supportsDirectorySelection => false;
 
   @override
-  Future<String?> defaultReceiveLocation() async => null;
+  Future<StorageLocationRef?> defaultReceiveLocation() async => null;
 
   @override
-  Future<String?> pickReceiveDirectory() async => null;
+  Future<StorageLocationRef?> pickReceiveDirectory() async => null;
+
+  @override
+  Future<StorageLocationRef> validateReceiveLocation(
+    StorageLocationRef location,
+  ) async => location.withPermissionState(StoragePermissionState.unavailable);
 
   @override
   Future<StorageMeasurement> measureFreeSpace({
-    required String? locationRef,
+    required StorageLocationRef? location,
   }) async {
     return const StorageMeasurement(
       volume: VolumeId('unknown'),
@@ -65,10 +77,7 @@ class UnknownPlatformStorageGateway implements PlatformStorageGateway {
 
 /// Android's application storage adapter.
 ///
-/// The native side only returns an app-private path for the default location and a measured
-/// `StatFs` answer. Directory selection remains disabled until the Android export sink can write
-/// SAF tree URIs; returning a URI to the existing path-only exporter would be an unsafe false
-/// capability.
+/// The native side owns SAF tree parsing and permission checks. Dart only carries the opaque URI.
 class MethodChannelAndroidStorageGateway implements PlatformStorageGateway {
   MethodChannelAndroidStorageGateway({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel(channelName);
@@ -81,26 +90,45 @@ class MethodChannelAndroidStorageGateway implements PlatformStorageGateway {
   String get platformLabel => 'Android';
 
   @override
-  bool get supportsDirectorySelection => false;
+  bool get supportsDirectorySelection => true;
 
   @override
-  Future<String?> defaultReceiveLocation() async {
+  Future<StorageLocationRef?> defaultReceiveLocation() async {
     final Object? value = await _channel.invokeMethod<Object?>(
       'defaultReceiveLocation',
     );
-    return value is String && value.isNotEmpty ? value : null;
+    return value == null ? null : StorageLocationRef.fromPlatformValue(value);
   }
 
   @override
-  Future<String?> pickReceiveDirectory() async => null;
+  Future<StorageLocationRef?> pickReceiveDirectory() async {
+    final Object? value = await _channel.invokeMethod<Object?>(
+      'pickReceiveDirectory',
+    );
+    return value == null ? null : StorageLocationRef.fromPlatformValue(value);
+  }
+
+  @override
+  Future<StorageLocationRef> validateReceiveLocation(
+    StorageLocationRef location,
+  ) async {
+    if (location.kind != StorageLocationKind.androidDocumentTree) {
+      return location.withPermissionState(StoragePermissionState.granted);
+    }
+    final Object? value = await _channel.invokeMethod<Object?>(
+      'validateReceiveDirectory',
+      <String, Object?>{'locationRef': location.opaqueValue},
+    );
+    return StorageLocationRef.fromPlatformValue(value);
+  }
 
   @override
   Future<StorageMeasurement> measureFreeSpace({
-    required String? locationRef,
+    required StorageLocationRef? location,
   }) async {
     final Object? value = await _channel.invokeMethod<Object?>(
       'measureFreeSpace',
-      <String, Object?>{'locationRef': locationRef},
+      <String, Object?>{'locationRef': location?.opaqueValue},
     );
     if (value is! Map) {
       return const StorageMeasurement(
@@ -123,4 +151,80 @@ class MethodChannelAndroidStorageGateway implements PlatformStorageGateway {
           : const VolumeAvailability.unknown(),
     );
   }
+}
+
+class MethodChannelWindowsStorageGateway implements PlatformStorageGateway {
+  MethodChannelWindowsStorageGateway({MethodChannel? channel})
+    : _channel = channel ?? const MethodChannel(channelName);
+
+  static const String channelName = 'com.nearsend.app/files';
+
+  final MethodChannel _channel;
+
+  @override
+  String get platformLabel => 'Windows';
+
+  @override
+  bool get supportsDirectorySelection => true;
+
+  @override
+  Future<StorageLocationRef?> defaultReceiveLocation() async {
+    final Object? value = await _channel.invokeMethod<Object?>(
+      'defaultReceiveLocation',
+    );
+    return value == null ? null : StorageLocationRef.fromPlatformValue(value);
+  }
+
+  @override
+  Future<StorageLocationRef?> pickReceiveDirectory() async {
+    final Object? value = await _channel.invokeMethod<Object?>(
+      'pickReceiveDirectory',
+    );
+    return value == null ? null : StorageLocationRef.fromPlatformValue(value);
+  }
+
+  @override
+  Future<StorageLocationRef> validateReceiveLocation(
+    StorageLocationRef location,
+  ) async {
+    final Object? value = await _channel.invokeMethod<Object?>(
+      'validateReceiveDirectory',
+      <String, Object?>{'locationRef': location.opaqueValue},
+    );
+    return StorageLocationRef.fromPlatformValue(value);
+  }
+
+  @override
+  Future<StorageMeasurement> measureFreeSpace({
+    required StorageLocationRef? location,
+  }) async {
+    final Object? value = await _channel.invokeMethod<Object?>(
+      'measureFreeSpace',
+      <String, Object?>{'locationRef': location?.opaqueValue},
+    );
+    return _measurementFrom(value);
+  }
+}
+
+StorageMeasurement _measurementFrom(Object? value) {
+  if (value is! Map) {
+    return const StorageMeasurement(
+      volume: VolumeId('unknown'),
+      label: '保存位置',
+      availability: VolumeAvailability.unknown(),
+    );
+  }
+  final Map<Object?, Object?> result = value.cast<Object?, Object?>();
+  final Object? freeBytes = result['freeBytes'];
+  final Object? volume = result['volume'];
+  final Object? label = result['label'];
+  return StorageMeasurement(
+    volume: VolumeId(
+      volume is String && volume.isNotEmpty ? volume : 'unknown',
+    ),
+    label: label is String && label.isNotEmpty ? label : '保存位置',
+    availability: freeBytes is int && freeBytes >= 0
+        ? VolumeAvailability.known(freeBytes)
+        : const VolumeAvailability.unknown(),
+  );
 }

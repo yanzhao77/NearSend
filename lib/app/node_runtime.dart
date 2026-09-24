@@ -1,9 +1,12 @@
 import 'dart:io';
 
 import 'package:nearsend/core/storage/source_bytes.dart';
+import 'package:nearsend/core/storage/export_naming.dart';
+import 'package:nearsend/core/storage/local_file_layer.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
+import 'package:nearsend/platform/android_export_sink.dart';
 
 /// Owns the application's one [NearSendNode], and the answers it needs before it can start.
 ///
@@ -92,6 +95,23 @@ class NodeRuntime {
       port: port,
       commonName: commonName,
       sourceResolver: _resolverFor(gateway),
+      exportSinkFactory: gateway == null
+          ? null
+          : (LocalStagingLayout layout, StagingFileSink staging) =>
+                AndroidRoutingExportSink(
+                  local: LocalDirectoryExportSink(
+                    layout: layout,
+                    staging: staging,
+                  ),
+                  documents: AndroidDocumentExportSink(
+                    layout: layout,
+                    gateway: gateway!,
+                    staging: staging,
+                  ),
+                ),
+      exportNaming: gateway == null
+          ? const ExportNamingPolicy()
+          : const ExportNamingPolicy(layout: ExportTargetLayout.flatten),
     );
     await opened.start();
     _node = opened;
