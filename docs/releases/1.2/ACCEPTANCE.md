@@ -29,6 +29,12 @@
 | V12-05 Android Kotlin 编译 | 通过 | 主应用及 `bonsoir_android 7.1.3` 编译成功；插件有旧 NSD API 弃用警告 |
 | V12-05 iOS Simulator 构建 | 通过 | `fvm flutter build ios --simulator` 成功，生成 `Runner.app`；验证 Bonjour 声明和 Darwin 插件链接 |
 | V12-05 iOS 设备构建 | 受阻 | `flutter build ios --no-codesign` 进入 Xcode 后仍要求 Development Team/Provisioning Profile，未产出设备包 |
+| V12-06 BLE 定向测试 | 通过 | 广告边界、20 字节帧、16 KiB 消息、截断、坏版本、重复、乱序、重放、超时、对端上限、并发发送串行化、双向网关与生命周期共 14 项通过 |
+| V12-06 全量测试 | 通过 | `fvm flutter test --reporter compact`，1322 项全部通过；`flutter analyze` 无问题 |
+| V12-06 Android Kotlin/插件编译 | 通过 | 首次 Maven TLS 握手中断；重试后主应用和 `bluetooth_low_energy_android 6.2.1` 均编译成功，插件报告旧 GATT API/Kotlin Gradle Plugin 弃用警告 |
+| V12-06 iOS Simulator 构建 | 通过 | `fvm flutter build ios --simulator` 成功，生成 `Runner.app`；只证明依赖链接和用途说明有效，默认 BLE 适配仍未开放 iOS 路径 |
+| V12-06 Windows 插件编译 | 受阻 | 当前主机不是 Windows；必须由 Windows CI/主机验证 WinRT central/peripheral 构建 |
+| V12-06 Android/Windows BLE 双机 | 未执行 | 缺少本轮 Android/Windows BLE 目标设备；不得用模拟事件代替广告、GATT、MTU、权限和生命周期实测 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
@@ -170,6 +176,35 @@ fvm flutter build ios --no-codesign
 fvm flutter build apk --debug
 结果：受阻，sqlite3 3.6.0 Android 原生库下载发生 TLS handshake terminated
 ```
+
+## V12-06 BLE 控制通道自动化证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm dart format --output=none --set-exit-if-changed .
+结果：212 files，0 changed
+
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test test/core/network/ble_control_frame_test.dart \
+  test/platform/ble_control_gateway_test.dart --reporter compact
+结果：14 tests passed
+
+fvm flutter test --reporter compact
+结果：1322 tests passed
+
+./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
+首次结果：下载 org.ow2.asm:asm-commons:9.7 时 Maven TLS 握手中断，未开始项目源码编译
+重试结果：BUILD SUCCESSFUL；主应用与 bluetooth_low_energy_android 6.2.1 编译通过，存在上游弃用警告
+
+fvm flutter build ios --simulator
+结果：成功，生成 build/ios/iphonesimulator/Runner.app
+```
+
+未执行 Android/Windows 双机 BLE、Windows 构建、真实 MTU、权限拒绝/恢复、适配器关闭、后台切换和
+断线重连。模拟网关只验证应用边界与生命周期，不能作为无线互操作证据。
 
 ## 证据规则
 

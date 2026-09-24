@@ -25,13 +25,13 @@
 
 | 任务 | 状态 | 当前结果 | 下一步 |
 |---|---|---|---|
-| V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v7、协议草案和平台边界；mDNS 已完成依赖/许可/API 与当前环境构建验证 | 继续验证 BLE、PAKE、热点和网络绑定候选 |
+| V12-00 基线与能力验证 | 进行中 | 已核对 Flutter、Dart、schema v7、协议草案和平台边界；mDNS 与 BLE 已完成依赖/许可/API、边界测试和当前环境代码级验证 | 继续验证 BLE 真机互操作、PAKE、热点和网络绑定候选 |
 | V12-01 系统位置与迁移 | 进行中 | 已实现严格版本化 `StorageLocationRef`、旧字符串值迁移、畸形值保留修复状态、Android 系统目录树选择/持久授权复查/有界 SAF 导出，以及 Windows `IFileDialog`/Known Folder/空间查询；28 项定向测试、1267 项全量测试与 Android Kotlin 编译通过 | Android 真机验证重启后写入/撤权；在 Windows CI/主机编译并实测目录选择与写入 |
 | V12-02 接收输出计划 | 当前环境完成 | schema v8 持久化冻结原名、本地改名、目标引用、冲突策略和导出状态；两个真实 TLS 方向均在接受前建计划，改名不改变清单/哈希，1275 项全量测试通过 | Android/Windows 实机验证权限失效、崩溃重试、同名冲突和平台句柄重开 |
 | V12-03 设置与确认 UI | 当前环境完成 | 默认目录选择先复查权限再持久化；单/多文件在一次弹框中确认位置与本地名称；取消、非法名、撤权和空间不足均不会接受；两个真实 TLS 方向已从确认 UI 保存并校验文件 | Android/Windows 实机验证系统选择器、重启授权、撤权修复与多文件保存 |
 | V12-04 稳定身份与历史 | 进行中 | P-256 长期设备身份与 TLS 身份通过 Android Keystore/Windows DPAPI 安全载荷持久化；schema v9 只存公开元数据，已绑定身份缺失/错配失败关闭，旧数据库可建立首个稳定身份；peer 历史含撤销与最近实时验证 | 将长期身份绑定到 V12-07 双向认证；Windows 编译及 Android/Windows 重启实测 |
 | V12-05 mDNS 发现 | 进行中 | 固定 `bonsoir 7.1.5`；实现最小 TXT、严格候选解析、发布/浏览/更新/丢失/停止生命周期；Android Kotlin 与 iOS Simulator 构建通过 | Android/Windows 同网双机发现并完成身份认证；验证隔离网络与网络切换清理 |
-| V12-06 BLE 控制通道 | 未开始 | 无生产 BLE 适配器 | Android/Windows 双角色 PoC 与分片上限验证 |
+| V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现无设备名广告、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；14 项定向测试、1322 项全量测试通过 | Android/Windows 双机验证不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期；Windows 编译 |
 | V12-07 统一安全配对 | 受阻于 V12-00 | 现有 QR 指纹与一次性令牌路径可用；短码 PAKE 尚未选型 | 选择成熟 PAKE 实现并完成向量互操作 |
 | V12-08 热点与数据通道 | 受阻于 V12-00/V12-06/V12-07 | 现有 HTTPS 数据通道可复用 | 验证 Android 热点、Windows 加入和目标网络绑定 |
 | V12-09 二维码入口 | 未开始 | 现有严格 `lft-pair` 解析器保留 | 定义新版载荷并复用统一认证协调器 |
@@ -111,6 +111,22 @@
 - 12 项 mDNS/节点生命周期定向测试及 1308 项全量测试通过；Android 主应用和插件 Kotlin 编译通过；iOS Simulator
   构建通过。iOS 设备无签名构建仍被 Development Team/Provisioning 配置阻断；Android APK 仍被
   sqlite3 原生库下载 TLS 握手中断阻塞。Windows 构建和 Android/Windows 同网双机发现尚未执行。
+
+## V12-06 BLE 控制通道阶段记录
+
+- 固定并审查 `bluetooth_low_energy 6.2.1`：MIT 许可、兼容 Dart 3.13.4 / Flutter 3.47.5，提供
+  Android/Windows central 与 peripheral、GATT、MTU、write 和 notification API。平台插件只负责
+  系统能力，不参与身份认证或文件传输。
+- 广告不包含设备名、身份、公钥、TLS pin 或秘密。固定 service UUID 的 service data 仅含格式/
+  协议版本和 48 位临时实例标签；发现记录始终是未认证候选。
+- 控制帧固定 16 字节头，逻辑消息上限 16 KiB、帧上限 512 字节、15 秒超时、每对端一个在途重组、
+  总计 16 个对端。自动化覆盖默认 20 字节帧、最大消息、截断、坏版本、重复、乱序、重放和超时。
+- 两端都可作为 central/peripheral，GATT 角色不决定后续文件方向。停止时撤销扫描、广告、连接、
+  service 和订阅。V12-07 认证完成前，任何 BLE 消息都不能点亮可信/就绪状态。
+- 格式检查、静态分析、14 项定向测试及 1322 项全量测试通过。Android Gradle 首次尝试因 Maven
+  TLS 中断失败，重试后主应用和 BLE 插件 Kotlin 编译通过；iOS Simulator 构建通过。插件报告旧
+  Android GATT API 和 Kotlin Gradle Plugin 弃用警告。Windows 编译、Android/Windows 双机控制
+  消息、权限、MTU、适配器关闭、后台和断线恢复尚未执行，因此 V12-06 保持进行中。
 
 ## 人工重点复核
 

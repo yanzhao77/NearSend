@@ -38,6 +38,7 @@ dependencies:
   sqlite3: ^3.6.0
   pointycastle: ^4.0.0
   bonsoir: 7.1.5
+  bluetooth_low_energy: 6.2.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

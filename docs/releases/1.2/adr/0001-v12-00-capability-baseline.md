@@ -32,7 +32,7 @@ Windows 入网能力。插件名称或平台 API 文档不能替代目标设备�
 | 能力 | 候选 | 当前结论 |
 |---|---|---|
 | mDNS | `bonsoir 7.1.5` | 依赖、许可、API 和代码级平台构建已验证并固定；双机和隔离网络实测待补，见 ADR 0002 |
-| BLE | 经验证的 Flutter 插件，或 Android Kotlin + Windows WinRT 项目内插件 | 未验证双向 GATT 与 Windows 角色，不冻结 |
+| BLE | `bluetooth_low_energy 6.2.1` | 许可、SDK、API、帧边界和代码级适配已固定；Android/Windows 双机 GATT、权限和生命周期实测待补，见 ADR 0003 |
 | 短码配对 | RFC 9382 SPAKE2 / RFC 9383 SPAKE2+ 的成熟实现 | 尚未找到完成许可证、向量和跨平台验证的实现；禁止自制替代 |
 | Android 热点 | `LocalOnlyHotspot` + reservation 生命周期 | 需要真机 API/权限/路由验证 |
 | Windows 入网 | Native Wi-Fi API + WLAN 事件 | 当前主机不能验证 |

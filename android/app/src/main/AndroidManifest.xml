@@ -6,6 +6,19 @@
          debug-mode test can see. It grants nothing beyond sockets: no internet service is
          used, no account exists, and §1 forbids any dependency on one. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- BLE is a bounded discovery/control channel; file contents stay on the
+         authenticated Wi-Fi/TLS transport. Android 11 and older gate scans on
+         location, while Android 12+ has dedicated nearby-device permissions. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE"/>
     <application
         android:label="NearSend"
         android:name="${applicationName}"

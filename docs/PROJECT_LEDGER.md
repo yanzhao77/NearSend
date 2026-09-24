@@ -1155,3 +1155,19 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   构建通过。iOS 设备
   构建缺 Development Team/Provisioning，Android APK 仍受 sqlite3 下载 TLS 问题阻塞，Windows
   构建与同网双机发现/认证需目标环境，故 V12-05 保持进行中。
+
+### 6.11 NearSend 1.2 BLE 控制通道（V12-06，2026-09-24）
+
+- 固定并审查 `bluetooth_low_energy 6.2.1`（MIT，兼容项目 FVM 工具链），新增 Android/Windows
+  central/peripheral 适配。广告只携带固定 service UUID、协议版本和 48 位临时实例标签；不广播
+  设备名、长期身份、TLS pin、令牌、热点凭据或文件信息，候选不等于可信设备。
+- 新增 BLE 控制帧 v1：16 字节固定头、16 KiB 逻辑消息上限、512 字节帧上限、15 秒重组超时、
+  16 个对端总上限。重复、乱序、重放、截断、坏版本和不一致长度均拒绝；文件内容继续只走
+  认证 HTTPS 数据面。
+- GATT central 写入与 peripheral notification 构成双向控制链路，蓝牙角色不决定文件发送方向；
+  生命周期明确停止扫描/广告、断开连接、移除 service 和取消订阅。V12-07 双向认证完成前不能用
+  BLE 消息更新可信或在线状态。
+- 格式、静态分析、14 项定向测试和 1322 项全量测试通过。Android 首次 Maven TLS 中断，重试后
+  主应用和 BLE 插件 Kotlin 编译通过；iOS Simulator 构建通过。插件存在旧 GATT API/Kotlin Gradle
+  Plugin 弃用警告。Windows 编译及 Android/Windows 双机、权限、MTU、后台和断线实测均待目标
+  环境，因而本任务保持进行中。
