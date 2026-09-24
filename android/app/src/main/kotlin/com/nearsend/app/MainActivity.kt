@@ -56,6 +56,7 @@ class MainActivity : FlutterActivity() {
     private val pickRequestCode = 4711
     private val storageLocations by lazy { AndroidStorageLocations(this) }
     private val secureIdentity by lazy { AndroidSecureIdentityStore(applicationContext) }
+    private val networkBootstrap by lazy { AndroidNetworkBootstrap(this) }
 
     /** Open write channels, keyed by URI, so a chunked write does not reopen per chunk. */
     private val writeChannels = HashMap<String, FileChannel>()
@@ -66,6 +67,10 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result -> handle(call, result) }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, identityChannelName)
             .setMethodCallHandler { call, result -> handleIdentity(call, result) }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            AndroidNetworkBootstrap.channelName,
+        ).setMethodCallHandler { call, result -> networkBootstrap.handle(call, result) }
     }
 
     private fun handleIdentity(call: MethodCall, result: MethodChannel.Result) {
@@ -189,6 +194,20 @@ class MainActivity : FlutterActivity() {
         }
         data.data?.let { picked.add(probe(it)) }
         pending.success(picked)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        networkBootstrap.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    override fun onDestroy() {
+        networkBootstrap.close()
+        super.onDestroy()
     }
 
     // --- reading ------------------------------------------------------------------------------

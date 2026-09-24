@@ -33,7 +33,7 @@
 | V12-05 mDNS 发现 | 进行中 | 固定 `bonsoir 7.1.5`；实现最小 TXT、严格候选解析、发布/浏览/更新/丢失/停止生命周期；Android Kotlin 与 iOS Simulator 构建通过 | Android/Windows 同网双机发现并完成身份认证；验证隔离网络与网络切换清理 |
 | V12-06 BLE 控制通道 | 进行中 | 固定 `bluetooth_low_energy 6.2.1`；实现无设备名广告、Android/Windows 双角色 GATT、16 KiB 有界分片、严格重组和资源释放；14 项定向测试、1322 项全量测试通过 | Android/Windows 双机验证不同 Wi-Fi 下双向控制消息、权限、MTU、掉线和后台生命周期；Windows 编译 |
 | V12-07 统一安全配对 | 部分完成，PAKE 受阻 | 已实现已授权设备 P-256 新鲜挑战、角色/版本/ready/TLS pin 绑定、30 秒有效期、重放/撤销/身份替换失败关闭；现有 QR 指纹与一次性令牌路径保留 | 选择满足审计、向量和 Android/Windows/iOS 支持的成熟 PAKE；双机验证双向挑战 |
-| V12-08 热点与数据通道 | 受阻于 V12-00/V12-06/V12-07 | 现有 HTTPS 数据通道可复用 | 验证 Android 热点、Windows 加入和目标网络绑定 |
+| V12-08 热点与数据通道 | 部分完成，路由绑定受阻 | 已实现认证端点优先的有界网络选择、Android LocalOnlyHotspot/系统确认入网 lease 与资源释放、Windows 系统设置回退；凭据不持久化/不输出 | Android 真机验证热点与指定 Network socket；Windows 主机验证 Native Wi-Fi 事件/profile/恢复后再开放自动加入 |
 | V12-09 二维码入口 | 未开始 | 现有严格 `lft-pair` 解析器保留 | 定义新版载荷并复用统一认证协调器 |
 | V12-10 首页雷达与在线历史 | 未开始 | 首页仅显示节点连接状态 | 等发现、身份和网络状态接口稳定后接入 |
 | V12-11 系统打开与异常收尾 | 未开始 | 无完整打开/定位与资源回收适配 | 在纵向流程完成后补齐 |
@@ -142,6 +142,21 @@
   现有高熵二维码一次性令牌路径保留。
 - 定向安全测试 42 项、全量测试 1337 项和静态分析通过。Android/Windows 双向认证与平台构建仍
   缺少对应环境；当前没有双机实测证据。
+
+## V12-08 网络引导第一阶段记录
+
+- 网络选择器最多处理 8 个候选，每个认证端点探测最多 3 秒。只有实际 TLS/身份认证探测成功才复用
+  现有网络；SSID、ping 或 BLE 连接不构成成功。
+- Android API 26+ 使用系统 `LocalOnlyHotspot` 回调和 reservation，API 29+ 使用
+  `WifiNetworkSpecifier`、系统确认及 `NetworkCallback`。权限按系统版本在用户触发时请求，热点和
+  入网 lease 在显式释放或 Activity 销毁时回收。
+- SSID/密码来自系统真实回调，密码只留在内存，`toString` 和错误不包含凭据。开放热点或缺少凭据
+  失败关闭；不预设热点地址或网络可达。
+- Android 编译通过，Dart 网关/选择器 7 项及全量 1344 项测试通过，并拒绝公网、回环和畸形候选。未调用
+  `bindProcessToNetwork`；返回的
+  `networkHandle` 尚未与 Flutter HTTPS socket 绑定并完成真机验证，因此无路由器真实传输仍受阻。
+- Windows 当前明确报告自动加入不支持并打开系统 Wi-Fi 设置。Native Wi-Fi 的 WLAN 完成事件、
+  临时 profile 所有权、旧网络恢复和清理必须在 Windows 环境验证后才能开放。
 
 ## 人工重点复核
 

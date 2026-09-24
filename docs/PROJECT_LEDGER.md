@@ -1185,3 +1185,15 @@ README的S1表示协议冻结阶段，对应T02后半段；S2/S3/S4是展示路�
   自制哈希或加密替代；现有高熵二维码 pin + 一次性令牌路径继续可用。
 - 定向安全测试 42 项、全量测试 1337 项和静态分析通过。Android/Windows 经 BLE 的双向挑战与
   PAKE 跨平台互操作仍无实机证据，不能将 V12-07 整项标记完成。
+
+### 6.13 NearSend 1.2 网络引导边界（V12-08 第一阶段，2026-09-24）
+
+- 新增有界网络选择器：最多 8 个候选、单候选 3 秒，只认实际认证端点探测；现有网络可达时不创建
+  热点，SSID/ping/BLE 不替代身份与 TLS 验证。
+- Android 使用官方 LocalOnlyHotspot reservation 和 WifiNetworkSpecifier 系统确认，按 lease 精确
+  释放并在 Activity 销毁时清理。系统返回的 SSID/密码不持久化、不进日志或对象文本，开放/畸形
+  热点失败关闭。Kotlin 编译、7 项定向测试和 1344 项全量测试通过，公网、回环和畸形候选不会进入探测。
+- Windows 自动入网仍关闭，只提供系统 Wi-Fi 设置回退；当前 macOS 无法验证 Native Wi-Fi WLAN
+  事件、临时 profile 所有权、恢复和清理，不能写固定成功实现。
+- Android 返回的 `networkHandle` 尚未与 Flutter HTTPS socket 完成真机绑定验证，且没有不同 Wi-Fi/
+  无路由器双向传输证据。因此 V12-08 只是平台边界第一阶段，不是热点传输完成。

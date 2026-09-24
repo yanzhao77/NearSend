@@ -38,6 +38,10 @@
 | V12-07 已知设备认证定向测试 | 通过 | 42 项通过；覆盖签名、TLS pin/ready 绑定、重放、过期、撤销、身份替换、角色反射、容量和严格 wire 解析 |
 | V12-07 首次短码 PAKE | 受阻 | `spake2plus 1.0.2` 缺目标平台，`dsrp 0.5.5` 未达到审计/测试门槛；未接入不合格实现 |
 | V12-07 Android/Windows 双向认证 | 未执行 | 缺少本轮双机环境；自动化不能替代 BLE 控制链路上的真实身份挑战 |
+| V12-08 网络网关定向测试 | 通过 | 7 项通过；覆盖凭据文本脱敏、MethodChannel 参数/错误分类、认证探测顺序、候选上限/超时及公网/回环拒绝 |
+| V12-08 Android Kotlin 编译 | 通过 | `LocalOnlyHotspot`、`WifiNetworkSpecifier`、权限和 lease 生命周期代码编译成功 |
+| V12-08 Android 热点传输 | 未执行 | 缺 Android/Windows 双机；指定 Android `Network` 尚未与 Flutter HTTPS socket 完成绑定验证 |
+| V12-08 Windows 自动入网 | 受阻 | 当前主机非 Windows；能力诚实报告为不支持，仅提供系统 Wi-Fi 设置回退 |
 | Android Kotlin 编译 | 通过 | `./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug`，BUILD SUCCESSFUL |
 | Android APK 构建 | 受阻 | `flutter build apk --debug` 在下载 `sqlite3 3.6.0` 的 Android 原生库时 TLS 握手中断；未产出 APK |
 | macOS 构建 | 未执行 | 集成阶段执行；不替代 Android/Windows 目标验收 |
@@ -200,6 +204,27 @@ fvm flutter test --reporter compact
 
 首次短码配对没有被降级实现。候选审查与阻塞理由见 ADR 0004；双机互操作、平台构建和全量回归
 中的平台部分仍需继续执行后补入本节。
+
+## V12-08 网络引导第一阶段证据
+
+2026-09-24 在 macOS/FVM Flutter 3.47.5 环境执行：
+
+```text
+fvm flutter test test/platform/platform_network_gateway_test.dart --reporter expanded
+结果：7 tests passed
+
+fvm flutter analyze
+结果：No issues found
+
+fvm flutter test --reporter compact
+结果：1344 tests passed
+
+cd android && ./gradlew :app:compileDebugKotlin -x :app:compileFlutterBuildDebug
+结果：BUILD SUCCESSFUL；LocalOnlyHotspot/WifiNetworkSpecifier 代码编译通过
+```
+
+Windows C++ 未在本机编译；Android 热点、入网系统确认、无互联网路由、指定 Network 的 HTTPS
+socket 和资源释放未在真机执行，不能视为热点传输验收。
 
 ## V12-06 BLE 控制通道自动化证据
 
