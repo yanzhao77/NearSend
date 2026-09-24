@@ -26,7 +26,7 @@ import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
-import 'package:nearsend/features/home/presentation/home_page.dart';
+import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
 
@@ -100,6 +100,42 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('local QR pairing appears on home without discovery enabled', (
+    tester,
+  ) async {
+    final node = session();
+    await tester.runAsync(() => node.start());
+    await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
+    await tester.pump();
+    await tester.tap(find.text('本机设备'));
+    await tester.pumpAndSettle();
+    expect(find.text('本机二维码'), findsOneWidget);
+    final payload = node.payload!;
+    final client = TransferClient(
+      pin: payload.serverFingerprint,
+      host: '127.0.0.1',
+      port: node.node!.server.boundPort,
+    );
+    await tester.runAsync(() => client.pairFrom(payload, clientLabel: '扫码手机'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('设备已连接'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('扫码手机'), findsOneWidget);
+    expect(find.text('已连接 · 二维码配对 · 本次会话'), findsOneWidget);
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const ValueKey<String>('wifi-discovery-switch')),
+          )
+          .value,
+      isFalse,
+    );
+    client.close();
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester, () => node.phase == NodePhase.stopped);
+  });
+
   testWidgets('the connection screen shows the running node\'s own pin', (
     tester,
   ) async {
@@ -112,6 +148,8 @@ void main() {
     expect(node.phase, NodePhase.ready);
 
     await tester.pumpWidget(NearSendApp(session: node, peer: peer));
+    await tester.pump();
+    await tester.tap(find.text('传输'));
     await tester.pump();
     await tester.tap(find.text('发送文件'));
     await tester.pumpAndSettle();
@@ -189,6 +227,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const NearSendApp());
+    await tester.tap(find.text('传输'));
+    await tester.pump();
     await tester.tap(find.text('发送文件'));
     await tester.pumpAndSettle();
 
@@ -200,7 +240,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const NearSendApp());
 
-    Navigator.of(tester.element(find.byType(HomePage))).pushNamed(
+    Navigator.of(tester.element(find.byType(NearSendAppShell))).pushNamed(
       NearSendApp.connectRoute,
       arguments: const RadarDevice(
         id: 'remote-session',
@@ -234,6 +274,8 @@ void main() {
     await node.start();
     await tester.pump();
 
+    await tester.tap(find.text('传输'));
+    await tester.pump();
     await tester.tap(find.text('发送文件'));
     await tester.pumpAndSettle();
 
@@ -299,6 +341,8 @@ void main() {
           transferIdFactory: () => transferId,
         ),
       );
+      await tester.pump();
+      await tester.tap(find.text('传输'));
       await tester.pump();
       await tester.tap(find.text('发送文件'));
       await tester.pumpAndSettle();
@@ -473,6 +517,7 @@ void main() {
 
       await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
       await tester.pump();
+      await tapText(tester, '传输');
       await tapText(tester, '接收文件');
       await tester.pumpAndSettle();
 
@@ -626,16 +671,11 @@ void main() {
 
       await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
       await tester.pump();
+      await tapText(tester, '传输');
       await tapText(tester, '接收文件');
       await tester.pumpAndSettle();
-      // The receiving screen is reached after a verified connection, although the push itself does not
-      // need one: what is on offer comes from this device's own rows.
-      // A **fresh** session for this device's own connection: the token the pusher used is one-time
-      // and already spent, so reusing that payload would be refused - correctly.
-      final PairingPayload forOurselves = app.openPairingSession();
-      await tester.enterText(find.byType(TextField), forOurselves.encode());
-      await tester.pump();
-      await tapText(tester, '连接');
+      // The authenticated incoming session opens reception directly from the transfer tab.
+      // No artificial self-pairing is needed to accept a peer's push.
       await settle(tester, () => visible(ConnectionPage.connectedNote));
       await tapText(tester, ConnectionPage.continueLabelReceive);
 

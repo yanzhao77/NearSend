@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nearsend/core/security/pairing_service.dart';
 
 import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/core/security/known_peer_authentication.dart';
@@ -11,6 +12,27 @@ import 'package:nearsend/platform/ble_control_gateway.dart';
 import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 void main() {
+  test(
+    'QR pairs appear without discovery and lose readiness after last activity',
+    () {
+      final radar = RadarController();
+      addTearDown(radar.dispose);
+      radar.syncQrSessions(const [
+        PairedClientPresence(sessionId: 'qr', label: 'Phone', isRecent: true),
+      ]);
+      expect(radar.pairedDevices.single.name, 'Phone');
+      expect(radar.pairedDevices.single.isReady, isTrue);
+      expect(radar.wifiDevices, isEmpty);
+      expect(radar.bluetoothDevices, isEmpty);
+      radar.syncQrSessions(const [
+        PairedClientPresence(sessionId: 'qr', label: 'Phone', isRecent: false),
+      ]);
+      expect(radar.pairedDevices.single.isReady, isFalse);
+      radar.syncQrSessions(const []);
+      expect(radar.pairedDevices, isEmpty);
+    },
+  );
+
   late Directory directory;
   late NearSendDatabase database;
   late PeerRepository peers;

@@ -135,6 +135,14 @@ class NodeSession extends ChangeNotifier {
   /// The connection information this device publishes, when it has any (§3).
   PairingPayload? get payload => _payload;
 
+  /// Issue a fresh one-time QR without revoking an established transfer session.
+  void refreshPairingCode() {
+    final current = node;
+    if (current == null || _phase != NodePhase.ready) return;
+    _payload = current.openPairingSession();
+    notifyListeners();
+  }
+
   /// Why the node is not running, as a sentence a user can act on.
   String? get failureReason => _failureReason;
 

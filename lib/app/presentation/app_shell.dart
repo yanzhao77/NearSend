@@ -5,6 +5,7 @@ import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/application/task_catalog_controller.dart';
 import 'package:nearsend/features/home/presentation/home_page.dart';
+import 'package:nearsend/features/transfer/presentation/transfer_overview_page.dart';
 import 'package:nearsend/features/settings/presentation/settings_page.dart';
 import 'package:nearsend/features/space/presentation/space_overview_page.dart';
 import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
@@ -22,6 +23,8 @@ class NearSendAppShell extends StatefulWidget {
     this.connectionLabel = '连接状态未知',
     this.connectionTone = NsStatusTone.warning,
     this.onContinueTask,
+    this.onSend,
+    this.onReceive,
     this.onWifiReadyChanged,
     this.onBluetoothReadyChanged,
     this.onRadarDevicePressed,
@@ -35,6 +38,8 @@ class NearSendAppShell extends StatefulWidget {
   final String connectionLabel;
   final NsStatusTone connectionTone;
   final VoidCallback? onContinueTask;
+  final VoidCallback? onSend;
+  final VoidCallback? onReceive;
   final ValueChanged<bool>? onWifiReadyChanged;
   final ValueChanged<bool>? onBluetoothReadyChanged;
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
@@ -46,10 +51,11 @@ class NearSendAppShell extends StatefulWidget {
 class _NearSendAppShellState extends State<NearSendAppShell> {
   int _selectedIndex = 0;
 
-  static const List<String> _labels = <String>['首页', '任务', '空间', '设置'];
+  static const List<String> _labels = <String>['首页', '传输', '任务', '空间', '设置'];
   static const List<IconData> _icons = <IconData>[
     Icons.home_outlined,
     Icons.swap_horizontal_circle_outlined,
+    Icons.task_alt_outlined,
     Icons.storage_outlined,
     Icons.settings_outlined,
   ];
@@ -155,8 +161,12 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
       pairedDevices: widget.radar?.pairedDevices ?? const <RadarDevice>[],
       onRadarDevicePressed: widget.onRadarDevicePressed,
     ),
-    1 => TaskOverviewPage(controller: widget.tasks),
-    2 => SpaceOverviewPage(controller: widget.space),
+    1 => TransferOverviewPage(
+      onSend: widget.onSend,
+      onReceive: widget.onReceive,
+    ),
+    2 => TaskOverviewPage(controller: widget.tasks),
+    3 => SpaceOverviewPage(controller: widget.space),
     _ => SettingsPage(controller: widget.settings, space: widget.space),
   };
 

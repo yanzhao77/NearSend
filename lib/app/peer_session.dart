@@ -130,7 +130,7 @@ class PeerSession extends ChangeNotifier {
   ///
   /// Returns whether a connection was established; the phase says the same thing, so a caller may
   /// use whichever reads better.
-  Future<bool> connect(PairingPayload payload) async {
+  Future<bool> connect(PairingPayload payload, {String? displayLabel}) async {
     if (_phase == PeerPhase.connecting) {
       return false;
     }
@@ -160,7 +160,7 @@ class PeerSession extends ChangeNotifier {
               },
         );
         await client
-            .pairFrom(payload, clientLabel: clientLabel)
+            .pairFrom(payload, clientLabel: displayLabel ?? clientLabel)
             .timeout(connectTimeout);
         _client = client;
         _peer = payload;
