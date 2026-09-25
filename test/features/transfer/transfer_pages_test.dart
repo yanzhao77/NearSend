@@ -256,6 +256,33 @@ void main() {
       expect(find.textContaining('摄像头权限未授予'), findsOneWidget);
     });
 
+    testWidgets(
+      'starts the camera flow when opened from the home scan action',
+      (tester) async {
+        final _PermissionGateway permissions = _PermissionGateway(
+          checked: PlatformPermissionState.granted,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: ConnectionPage(
+              payload: null,
+              enableCameraScanner: true,
+              startWithCamera: true,
+              permissionGateway: permissions,
+              cameraScannerPageBuilder: (_) =>
+                  const Scaffold(body: Text('scanner opened')),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        expect(permissions.checks, 1);
+        expect(find.text('scanner opened'), findsOneWidget);
+      },
+    );
+
     testWidgets('camera permission is rechecked for every scanner use', (
       tester,
     ) async {
@@ -286,6 +313,38 @@ void main() {
       expect(permissions.checks, 2);
       expect(permissions.requests, 0);
       expect(find.text('scanner opened'), findsOneWidget);
+    });
+
+    testWidgets('automatically connects after a valid payload is scanned', (
+      tester,
+    ) async {
+      PairingPayload? connectedPayload;
+      final PairingPayload payload = PairingPayload.parse(
+        '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
+        '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
+        '"sessionId":"11111111-2222-4333-8444-555555555555",'
+        '"candidates":[{"host":"10.0.0.9","port":18443}],'
+        '"pairToken":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expiresInSeconds":300}',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildNearSendTheme(Brightness.light),
+          home: ConnectionPage(
+            payload: null,
+            connectImmediately: true,
+            onConnect: (PairingPayload value) => connectedPayload = value,
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byType(TextField),
+        jsonEncode(payload.toJson()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(connectedPayload?.encode(), payload.encode());
+      expect(find.widgetWithText(FilledButton, '连接'), findsNothing);
     });
 
     testWidgets('shows the pin, the candidates and the session', (

@@ -118,6 +118,7 @@ class NearSendApp extends StatefulWidget {
   /// actions and still lead somewhere different afterwards.
   static const String sendArgument = 'send';
   static const String receiveArgument = 'receive';
+  static const String scanArgument = 'scan';
 
   /// The receive confirmation, which `docs/ui/UI_UX_SPEC.md` §5 keeps as its own step so the
   /// space check cannot be skipped by accepting on the connection screen.
@@ -670,6 +671,14 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               onRadarDevicePressed: (RadarDevice device) =>
                   Navigator.of(context)
                       .pushNamed(NearSendApp.connectRoute, arguments: device),
+              onScanPairing:
+                  defaultTargetPlatform == TargetPlatform.android ||
+                      defaultTargetPlatform == TargetPlatform.iOS
+                  ? () => Navigator.of(context).pushNamed(
+                      NearSendApp.connectRoute,
+                      arguments: NearSendApp.scanArgument,
+                    )
+                  : null,
             ),
             '/local-qr': (_) => LocalDeviceQrPage(
               session: widget.session,
@@ -712,7 +721,13 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               final bool receiving =
                   routeArgument == NearSendApp.receiveArgument;
               final bool pairingOnly =
-                  routeArgument == 'pair' || routeArgument is RadarDevice;
+                  routeArgument == 'pair' ||
+                  routeArgument == NearSendApp.scanArgument ||
+                  routeArgument is RadarDevice;
+              final bool startWithCamera =
+                  routeArgument == NearSendApp.scanArgument &&
+                  (defaultTargetPlatform == TargetPlatform.android ||
+                      defaultTargetPlatform == TargetPlatform.iOS);
               final RadarDevice? selectedDevice = routeArgument is RadarDevice
                   ? routeArgument
                   : null;
@@ -746,6 +761,9 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                     enableCameraScanner:
                         defaultTargetPlatform == TargetPlatform.android ||
                         defaultTargetPlatform == TargetPlatform.iOS,
+                    startWithCamera: startWithCamera,
+                    connectImmediately:
+                        routeArgument == NearSendApp.scanArgument,
                     qrImageGateway:
                         defaultTargetPlatform == TargetPlatform.windows
                         ? MethodChannelQrImageGateway()

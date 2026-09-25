@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
@@ -94,6 +96,8 @@ class ConnectionPage extends StatefulWidget {
     this.qrImageGateway,
     this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
     this.cameraScannerPageBuilder,
+    this.startWithCamera = false,
+    this.connectImmediately = false,
     this.starting = false,
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
@@ -126,6 +130,13 @@ class ConnectionPage extends StatefulWidget {
   final QrImageGateway? qrImageGateway;
   final PlatformPermissionGateway permissionGateway;
   final WidgetBuilder? cameraScannerPageBuilder;
+  final bool startWithCamera;
+
+  /// Automatically starts the connection once a valid scanned or pasted payload is available.
+  ///
+  /// This does not weaken TLS pinning: [PeerSession] still refuses to submit the one-time token
+  /// unless the presented certificate matches the fingerprint in the payload.
+  final bool connectImmediately;
 
   /// Whether this device's own node is still starting.
   final bool starting;
@@ -172,8 +183,8 @@ class ConnectionPage extends StatefulWidget {
   static const String connectingNote = '正在连接对方设备…';
 
   /// Shown once the peer proved the identity the payload named (§2).
-  static const String connectedNote = '已连接：对方证书指纹与连接信息一致。';
-  static const String fingerprintPendingNote = '完成连接前，指纹只表示待验证信息，不代表已信任。';
+  static const String connectedNote = '已连接：系统已自动校验对方证书指纹。';
+  static const String fingerprintPendingNote = '连接时会自动校验证书指纹；不匹配会立即阻断连接。';
 
   /// The action that follows a verified connection.
   static const String continueLabelSend = '选择文件';
@@ -192,6 +203,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
   PairingImportState _import = const PairingImportState();
   bool _checkingCameraPermission = false;
   String? _cameraPermissionError;
+  bool _autoConnectScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startWithCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_scan());
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -202,21 +224,31 @@ class _ConnectionPageState extends State<ConnectionPage> {
   void _parse(String text) {
     final String trimmed = text.trim();
     if (trimmed.isEmpty) {
+      _autoConnectScheduled = false;
       setState(() => _import = const PairingImportState());
       return;
     }
+    late final PairingImportState next;
     try {
       final ScannedPairingPayload parsed = ScannedPairingPayload.parse(trimmed);
-      setState(
-        () => _import = switch (parsed) {
-          LegacyScannedPairingPayload() => PairingImportState(
-            payload: parsed.pairing,
-          ),
-          BootstrapPairingPayload() => PairingImportState(bootstrap: parsed),
-        },
-      );
+      next = switch (parsed) {
+        LegacyScannedPairingPayload() => PairingImportState(
+          payload: parsed.pairing,
+        ),
+        BootstrapPairingPayload() => PairingImportState(bootstrap: parsed),
+      };
     } on Object catch (error) {
-      setState(() => _import = PairingImportState(error: '$error'));
+      _autoConnectScheduled = false;
+      next = PairingImportState(error: '$error');
+    }
+    setState(() => _import = next);
+    if (widget.connectImmediately &&
+        next.isAccepted &&
+        !_autoConnectScheduled) {
+      _autoConnectScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !widget.connection.isBusy) _connectImported();
+      });
     }
   }
 
@@ -280,6 +312,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     );
     final PairingPayload? payload = widget.payload;
     final ConnectionAttempt attempt = widget.connection;
+    final bool canConnectImported =
+        (_import.bootstrap == null && widget.onConnect != null) ||
+        (_import.bootstrap != null && widget.onConnectBootstrap != null);
 
     return Scaffold(
       appBar: AppBar(
@@ -394,17 +429,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       palette: palette,
                       isError: true,
                     ),
-                  if (_import.isAccepted &&
-                      ((_import.bootstrap == null &&
-                              widget.onConnect != null) ||
-                          (_import.bootstrap != null &&
-                              widget.onConnectBootstrap != null)))
+                  if (!widget.connectImmediately &&
+                      _import.isAccepted &&
+                      canConnectImported)
                     FilledButton.icon(
                       onPressed: attempt.isBusy ? null : _connectImported,
                       icon: const Icon(Icons.link),
                       label: const Text('连接'),
                     )
-                  else if (_import.isAccepted)
+                  else if (_import.isAccepted && !canConnectImported)
                     _Notice(
                       text: ConnectionPage.noConnectorNote,
                       palette: palette,
@@ -595,7 +628,7 @@ class _PublishedPayload extends StatelessWidget {
             _Field(label: '会话', value: payload.sessionId),
             const SizedBox(height: NearSendSpacing.sm),
             Text(
-              '请让对方核对上面的指纹后再连接。指纹不符时应重新配对，而不是继续。',
+              '对方扫码后会自动校验证书指纹；指纹不符时会阻断连接并要求重新扫码。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: NearSendSpacing.sm),
@@ -667,11 +700,11 @@ class _PeerPreview extends StatelessWidget {
             const SizedBox(height: NearSendSpacing.xs),
             _Field(label: '地址', value: _addresses),
             const SizedBox(height: NearSendSpacing.xs),
-            _Field(label: '待核对指纹', value: payload.serverFingerprint),
+            _Field(label: '证书指纹（自动校验）', value: payload.serverFingerprint),
             if (!verified) ...<Widget>[
               const SizedBox(height: NearSendSpacing.sm),
               const NsInfoBanner(
-                title: '请先核对指纹',
+                title: '系统自动校验指纹',
                 message: ConnectionPage.fingerprintPendingNote,
                 tone: NsStatusTone.warning,
               ),

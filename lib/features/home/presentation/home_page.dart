@@ -29,6 +29,7 @@ class HomePage extends StatelessWidget {
     this.qrSessionDevices = const <RadarDevice>[],
     this.pairedDevices = const <RadarDevice>[],
     this.onRadarDevicePressed,
+    this.onScanPairing,
   });
 
   final String deviceName;
@@ -48,6 +49,7 @@ class HomePage extends StatelessWidget {
   final List<RadarDevice> qrSessionDevices;
   final List<RadarDevice> pairedDevices;
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
+  final VoidCallback? onScanPairing;
 
   static const String connectRoute = '/connect';
   static const String transferRoute = '/transfer';
@@ -83,13 +85,12 @@ class HomePage extends StatelessWidget {
                   onDevicePressed: onRadarDevicePressed,
                 ),
                 const SizedBox(height: NearSendSpacing.md),
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      Navigator.of(context)
-                          .pushNamed(connectRoute, arguments: 'pair'),
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('扫码连接设备'),
-                ),
+                if (onScanPairing != null)
+                  OutlinedButton.icon(
+                    onPressed: onScanPairing,
+                    icon: const Icon(Icons.center_focus_weak),
+                    label: const Text('扫一扫连接设备'),
+                  ),
                 const SizedBox(height: NearSendSpacing.md),
                 const NsInfoBanner(
                   title: '本地连接说明',

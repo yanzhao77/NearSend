@@ -1,6 +1,12 @@
 # NearSend 项目现状与进度台账
 
-更新日期：2026-09-24。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果与 T12 UI 合并状态。后续以本文件最新Git版本为准，不用聊天记录代替状态。
+更新日期：2026-09-25。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果与 T12 UI 合并状态。后续以本文件最新Git版本为准，不用聊天记录代替状态。
+
+## 本次分支增量（2026-09-25）：首页相机扫码入口
+
+状态：已实现代码与自动化测试；尚未替代 Android/Windows 双机实测。首页移动端“扫描对方二维码”直接进入系统相机扫码页，复用现有严格载荷解析和摄像头权限链路；扫码成功后自动发起连接，TLS 层仍强制校验二维码中的指纹，不匹配即阻断。桌面端不显示没有相机实现的入口，继续使用连接页中的图片导入或手动信息路径；发现广播没有一次性令牌和指纹，不能绕过扫码直接配对。
+
+本分支基于 `a74e264`（预览版 [v0.1.8](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.8)）增加首页相机扫码与扫码后自动连接。真机相机权限、实际扫码、自动指纹校验和断网重连仍需按验收矩阵人工复核。
 
 ## 本次分支增量（2026-09-24）：设备首页 / 传输导航
 
@@ -10,7 +16,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 最新预览基线为 `v0.1.7`（`684166a`）；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 最新预览基线为 `v0.1.8`（`a74e264`）；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
 
 ## 1. 状态口径
 
