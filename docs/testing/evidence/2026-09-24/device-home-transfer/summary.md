@@ -1,6 +1,6 @@
 # 设备首页与传输导航调整
 
-基线：`75b4d80`（master）。实现位于 `feat/device-home-transfer-tab`；未合并、未发布。
+基线：`75b4d80`（master）。实现由 [PR #71](https://github.com/yanzhao77/NearSend/pull/71) 引入；合并与发版状态以 PR 和 Release 页面为准。
 
 - 导航：首页、传输、任务、空间、设置。发送/接收卡迁移到传输页。
 - 首页：本机卡进入二维码页；已配对设备栏始终显示在本机卡下；保留独立 Wi-Fi/蓝牙开关、候选列表与设备点击回调。
@@ -18,7 +18,7 @@
 
 ## 验证限制
 
-本地 Flutter 启动/依赖解析被自动审批拒绝：工具尝试访问云实例元数据地址 `169.254.169.254`。未绕过拦截。本地 `flutter analyze`、`flutter test` 和平台构建未执行，交由仓库原有只读 CI 验证；CI 结果尚待回填。
+本地 Flutter 启动/依赖解析被自动审批拒绝：工具尝试访问云实例元数据地址 `169.254.169.254`。未绕过拦截。本地 `flutter analyze`、`flutter test` 和平台构建未执行。[PR CI run 36008522130](https://github.com/yanzhao77/NearSend/actions/runs/36008522130) 已通过四项作业：仓库检查、格式/分析/测试、Windows 构建与 Android 构建。
 
 新增/更新用例覆盖：导航迁移、本机二维码路由、真实 loopback 配对后首页刷新、入站推送接收、发现开关和候选点击、认证状态过期/恢复/拒绝、二维码会话与发现独立、传输入口方向参数。
 

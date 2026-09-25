@@ -4,9 +4,9 @@
 
 ## 本次分支增量（2026-09-24）：设备首页 / 传输导航
 
-状态：已实现，待 CI 和目标平台验证；未合并、未发布。基于 `75b4d80`，新增传输导航，将发送/接收移入；首页本机二维码、已配对设备与真实连接呼吸灯；Wi-Fi/蓝牙发现保持独立。扫码历史仅为本次会话，不声称已建立长期设备身份或跨重启免扫码。
+状态：已实现；[PR #71](https://github.com/yanzhao77/NearSend/pull/71) 的四项 CI 已通过，目标平台扫码与断网重连仍待验收。合并与发布状态以 PR 和 Release 页面为准。基于 `75b4d80`，新增传输导航，将发送/接收移入；首页本机二维码、已配对设备与真实连接呼吸灯；Wi-Fi/蓝牙发现保持独立。扫码历史仅为本次会话，不声称已建立长期设备身份或跨重启免扫码。
 
-验证、配对状态边界及人工复核项见[本次证据](testing/evidence/2026-09-24/device-home-transfer/summary.md)。本地 Flutter 因工具访问云实例元数据被自动审批拦截；格式和 Python 检查通过，Flutter 分析、测试、构建须等待 CI。
+验证、配对状态边界及人工复核项见[本次证据](testing/evidence/2026-09-24/device-home-transfer/summary.md)。本地 Flutter 因工具访问云实例元数据被自动审批拦截；格式和 Python 检查通过。PR [CI run 36008522130](https://github.com/yanzhao77/NearSend/actions/runs/36008522130) 的仓库检查、格式/分析/测试、Windows 与 Android 构建均通过。
 
 ## 一句话现状
 
