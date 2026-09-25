@@ -289,7 +289,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       if (!mounted) return;
       if (permission != PlatformPermissionState.granted) {
         final String message = permission == PlatformPermissionState.denied
-            ? '相机权限未获批准，请在系统设置中允许 NearSend 使用相机后重试。'
+            ? '摄像头权限未授予，请在系统设置中允许 NearSend 使用相机后重试。'
             : '系统未能确认相机权限状态，请检查系统相机权限设置后重试。';
         _reportScanFailure(message);
         return;
