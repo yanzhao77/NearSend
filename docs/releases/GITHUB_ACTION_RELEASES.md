@@ -1,18 +1,19 @@
 # GitHub Actions 自动发版
 
-截至 2026-09-24 的发布基线：**[v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)**。
-该版本由提交 `ae4a2db3c86963e07376d9521d606de0090859eb` 触发并成功发布。
+截至 2026-09-25 的预览发布基线：**[v0.1.7](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.7)**。
+该版本对应提交 `684166a0baba52638a4a0e7ff815ca6597fc9b60`；它仍是内部预览，不是正式签名分发。
 
 ## 行为
 
 `.github/workflows/release.yml` 在 `master` 的 CI 成功后自动运行，也支持从
-GitHub Actions 页面手动 `workflow_dispatch`。发布工作流使用四类原生 runner：
+GitHub Actions 页面手动 `workflow_dispatch`。手动触发必须输入完整目标 SHA；工作流会
+确认它位于 `master` 历史中，并且该精确 SHA 已有成功的 `master` push CI。发布工作流使用四类原生 runner：
 
 - Ubuntu：Android APK、Linux `amd64` `.deb` 和便携式 `.tar.gz`。
 - Windows：Windows `x64` ZIP。
 - macOS：macOS `.app` ZIP。
 
-发布 job 会等待四个平台全部构建成功后才创建 GitHub Release。Release tag 使用
+发布 job 会等待四个平台全部构建成功后才创建标为 **prerelease** 的 GitHub Release。Release tag 使用
 `vMAJOR.MINOR.PATCH`，以仓库已有最高版本 tag 为基线递增 patch；没有历史 release
 时以 `pubspec.yaml` 的版本为基线并递增 patch。Android、Windows、Linux、macOS
 构建都把相同的 Release 版本写入 Flutter build name，Android build number 使用
@@ -49,7 +50,7 @@ GitHub Actions run number。
 macOS 临时补丁仅经此次 Flutter 3.47.5 构建验证；升级 Flutter 后应重新核对上游修复与补丁适用性。构建成功不等于安装、签名、升级或目标设备传输验收完成。
 
 后续向 `master` 的提交会先触发 CI；只有 CI 成功，Release 工作流才会以最高版本 tag
-为基线递增 patch 并发布下一版。文档提交本身也会走这条路径，因此不能把 GitHub 上的
+为基线递增 patch 并发布下一预览版。手动入口也不能绕过这项门禁。文档提交本身同样会走这条路径，因此不能把 GitHub 上的
 Release 生成当作本地构建验证的替代品：本项目的构建验证入口是 GitHub Actions。
 
 ## 需要人工配置的发布阻断项

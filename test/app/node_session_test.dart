@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nearsend/app/node_runtime.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/core/security/installation_identity.dart';
+import 'package:nearsend/core/security/pair_request.dart';
+import 'package:nearsend/core/security/pairing_service.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
@@ -110,6 +112,52 @@ void main() {
 
       expect(opened, 1);
       expect(session.node, same(node));
+      await session.stop();
+    },
+  );
+
+  test(
+    'refresh invalidates the old QR and keeps an established session',
+    () async {
+      final NodeSession session = NodeSession(
+        resolveDirectory: () async => directory(),
+        candidateAddresses: const <String>['127.0.0.1'],
+      );
+      await session.start();
+      final first = session.payload!;
+
+      await session.refreshPairingCode();
+      final second = session.payload!;
+
+      expect(second.sessionId, isNot(first.sessionId));
+      final oldResult = session.node!.pairing.pair(
+        request: PairRequest(
+          requestId: randomUuidV4(),
+          sessionId: first.sessionId,
+          pairToken: first.pairToken,
+          clientLabel: 'stale scanner',
+        ),
+        source: 'peer-old',
+      );
+      expect(oldResult.status, 401);
+
+      final accepted = session.node!.pairing.pair(
+        request: PairRequest(
+          requestId: randomUuidV4(),
+          sessionId: second.sessionId,
+          pairToken: second.pairToken,
+          clientLabel: 'current scanner',
+        ),
+        source: 'peer-new',
+      );
+      final accessToken = PairResponse.parse(accepted.decodeJsonBody())
+          .sessionAccessToken;
+
+      await session.refreshPairingCode();
+      expect(
+        session.node!.pairing.authenticate(token: accessToken, nowMillis: 0),
+        isNotNull,
+      );
       await session.stop();
     },
   );
@@ -238,8 +286,19 @@ void main() {
       expect(adapter.publication!.platform, 'windows');
       expect(session.discoveryFailureReason, isNull);
 
+      final String publishedBeforeRefresh = adapter.publication!.instanceId;
+      await session.refreshPairingCode();
+      expect(adapter.publication!.instanceId, session.payload!.sessionId);
+      expect(adapter.publication!.instanceId, isNot(publishedBeforeRefresh));
+      expect(
+        adapter.session.stops,
+        1,
+        reason:
+            'the old mDNS publication must not advertise a revoked QR session',
+      );
+
       await session.stop();
-      expect(adapter.session.stops, 1);
+      expect(adapter.session.stops, 2);
     },
   );
 

@@ -10,9 +10,15 @@ on:
     types: [completed]
     branches: [master]
   workflow_dispatch:
+    inputs:
+      target_commit:
+        description: Full 40-character master commit SHA with a successful CI run
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  actions: read
+  contents: read
 
 concurrency:
   group: release-master
@@ -39,7 +45,30 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.target_commit }}
+
+      - name: Verify manual target passed CI on master
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_COMMIT: ${{ inputs.target_commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$TARGET_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "target_commit must be a full lowercase 40-character commit SHA" >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$TARGET_COMMIT"
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$TARGET_COMMIT" origin/master
+          successful_runs="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${TARGET_COMMIT}&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success" and .head_branch == "master" and .event == "push")] | length')"
+          if [ "$successful_runs" -lt 1 ]; then
+            echo "No successful master push CI run found for $TARGET_COMMIT" >&2
+            exit 1
+          fi
 
       - name: Calculate next version
         id: version
@@ -85,7 +114,7 @@ jobs:
           --build-number "${{ needs.prepare.outputs.build_number }}"
           --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
           --dart-define=NS_GIT_DIRTY=false
-          --dart-define=NS_BUILD_CHANNEL=release
+          --dart-define=NS_BUILD_CHANNEL=preview
       - name: Stage APK
         run: |
           mkdir -p dist
@@ -125,7 +154,7 @@ jobs:
           --build-number "${{ needs.prepare.outputs.build_number }}"
           --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
           --dart-define=NS_GIT_DIRTY=false
-          --dart-define=NS_BUILD_CHANNEL=release
+          --dart-define=NS_BUILD_CHANNEL=preview
       - name: Package Windows bundle
         shell: pwsh
         run: |
@@ -169,7 +198,7 @@ jobs:
           --build-number "${{ needs.prepare.outputs.build_number }}"
           --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
           --dart-define=NS_GIT_DIRTY=false
-          --dart-define=NS_BUILD_CHANNEL=release
+          --dart-define=NS_BUILD_CHANNEL=preview
       - name: Package Linux bundle
         run: |
           mkdir -p dist
@@ -247,7 +276,7 @@ jobs:
           --build-number "${{ needs.prepare.outputs.build_number }}"
           --dart-define=NS_GIT_SHA=${{ needs.prepare.outputs.commit }}
           --dart-define=NS_GIT_DIRTY=false
-          --dart-define=NS_BUILD_CHANNEL=release
+          --dart-define=NS_BUILD_CHANNEL=preview
       - name: Package macOS application
         run: |
           mkdir -p dist
@@ -266,6 +295,8 @@ jobs:
     name: Create GitHub Release
     needs: [prepare, build-android, build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
@@ -294,6 +325,7 @@ jobs:
 
           ## Build details
 
+          - Channel: preview (GitHub prerelease; not a stable distribution).
           - Commit: `${{ needs.prepare.outputs.commit }}`
           - Flutter: `${{ env.FLUTTER_VERSION }}`
           - macOS release applies the scoped Flutter 3.47.5 AOT windowing workaround for upstream issue #191575.
@@ -307,5 +339,6 @@ jobs:
         run: |
           gh release create "${{ needs.prepare.outputs.tag }}" dist/* \
             --target "${{ needs.prepare.outputs.commit }}" \
-            --title "NearSend ${{ needs.prepare.outputs.tag }}" \
+            --title "NearSend ${{ needs.prepare.outputs.tag }} Preview" \
+            --prerelease \
             --notes-file RELEASE_NOTES.md

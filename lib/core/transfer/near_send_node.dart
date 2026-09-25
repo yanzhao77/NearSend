@@ -208,8 +208,9 @@ class NearSendNode {
 
   /// Opens a pairing session and returns the payload the QR code should carry (§3).
   ///
-  /// Re-issuing invalidates the previous session's access token, which §3 requires: a screenshot
-  /// of the old code must stop working the moment a new one exists.
+  /// Publishing a new session invalidates the previous QR's unconsumed one-time token. Explicitly
+  /// reissuing the same [sessionId] also invalidates that session's access token for the §3
+  /// lost-response path.
   PairingPayload openPairingSession({String? sessionId}) {
     // The candidates are re-pointed at the bound port first: a node that asked the system for a free
     // port published   until this existed, and a payload offering port 0 is one no peer can use -
@@ -221,6 +222,27 @@ class NearSendNode {
       ]);
     }
     final PairingPayload issued = pairing.openSession(sessionId: sessionId);
+    _payload = issued;
+    return issued;
+  }
+
+  /// Issues a new QR and revokes only the previous QR's unconsumed one-time token.
+  ///
+  /// A peer that already exchanged that token for a session access token remains connected. This
+  /// is different from reissuing the same session id through [openPairingSession], which is the
+  /// lost-response recovery path and intentionally revokes that session's access token.
+  PairingPayload refreshPairingSession() {
+    final PairingPayload? previous = _payload;
+    if (previous == null) {
+      return openPairingSession();
+    }
+    if (server.isRunning) {
+      pairing.repointCandidates(<PairingCandidate>[
+        for (final PairingCandidate candidate in pairing.candidates)
+          PairingCandidate(host: candidate.host, port: server.boundPort),
+      ]);
+    }
+    final PairingPayload issued = pairing.refreshSession();
     _payload = issued;
     return issued;
   }

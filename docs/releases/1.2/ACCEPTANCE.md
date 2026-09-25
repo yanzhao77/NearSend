@@ -1,9 +1,20 @@
 # NearSend 1.2 验收记录
 
-更新日期：2026-09-24
+更新日期：2026-09-25
 
 状态说明：`通过` 必须有命令或实机证据；`未执行` 表示没有证据；`受阻` 必须写明缺失条件。
 自动化测试不能替代实机网络、权限和生命周期验证。
+
+## 2026-09-25 二维码刷新与预览发版门禁复核
+
+| 检查 | 状态 | 结果或阻塞 |
+|---|---|---|
+| 二维码刷新安全路径定向测试 | 通过 | 令牌撤销、既有会话保留、mDNS 会话 ID 更新及首页会话/历史分组共 78 项通过 |
+| `flutter analyze` | 通过 | `No issues found` |
+| `flutter test --reporter compact` | 通过 | 1394 项全部通过 |
+| Android preview APK | 通过 | `flutter build apk --release --dart-define=NS_BUILD_CHANNEL=preview` 成功；仍使用 debug signing，仅用于内部预览 |
+| 发布工作流静态门禁 | 通过 | `python tooling/checks/check_ci_workflow.py`：手动目标 SHA、master CI、prerelease 与 publish-only 写权限约束成立 |
+| Android ↔ Windows 双机刷新/收发/断网重连 | 未执行 | 本轮没有进行新的实机操作，不能替代 A01、A15、A18 等矩阵证据 |
 
 ## 自动化与构建
 

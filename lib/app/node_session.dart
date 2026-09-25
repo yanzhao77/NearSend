@@ -136,10 +136,27 @@ class NodeSession extends ChangeNotifier {
   PairingPayload? get payload => _payload;
 
   /// Issue a fresh one-time QR without revoking an established transfer session.
-  void refreshPairingCode() {
+  Future<void> refreshPairingCode() async {
     final current = node;
     if (current == null || _phase != NodePhase.ready) return;
-    _payload = current.openPairingSession();
+    _payload = current.refreshPairingSession();
+    final MdnsDiscoveryGateway? mdns = discovery;
+    if (_discoveryEnabled && mdns != null) {
+      try {
+        await mdns.stop();
+        await mdns.start(
+          MdnsPublication(
+            instanceId: _payload!.sessionId,
+            port: current.server.boundPort,
+            deviceName: _discoveryDeviceName,
+            platform: _discoveryPlatform,
+          ),
+        );
+        _discoveryFailureReason = null;
+      } on Object {
+        _discoveryFailureReason = '局域网自动发现不可用，仍可使用手动连接。';
+      }
+    }
     notifyListeners();
   }
 

@@ -19,7 +19,7 @@
 | 11 | [GitHub Actions 自动发版](releases/GITHUB_ACTION_RELEASES.md) | 安装包、版本递增、Release 说明与签名限制 | 发布、维护者 |
 | 12 | [NearSend 1.2 计划](releases/1.2/PLAN.md) · [状态](releases/1.2/STATUS.md) · [验收](releases/1.2/ACCEPTANCE.md) | 1.2 升级范围、实际进展、验证与阻塞 | 开发、测试、维护者 |
 
-截至 2026-09-24 的预览发布基线：[NearSend v0.1.3](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3)。
+截至 2026-09-25 的预览发布基线：[NearSend v0.1.7](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.7)（提交 `684166a`）。
 README 负责面向使用者的快速入口；本台账负责项目事实和阻塞状态；发布文档负责
 GitHub Actions 的构建、版本和签名边界。三者必须同时更新，不能只修改聊天记录。
 

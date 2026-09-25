@@ -249,6 +249,17 @@ class PairingTokenIssuer {
     return issued;
   }
 
+  /// Revokes the unconsumed token for [sessionId], if one exists.
+  ///
+  /// This deliberately knows nothing about session access tokens issued after a successful
+  /// pairing. Refreshing the QR must invalidate the credential visible in the old image without
+  /// disconnecting peers that have already completed the handshake.
+  bool revoke(String sessionId) {
+    uuidToBytes(sessionId, 'sessionId');
+    _dropExpired(_clock());
+    return _outstanding.remove(sessionId) != null;
+  }
+
   /// Whether [source] is currently refused new attempts.
   bool isRateLimited(String source) {
     final int now = _clock();

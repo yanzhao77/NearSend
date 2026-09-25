@@ -22,8 +22,10 @@ void main() {
     );
     expect(find.text('发送文件'), findsNothing);
     expect(find.text('接收文件'), findsNothing);
-    expect(find.text('已配对设备'), findsOneWidget);
-    expect(find.textContaining('暂无已配对设备'), findsOneWidget);
+    expect(find.text('本次扫码会话'), findsOneWidget);
+    expect(find.text('已验证设备历史'), findsOneWidget);
+    expect(find.textContaining('暂无扫码会话'), findsOneWidget);
+    expect(find.textContaining('暂无已验证'), findsOneWidget);
     await tester.tap(find.text('本机设备'));
     await tester.pumpAndSettle();
     expect(find.text('QR page'), findsOneWidget);
@@ -81,6 +83,10 @@ void main() {
   testWidgets('only verified ready devices render a green status semantic', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       const MaterialApp(
         home: HomePage(
@@ -117,6 +123,43 @@ void main() {
     expect(find.byType(ConnectedDeviceLight), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'QR sessions and verified history are rendered in separate sections',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: HomePage(
+            qrSessionDevices: <RadarDevice>[
+              RadarDevice(
+                id: 'qr-in:session',
+                name: '本次扫码手机',
+                detail: '二维码配对 · 本次会话',
+                isKnown: false,
+                isReady: true,
+                isRevoked: false,
+              ),
+            ],
+            pairedDevices: <RadarDevice>[
+              RadarDevice(
+                id: 'verified-peer',
+                name: '历史验证电脑',
+                detail: 'windows',
+                isKnown: true,
+                isReady: false,
+                isRevoked: false,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('本次扫码会话'), findsOneWidget);
+      expect(find.text('已验证设备历史'), findsOneWidget);
+      expect(find.text('本次扫码手机'), findsOneWidget);
+      expect(find.text('历史验证电脑'), findsOneWidget);
+    },
+  );
 
   testWidgets('long peer names fit a narrow viewport', (tester) async {
     tester.view.physicalSize = const Size(320, 800);

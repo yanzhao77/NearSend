@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce the invariants that .github/workflows/ci.yml claims in its own comments.
+"""Enforce the CI and preview-release workflow security invariants.
 
 Claims in a comment are not guarantees. This check turns them into something CI
 verifies, so a later edit cannot quietly weaken the gate:
@@ -10,6 +10,9 @@ verifies, so a later edit cannot quietly weaken the gate:
 * workflow permissions stay read-only - nothing here needs to write to the repo;
 * the pinned Flutter version matches the one in tooling/ci/install_flutter.sh, so
   the workflow environment and the installer cannot drift apart.
+* preview releases stay marked as prereleases, and manual releases cannot bypass
+  the exact-commit master CI gate;
+* repository write permission is limited to the publish job.
 
 Written with the standard library only. Adding PyYAML would mean CI installing a
 dependency to check a file whose shape is known, which is a poor trade for a
@@ -29,6 +32,7 @@ import sys
 from pathlib import Path
 
 WORKFLOW_RELATIVE = Path(".github/workflows/ci.yml")
+RELEASE_WORKFLOW_RELATIVE = Path(".github/workflows/release.yml")
 INSTALLER_RELATIVE = Path("tooling/ci/install_flutter.sh")
 
 USES_RE = re.compile(r"^\s*(?:-\s*)?uses:\s*(\S+)(?:\s+#.*)?$")
@@ -126,13 +130,65 @@ def check_workflow(root: Path) -> list[str]:
     return problems
 
 
+def check_release_workflow(root: Path) -> list[str]:
+    release_path = root / RELEASE_WORKFLOW_RELATIVE
+    if not release_path.is_file():
+        return [f"{RELEASE_WORKFLOW_RELATIVE.as_posix()} does not exist"]
+
+    text = release_path.read_text(encoding="utf-8")
+    problems: list[str] = []
+    required_fragments = {
+        "a required manual target commit": "target_commit:\n        description:",
+        "manual target validation": "Verify manual target passed CI on master",
+        "a master ancestry check": 'git merge-base --is-ancestor "$TARGET_COMMIT" origin/master',
+        "an exact-commit CI lookup": "actions/workflows/ci.yml/runs?head_sha=${TARGET_COMMIT}",
+        "a successful master push CI requirement": '.event == "push"',
+        "the GitHub prerelease flag": "--prerelease",
+        "the preview build channel": "--dart-define=NS_BUILD_CHANNEL=preview",
+    }
+    for description, fragment in required_fragments.items():
+        if fragment not in text:
+            problems.append(
+                f"{RELEASE_WORKFLOW_RELATIVE.as_posix()}: missing {description}"
+            )
+
+    top_permissions = re.search(
+        r"(?m)^permissions:\s*\n((?:^[ ]{2}[^\n]+\n)+)", text
+    )
+    if top_permissions is None:
+        problems.append(
+            f"{RELEASE_WORKFLOW_RELATIVE.as_posix()}: missing top-level permissions"
+        )
+    else:
+        permissions = top_permissions.group(1)
+        if "  contents: read\n" not in permissions or "  actions: read\n" not in permissions:
+            problems.append(
+                f"{RELEASE_WORKFLOW_RELATIVE.as_posix()}: top-level permissions must be "
+                "actions: read and contents: read"
+            )
+        if "write" in permissions:
+            problems.append(
+                f"{RELEASE_WORKFLOW_RELATIVE.as_posix()}: top-level permissions must not write"
+            )
+
+    if not re.search(
+        r"(?ms)^  publish:\n.*?^    permissions:\n      contents: write\s*$", text
+    ):
+        problems.append(
+            f"{RELEASE_WORKFLOW_RELATIVE.as_posix()}: publish job must explicitly receive "
+            "contents: write"
+        )
+
+    return problems
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root (default: current directory)")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    problems = check_workflow(root)
+    problems = check_workflow(root) + check_release_workflow(root)
 
     if problems:
         print(f"CI WORKFLOW VIOLATIONS ({len(problems)}):")
@@ -140,8 +196,8 @@ def main() -> int:
             print(f"  {problem}")
         return 1
 
-    print("CI workflow invariants hold (SHA-pinned actions, no continue-on-error, "
-          "read-only permissions, Flutter version pinned consistently)")
+    print("Workflow invariants hold (CI actions pinned and read-only; preview releases "
+          "CI-gated, prerelease, and publish-only writable)")
     return 0
 
 

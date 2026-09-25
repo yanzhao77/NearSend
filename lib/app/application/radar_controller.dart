@@ -57,7 +57,7 @@ class RadarController extends ChangeNotifier {
           id: 'qr-in:${client.sessionId}',
           name: client.label.isEmpty ? '扫码连接设备' : client.label,
           detail: '二维码配对 · 本次会话',
-          isKnown: true,
+          isKnown: false,
           isReady: client.isRecent,
           isRevoked: false,
           discoveryMethod: '二维码配对',
@@ -227,9 +227,14 @@ class RadarController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Short-lived QR connections. These are not persistent device identities.
+  List<RadarDevice> get qrSessionDevices =>
+      List<RadarDevice>.unmodifiable(_qrDevices);
+
+  /// Persisted, cryptographically verified device identities from [PeerRepository].
   List<RadarDevice> get pairedDevices {
     final int now = _clock();
-    final List<RadarDevice> out = <RadarDevice>[..._qrDevices];
+    final List<RadarDevice> out = <RadarDevice>[];
     for (final PeerRecord peer in _peers?.history() ?? const <PeerRecord>[]) {
       final VerifiedPeerSession? verified = _verified[peer.peerId];
       out.add(
@@ -297,6 +302,7 @@ class RadarController extends ChangeNotifier {
   }
 
   List<RadarDevice> get devices => List<RadarDevice>.unmodifiable(<RadarDevice>[
+    ...qrSessionDevices,
     ...pairedDevices,
     ...wifiDevices,
     ...bluetoothDevices,
