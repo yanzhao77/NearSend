@@ -85,7 +85,7 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
                 ),
                 const SizedBox(height: NearSendSpacing.md),
                 const Text(
-                  '让对方在 NearSend 中扫描下方二维码并确认连接。',
+                  '让对方在 NearSend 中扫描下方二维码，系统会自动校验并连接。',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: NearSendSpacing.lg),

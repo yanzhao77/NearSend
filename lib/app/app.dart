@@ -762,6 +762,8 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                         defaultTargetPlatform == TargetPlatform.android ||
                         defaultTargetPlatform == TargetPlatform.iOS,
                     startWithCamera: startWithCamera,
+                    connectImmediately:
+                        routeArgument == NearSendApp.scanArgument,
                     qrImageGateway:
                         defaultTargetPlatform == TargetPlatform.windows
                         ? MethodChannelQrImageGateway()
