@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/features/home/presentation/home_page.dart';
+import 'package:nearsend/features/home/presentation/connected_device_light.dart';
 
 /// T12-04 acceptance for the real home shell.
 void main() {
@@ -10,34 +11,23 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: HomePage()));
   }
 
-  testWidgets('renders both primary actions', (tester) async {
-    await pumpHomePage(tester);
-
-    expect(find.text('发送文件'), findsAtLeastNWidgets(1));
-    expect(find.text('接收文件'), findsAtLeastNWidgets(1));
-    expect(find.byType(FilledButton), findsNWidgets(2));
+  testWidgets('home focuses on devices and opens the local QR route', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: const HomePage(),
+        routes: {'/local-qr': (_) => const Scaffold(body: Text('QR page'))},
+      ),
+    );
+    expect(find.text('发送文件'), findsNothing);
+    expect(find.text('接收文件'), findsNothing);
+    expect(find.text('已配对设备'), findsOneWidget);
+    expect(find.textContaining('暂无已配对设备'), findsOneWidget);
+    await tester.tap(find.text('本机设备'));
+    await tester.pumpAndSettle();
+    expect(find.text('QR page'), findsOneWidget);
   });
-
-  testWidgets(
-    'primary actions are enabled and explain the completion boundary',
-    (tester) async {
-      await pumpHomePage(tester);
-
-      for (final FilledButton button in tester.widgetList<FilledButton>(
-        find.byType(FilledButton),
-      )) {
-        expect(
-          button.onPressed,
-          isNotNull,
-          reason: 'the primary actions open the real connection flow',
-        );
-      }
-
-      final Finder completionNote = find.text(HomePage.remainingWorkNote);
-      await tester.scrollUntilVisible(completionNote, 300);
-      expect(completionNote, findsOneWidget);
-    },
-  );
 
   testWidgets('explains that no internet is required but a local link is', (
     tester,
@@ -46,15 +36,6 @@ void main() {
 
     expect(find.text(HomePage.emptyStateExplanation), findsOneWidget);
   });
-
-  testWidgets(
-    'states plainly that the user-facing transfer flow is not integrated',
-    (tester) async {
-      await pumpHomePage(tester);
-
-      expect(find.text(HomePage.baselineNotice), findsOneWidget);
-    },
-  );
 
   testWidgets(
     'does not render a continue-task action while none is recoverable',
@@ -132,7 +113,9 @@ void main() {
     final Text verifiedName = tester.widget<Text>(find.text('已验证设备'));
     expect(verifiedName.semanticsLabel, '已验证设备，已实时验证并就绪');
     expect(find.text('未经验证的候选设备'), findsOneWidget);
-    expect(find.byIcon(Icons.devices_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.devices_outlined), findsNWidgets(2));
+    expect(find.byType(ConnectedDeviceLight), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('long peer names fit a narrow viewport', (tester) async {
@@ -195,6 +178,8 @@ void main() {
     );
 
     await tester.scrollUntilVisible(find.text('书房电脑'), 300);
+    await tester.ensureVisible(find.text('书房电脑'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('书房电脑'));
     expect(selected, same(wifi));
 

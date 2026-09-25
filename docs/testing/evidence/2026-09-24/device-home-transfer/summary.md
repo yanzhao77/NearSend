@@ -1,0 +1,29 @@
+# 设备首页与传输导航调整
+
+基线：`75b4d80`（master）。实现由 [PR #71](https://github.com/yanzhao77/NearSend/pull/71) 引入；合并与发版状态以 PR 和 Release 页面为准。
+
+- 导航：首页、传输、任务、空间、设置。发送/接收卡迁移到传输页。
+- 首页：本机卡进入二维码页；已配对设备栏始终显示在本机卡下；保留独立 Wi-Fi/蓝牙开关、候选列表与设备点击回调。
+- 扫码成功后，服务端按成功的一次性令牌配对记录显示客户端名称；名称只作展示，不建立长期身份信任。扫描端显示本次已验证服务端会话。
+- 绿色呼吸灯位于已连接设备行尾，带文字和无障碍语义，遵守系统减少动画设置。扫描端每 10 秒通过现有认证 offers 接口探测，5 秒超时；服务端以 30 秒内认证活动和会话有效期判定，断线后有最多约 30 秒识别窗口。
+- QR 配对不依赖发现开关。刷新二维码创建新的短期会话，不撤销已建立传输的授权。原协议、TLS pin 验证、一次性令牌检查不变。
+
+## 已执行
+
+- Flutter 3.47.5 配套 Dart SDK 的独立 formatter：`dart format --output=none --set-exit-if-changed .`，232 文件，0 改动（未解析 flutter_lints 的提示不影响格式检查）。
+- `git diff --check`：通过。
+- `python tooling/checks/check_links.py`：通过。
+- `python tooling/checks/check_secrets.py`：通过。
+- `cd tooling/s0 && python -m unittest -v test_probes`：24 项通过。
+
+## 验证限制
+
+本地 Flutter 启动/依赖解析被自动审批拒绝：工具尝试访问云实例元数据地址 `169.254.169.254`。未绕过拦截。本地 `flutter analyze`、`flutter test` 和平台构建未执行。[PR CI run 36008522130](https://github.com/yanzhao77/NearSend/actions/runs/36008522130) 已通过四项作业：仓库检查、格式/分析/测试、Windows 构建与 Android 构建。
+
+新增/更新用例覆盖：导航迁移、本机二维码路由、真实 loopback 配对后首页刷新、入站推送接收、发现开关和候选点击、认证状态过期/恢复/拒绝、二维码会话与发现独立、传输入口方向参数。
+
+## 边界和人工复核
+
+- **需重点复核：安全配对状态投影**（`PairingService.pairedClients` 和 `RadarController.syncQrSessions`）。投影不携带凭证，不授权传输，不把会话标签当成持久设备身份。
+- QR 协议不提供服务端设备名/持久客户端身份；直接扫码的扫描端显示“已扫码设备”，被扫端显示客户端提供的名称。扫码记录属于本次会话，不承诺跨重启免扫码或双向扫码后的设备级合并。
+- 未运行 Android/Windows 真机扫码、断网重连、系统相机和蓝牙验证。新增测试及代码级检查不能替代真机验收。

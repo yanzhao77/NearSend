@@ -10,6 +10,7 @@ import 'package:nearsend/app/application/space_overview_controller.dart';
 import 'package:nearsend/app/application/task_catalog_controller.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
+import 'package:nearsend/features/pairing/presentation/local_device_qr_page.dart';
 import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
@@ -151,6 +152,61 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
           ? MethodChannelPlatformNetworkGateway()
           : const UnavailablePlatformNetworkGateway());
   JoinedWifiLease? _joinedWifi;
+  Timer? _pairingPresenceTimer;
+  bool _probingPeer = false;
+  bool _outgoingRecent = false;
+  final Stopwatch _outgoingAge = Stopwatch();
+  String? _outgoingName;
+  int _presenceTicks = 0;
+
+  void _syncPairingPresence() {
+    if (_disposing) return;
+    final peer = widget.peer;
+    final payload = peer?.peer;
+    _radar.syncQrSessions(
+      widget.session?.node?.pairing.pairedClients ?? const [],
+      outgoing: payload == null
+          ? null
+          : RadarDevice(
+              id: 'qr-out:${payload.serverFingerprint}',
+              name: _outgoingName ?? '已扫码设备',
+              detail: '二维码配对 · 本次会话',
+              isKnown: true,
+              isReady:
+                  peer!.isConnected &&
+                  _outgoingRecent &&
+                  _outgoingAge.elapsed.inSeconds < 30,
+              isRevoked: false,
+              discoveryMethod: '二维码配对',
+            ),
+    );
+  }
+
+  Future<void> _probePairedPeer() async {
+    final peer = widget.peer;
+    final client = peer?.client;
+    if (_probingPeer || client == null || peer?.isConnected != true) return;
+    _probingPeer = true;
+    bool recent = false;
+    try {
+      // Existing authenticated, read-only endpoint: also refreshes server presence.
+      await client.offers().timeout(const Duration(seconds: 5));
+      recent = true;
+    } on Object {
+      // A failed probe only changes presence; it does not cancel a transfer.
+      recent = false;
+    } finally {
+      _probingPeer = false;
+    }
+    if (_disposing || widget.peer?.client != client) return;
+    _outgoingRecent = recent;
+    if (recent) {
+      _outgoingAge
+        ..reset()
+        ..start();
+    }
+    _syncPairingPresence();
+  }
 
   /// The sending flow, once there is a verified peer and a node to send from.
   ///
@@ -197,6 +253,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     _tasks.attach(node.database);
     _settings.attach(AppSettingsRepository(node.database));
     _radar.attach(PeerRepository(node.database));
+    _syncPairingPresence();
+    _pairingPresenceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _syncPairingPresence();
+      if (++_presenceTicks % 10 == 0) unawaited(_probePairedPeer());
+    });
     final MdnsDiscoveryGateway? discovery = session.discovery;
     if (discovery != null) {
       _radarDiscovery = discovery.events.listen(_radar.handleMdns);
@@ -210,6 +271,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     _disposing = true;
+    _pairingPresenceTimer?.cancel();
     _wifiDesired = false;
     _bluetoothDesired = false;
     WidgetsBinding.instance.removeObserver(this);
@@ -360,12 +422,24 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   /// not exist, and `PeerSession` is what guarantees it does not. Which of them a screen uses is the
   /// user's choice - the same connection serves sending and receiving, which is why they are made
   /// together rather than on the way into a screen.
-  Future<bool> connect(PairingPayload payload) async {
+  Future<bool> connect(PairingPayload payload, {String? displayName}) async {
     final PeerSession? peer = widget.peer;
     if (peer == null) {
       return false;
     }
-    final bool connected = await peer.connect(payload);
+    _outgoingRecent = false;
+    final bool connected = await peer.connect(
+      payload,
+      displayLabel: _settings.settings.deviceName,
+    );
+    _outgoingRecent = connected;
+    if (connected) {
+      _outgoingAge
+        ..reset()
+        ..start();
+    }
+    _outgoingName = displayName;
+    _syncPairingPresence();
     final NearSendNode? node = widget.session?.node;
     if (!connected || node == null) {
       return false;
@@ -575,6 +649,22 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               deviceName: _settings.settings.deviceName,
               connectionLabel: _connectionLabel,
               connectionTone: _connectionTone,
+              onSend: () => Navigator.of(context).pushNamed(
+                _flow != null && widget.peer?.isConnected == true
+                    ? NearSendApp.sendRoute
+                    : NearSendApp.connectRoute,
+                arguments: 'send',
+              ),
+              onReceive: () => Navigator.of(context).pushNamed(
+                _receiving != null ||
+                        (_incoming != null &&
+                            _radar.pairedDevices.any(
+                              (device) => device.isReady,
+                            ))
+                    ? NearSendApp.receiveRoute
+                    : NearSendApp.connectRoute,
+                arguments: 'receive',
+              ),
               onContinueTask: () =>
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
               onWifiReadyChanged: _requestWifiReady,
@@ -582,6 +672,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               onRadarDevicePressed: (RadarDevice device) =>
                   Navigator.of(context)
                       .pushNamed(NearSendApp.connectRoute, arguments: device),
+            ),
+            '/local-qr': (_) => LocalDeviceQrPage(
+              session: widget.session,
+              radar: _radar,
+              deviceName: _settings.settings.deviceName,
             ),
             NearSendApp.aboutRoute: (_) => const AboutPage(),
             NearSendApp.tasksRoute: (_) => TaskOverviewPage(controller: _tasks),
@@ -618,6 +713,8 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   .arguments;
               final bool receiving =
                   routeArgument == NearSendApp.receiveArgument;
+              final bool pairingOnly =
+                  routeArgument == 'pair' || routeArgument is RadarDevice;
               final RadarDevice? selectedDevice = routeArgument is RadarDevice
                   ? routeArgument
                   : null;
@@ -639,7 +736,12 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                         ? session!.failureReason
                         : null,
                     connection: attempt,
-                    onConnect: widget.peer == null ? null : connect,
+                    onConnect: widget.peer == null
+                        ? null
+                        : (payload) => connect(
+                            payload,
+                            displayName: selectedDevice?.name,
+                          ),
                     onConnectBootstrap: widget.peer == null
                         ? null
                         : connectBootstrap,
@@ -651,12 +753,16 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                         ? MethodChannelQrImageGateway()
                         : null,
                     permissionGateway: widget.permissionGateway,
-                    onContinue: _continueTarget(receiving) == null
+                    onContinue: pairingOnly && attempt.isConnected
+                        ? () => Navigator.of(context).pop()
+                        : _continueTarget(receiving) == null
                         ? null
                         : () =>
                               Navigator.of(context)
                                   .pushNamed(_continueTarget(receiving)!),
-                    continueLabel: receiving
+                    continueLabel: pairingOnly
+                        ? '返回首页'
+                        : receiving
                         ? ConnectionPage.continueLabelReceive
                         : ConnectionPage.continueLabelSend,
                     localDeviceName: _settings.settings.deviceName,

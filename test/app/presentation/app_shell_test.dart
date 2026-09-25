@@ -17,6 +17,23 @@ void main() {
     ),
   );
 
+  testWidgets('mobile navigation moves send and receive into transfer tab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(shell());
+    expect(find.text('发送文件'), findsNothing);
+    final nav = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect(nav.destinations, hasLength(5));
+    await tester.tap(find.text('传输'));
+    await tester.pumpAndSettle();
+    expect(find.text('发送文件'), findsOneWidget);
+    expect(find.text('接收文件'), findsOneWidget);
+    await tester.tap(find.text('首页'));
+    await tester.pumpAndSettle();
+    expect(find.text('已配对设备'), findsOneWidget);
+    expect(find.text('发送文件'), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('desktop shell uses the full navigation rail above 900px', (
     tester,
   ) async {
@@ -28,7 +45,7 @@ void main() {
       find.byType(NavigationRail),
     );
     expect(rail.extended, isTrue);
-    expect(rail.destinations, hasLength(4));
+    expect(rail.destinations, hasLength(5));
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
   testWidgets('compact desktop shell keeps the 72px icon rail', (tester) async {

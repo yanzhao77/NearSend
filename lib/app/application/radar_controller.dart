@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:nearsend/core/security/known_peer_authentication.dart';
+import 'package:nearsend/core/security/pairing_service.dart';
 import 'package:nearsend/core/storage/peer_repository.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
 import 'package:nearsend/platform/mdns_discovery_gateway.dart';
@@ -43,6 +44,40 @@ class RadarController extends ChangeNotifier {
   final Map<String, VerifiedPeerSession> _verified =
       <String, VerifiedPeerSession>{};
   PeerRepository? _peers;
+  List<RadarDevice> _qrDevices = const [];
+
+  /// QR sessions are display-only and never create a persistent trust record.
+  void syncQrSessions(
+    List<PairedClientPresence> incoming, {
+    RadarDevice? outgoing,
+  }) {
+    final next = <RadarDevice>[
+      for (final client in incoming)
+        RadarDevice(
+          id: 'qr-in:${client.sessionId}',
+          name: client.label.isEmpty ? '扫码连接设备' : client.label,
+          detail: '二维码配对 · 本次会话',
+          isKnown: true,
+          isReady: client.isRecent,
+          isRevoked: false,
+          discoveryMethod: '二维码配对',
+        ),
+      ?outgoing,
+    ];
+    if (next.length == _qrDevices.length &&
+        List.generate(
+          next.length,
+          (i) =>
+              next[i].id == _qrDevices[i].id &&
+              next[i].name == _qrDevices[i].name &&
+              next[i].isReady == _qrDevices[i].isReady,
+        ).every((same) => same)) {
+      return;
+    }
+    _qrDevices = next;
+    notifyListeners();
+  }
+
   RadarReadinessPhase _wifiPhase = RadarReadinessPhase.off;
   RadarReadinessPhase _bluetoothPhase = RadarReadinessPhase.off;
   String? _wifiFailureReason;
@@ -194,7 +229,7 @@ class RadarController extends ChangeNotifier {
 
   List<RadarDevice> get pairedDevices {
     final int now = _clock();
-    final List<RadarDevice> out = <RadarDevice>[];
+    final List<RadarDevice> out = <RadarDevice>[..._qrDevices];
     for (final PeerRecord peer in _peers?.history() ?? const <PeerRecord>[]) {
       final VerifiedPeerSession? verified = _verified[peer.peerId];
       out.add(

@@ -113,6 +113,22 @@ class PairingService implements ControlAuthenticator {
   /// The number of live sessions, for tests and diagnostics. Never the tokens.
   int get liveSessionCount => _sessionsByDigest.length;
 
+  /// Presentation only: a client label is not a persistent device identity.
+  /// Readiness requires recent authenticated traffic and an unexpired token.
+  List<PairedClientPresence> get pairedClients {
+    final int now = _clock();
+    return List<PairedClientPresence>.unmodifiable([
+      for (final session in _sessionsByDigest.values)
+        PairedClientPresence(
+          sessionId: session.sessionId,
+          label: session.clientLabel,
+          isRecent:
+              session.expiresAtMillis > now &&
+              now - session.lastSeenMillis < 30000,
+        ),
+    ]);
+  }
+
   /// Whether [source] has exhausted its pairing failure allowance.
   bool isRateLimited(String source) => _issuer.isRateLimited(source);
 
@@ -218,6 +234,8 @@ class PairingService implements ControlAuthenticator {
     _sessionsByDigest[digest] = _PairedSession(
       sessionId: request.sessionId,
       tokenDigest: digest,
+      clientLabel: request.clientLabel,
+      lastSeenMillis: _clock(),
       expiresAtMillis: _clock() + _sessionTtlMillis,
     );
     _digestBySession[request.sessionId] = digest;
@@ -262,6 +280,7 @@ class PairingService implements ControlAuthenticator {
     // The peer id is the session, not a device fingerprint. §3 makes the client label
     // display-only and the peer identity is established separately (T04-01's peer
     // repository), so claiming a device identity here would be inventing one.
+    session.lastSeenMillis = _clock();
     return SessionGrant(peerId: session.sessionId);
   }
 
@@ -271,13 +290,29 @@ class PairingService implements ControlAuthenticator {
 }
 
 final class _PairedSession {
-  const _PairedSession({
+  _PairedSession({
     required this.sessionId,
     required this.tokenDigest,
+    required this.clientLabel,
+    required this.lastSeenMillis,
     required this.expiresAtMillis,
   });
 
   final String sessionId;
   final String tokenDigest;
+  final String clientLabel;
+  int lastSeenMillis;
   final int expiresAtMillis;
+}
+
+/// Safe UI projection: deliberately carries no credentials or trust grants.
+class PairedClientPresence {
+  const PairedClientPresence({
+    required this.sessionId,
+    required this.label,
+    required this.isRecent,
+  });
+  final String sessionId;
+  final String label;
+  final bool isRecent;
 }

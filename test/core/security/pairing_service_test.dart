@@ -53,6 +53,33 @@ void main() {
   String sessionTokenFrom(_PairResult result) =>
       PairResponse.parse(result.body).sessionAccessToken;
 
+  test('presence follows accepted pairing and authenticated activity only', () {
+    final payload = service.openSession();
+    expect(service.pairedClients, isEmpty);
+    pairIt(requestFor(payload, token: encodeBase64UrlNoPadding(_bytes(0x22))));
+    expect(service.pairedClients, isEmpty);
+    final token = sessionTokenFrom(pairIt(requestFor(payload)));
+    expect(service.pairedClients.single.label, 'test client');
+    expect(service.pairedClients.single.isRecent, isTrue);
+    now = 30000;
+    expect(service.pairedClients.single.isRecent, isFalse);
+    expect(service.authenticate(token: 'wrong', nowMillis: now), isNull);
+    expect(service.pairedClients.single.isRecent, isFalse);
+    expect(service.authenticate(token: token, nowMillis: now), isNotNull);
+    expect(service.pairedClients.single.isRecent, isTrue);
+    now = ProtocolLimits.sessionAccessTokenTtlSeconds * 1000;
+    expect(service.pairedClients.single.isRecent, isFalse);
+  });
+
+  test('another QR preserves active connections and same-session reissue revokes presence', () {
+    final payload = service.openSession();
+    pairIt(requestFor(payload));
+    service.openSession();
+    expect(service.pairedClients.single.isRecent, isTrue);
+    service.openSession(sessionId: payload.sessionId);
+    expect(service.pairedClients, isEmpty);
+  });
+
   group('opening a session', () {
     test('the QR payload names this server and survives its own parser', () {
       final PairingPayload payload = service.openSession();

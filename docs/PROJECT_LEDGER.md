@@ -2,6 +2,12 @@
 
 更新日期：2026-09-24。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果与 T12 UI 合并状态。后续以本文件最新Git版本为准，不用聊天记录代替状态。
 
+## 本次分支增量（2026-09-24）：设备首页 / 传输导航
+
+状态：已实现；[PR #71](https://github.com/yanzhao77/NearSend/pull/71) 的四项 CI 已通过，目标平台扫码与断网重连仍待验收。合并与发布状态以 PR 和 Release 页面为准。基于 `75b4d80`，新增传输导航，将发送/接收移入；首页本机二维码、已配对设备与真实连接呼吸灯；Wi-Fi/蓝牙发现保持独立。扫码历史仅为本次会话，不声称已建立长期设备身份或跨重启免扫码。
+
+验证、配对状态边界及人工复核项见[本次证据](testing/evidence/2026-09-24/device-home-transfer/summary.md)。本地 Flutter 因工具访问云实例元数据被自动审批拦截；格式和 Python 检查通过。PR [CI run 36008522130](https://github.com/yanzhao77/NearSend/actions/runs/36008522130) 的仓库检查、格式/分析/测试、Windows 与 Android 构建均通过。
+
 ## 一句话现状
 
 **S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.3`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
