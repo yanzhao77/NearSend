@@ -45,8 +45,8 @@ void main() {
       MaterialApp(home: HomePage(onScanPairing: () => scanned = true)),
     );
 
-    expect(find.text('扫描对方二维码'), findsOneWidget);
-    await tester.tap(find.text('扫描对方二维码'));
+    expect(find.text('扫一扫连接设备'), findsOneWidget);
+    await tester.tap(find.text('扫一扫连接设备'));
     expect(scanned, isTrue);
   });
 

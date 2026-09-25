@@ -88,8 +88,8 @@ class HomePage extends StatelessWidget {
                 if (onScanPairing != null)
                   OutlinedButton.icon(
                     onPressed: onScanPairing,
-                    icon: const Icon(Icons.qr_code_scanner),
-                    label: const Text('扫描对方二维码'),
+                    icon: const Icon(Icons.center_focus_weak),
+                    label: const Text('扫一扫连接设备'),
                   ),
                 const SizedBox(height: NearSendSpacing.md),
                 const NsInfoBanner(
