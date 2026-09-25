@@ -7,6 +7,13 @@ import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
 import 'package:nearsend/platform/platform_permission_gateway.dart';
 import 'package:nearsend/platform/qr_image_gateway.dart';
 
+/// A scanner failure that should be returned to the screen that launched it.
+class PairingScanFailure {
+  const PairingScanFailure(this.message);
+
+  final String message;
+}
+
 class PairingQrView extends StatelessWidget {
   const PairingQrView({super.key, required this.payload, this.size = 240});
 
@@ -46,7 +53,6 @@ class MobilePairingScannerPage extends StatefulWidget {
 class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
   late final MobileScannerController _controller;
   bool _handled = false;
-  bool _retryingCamera = false;
 
   @override
   void initState() {
@@ -71,28 +77,43 @@ class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
         .where((String value) => value.isNotEmpty)
         .toSet()
         .toList(growable: false);
-    if (values.length != 1) return;
+    if (values.isEmpty) return;
+    if (values.length != 1) {
+      _returnFailure('画面中检测到多个二维码，请只对准对方设备的 NearSend 连接二维码。');
+      return;
+    }
     try {
       ScannedPairingPayload.parse(values.single);
+    } on FormatException catch (error) {
+      _returnFailure('扫描到的二维码不是有效的 NearSend 连接码：${error.message}');
+      return;
     } on Object {
+      _returnFailure('扫描到的二维码不是有效的 NearSend 连接码，请确认对方展示的是连接二维码。');
       return;
     }
     _handled = true;
-    Navigator.of(context).pop<String>(values.single);
+    Navigator.of(context).pop<Object?>(values.single);
   }
 
-  Future<void> _retryCamera() async {
-    if (_retryingCamera) return;
-    setState(() => _retryingCamera = true);
-    try {
-      // MobileScannerController.start rechecks native camera authorization and
-      // requests it when missing.
-      await _controller.start();
-    } on Object {
-      // The controller exposes the failure to MobileScanner's errorBuilder.
-    } finally {
-      if (mounted) setState(() => _retryingCamera = false);
-    }
+  void _returnFailure(String message) {
+    if (_handled) return;
+    _handled = true;
+    Navigator.of(context).pop<Object?>(PairingScanFailure(message));
+  }
+
+  void _scannerFailed(MobileScannerException error) {
+    if (_handled) return;
+    final String message = switch (error.errorCode) {
+      MobileScannerErrorCode.permissionDenied =>
+        '相机权限被拒绝，请在系统设置中允许 NearSend 使用相机后重试。',
+      MobileScannerErrorCode.unsupported => '当前设备不支持相机扫码，请改用连接信息导入。',
+      _ =>
+        '相机启动失败（${error.errorCode.name}）：'
+            '${error.errorDetails?.message ?? error.errorCode.message}',
+    };
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _returnFailure(message);
+    });
   }
 
   @override
@@ -102,32 +123,25 @@ class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
       child: MobileScanner(
         onDetect: _detected,
         controller: _controller,
-        errorBuilder: (BuildContext context, MobileScannerException _) =>
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(NearSendSpacing.lg),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Text(
-                      '需要相机权限才能扫码。请在系统弹窗中批准；如果系统不再弹出，请到系统设置中开启权限。',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: NearSendSpacing.md),
-                    FilledButton.icon(
-                      onPressed: _retryingCamera ? null : _retryCamera,
-                      icon: _retryingCamera
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.camera_alt_outlined),
-                      label: Text(_retryingCamera ? '正在申请相机权限' : '重新申请相机权限'),
-                    ),
-                  ],
-                ),
+        errorBuilder: (BuildContext context, MobileScannerException error) {
+          _scannerFailed(error);
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(NearSendSpacing.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: NearSendSpacing.md),
+                  Text(
+                    '相机扫码失败：${error.errorCode.message}，正在返回…',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             ),
+          );
+        },
       ),
     ),
   );

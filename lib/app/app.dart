@@ -11,6 +11,7 @@ import 'package:nearsend/app/application/task_catalog_controller.dart';
 import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/features/pairing/presentation/local_device_qr_page.dart';
+import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
 import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
@@ -159,6 +160,27 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   final Stopwatch _outgoingAge = Stopwatch();
   String? _outgoingName;
   int _presenceTicks = 0;
+
+  Future<void> _scanFromHome(BuildContext context) async {
+    final Object? result = await Navigator.of(context).pushNamed<Object?>(
+      NearSendApp.connectRoute,
+      arguments: NearSendApp.scanArgument,
+    );
+    if (!context.mounted || result is! PairingScanFailure) return;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('扫一扫失败'),
+        content: Text(result.message),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _syncPairingPresence() {
     if (_disposing) return;
@@ -674,10 +696,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               onScanPairing:
                   defaultTargetPlatform == TargetPlatform.android ||
                       defaultTargetPlatform == TargetPlatform.iOS
-                  ? () => Navigator.of(context).pushNamed(
-                      NearSendApp.connectRoute,
-                      arguments: NearSendApp.scanArgument,
-                    )
+                  ? () => unawaited(_scanFromHome(context))
                   : null,
             ),
             '/local-qr': (_) => LocalDeviceQrPage(
