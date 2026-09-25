@@ -264,15 +264,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
       _cameraPermissionError = null;
     });
     try {
-      final PlatformPermissionState permission = await ensurePlatformPermission(
-        widget.permissionGateway,
-        PlatformPermissionKind.camera,
-      );
+      final PlatformPermissionState permission =
+          await _checkAndRequestCameraPermission();
       if (!mounted) return;
       if (permission != PlatformPermissionState.granted) {
         setState(() {
           _cameraPermissionError = permission == PlatformPermissionState.denied
-              ? '摄像头权限未授予。请授权后再次点击扫描，或改用图片导入。'
+              ? '请在系统弹窗中允许相机权限后重试；如果系统不再显示弹窗，请到系统设置中开启相机权限。'
               : '当前无法检查或使用摄像头权限，请改用图片导入。';
         });
         return;
@@ -294,6 +292,21 @@ class _ConnectionPageState extends State<ConnectionPage> {
     } finally {
       if (mounted) setState(() => _checkingCameraPermission = false);
     }
+  }
+
+  Future<PlatformPermissionState> _checkAndRequestCameraPermission() async {
+    final PlatformPermissionState current = await widget.permissionGateway
+        .check(PlatformPermissionKind.camera);
+    if (current == PlatformPermissionState.granted) return current;
+
+    final PlatformPermissionState requested = await widget.permissionGateway
+        .request(PlatformPermissionKind.camera);
+    if (requested != PlatformPermissionState.granted) return requested;
+
+    // Re-read the native state after the user responds. A successful request
+    // callback alone is not enough to start the camera if the OS grant changed
+    // while the scanner route was being opened.
+    return widget.permissionGateway.check(PlatformPermissionKind.camera);
   }
 
   void _connectImported() {

@@ -46,6 +46,7 @@ class MobilePairingScannerPage extends StatefulWidget {
 class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
   late final MobileScannerController _controller;
   bool _handled = false;
+  bool _retryingCamera = false;
 
   @override
   void initState() {
@@ -80,6 +81,20 @@ class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
     Navigator.of(context).pop<String>(values.single);
   }
 
+  Future<void> _retryCamera() async {
+    if (_retryingCamera) return;
+    setState(() => _retryingCamera = true);
+    try {
+      // MobileScannerController.start rechecks native camera authorization and
+      // requests it when missing.
+      await _controller.start();
+    } on Object {
+      // The controller exposes the failure to MobileScanner's errorBuilder.
+    } finally {
+      if (mounted) setState(() => _retryingCamera = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('扫描配对码')),
@@ -87,8 +102,32 @@ class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
       child: MobileScanner(
         onDetect: _detected,
         controller: _controller,
-        errorBuilder: (BuildContext context, MobileScannerException error) =>
-            const Center(child: Text('无法使用摄像头，请检查权限或改用图片导入。')),
+        errorBuilder: (BuildContext context, MobileScannerException _) =>
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(NearSendSpacing.lg),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Text(
+                      '需要相机权限才能扫码。请在系统弹窗中批准；如果系统不再弹出，请到系统设置中开启权限。',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: NearSendSpacing.md),
+                    FilledButton.icon(
+                      onPressed: _retryingCamera ? null : _retryCamera,
+                      icon: _retryingCamera
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.camera_alt_outlined),
+                      label: Text(_retryingCamera ? '正在申请相机权限' : '重新申请相机权限'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
       ),
     ),
   );
