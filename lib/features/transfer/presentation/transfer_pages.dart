@@ -206,6 +206,26 @@ class _ConnectionPageState extends State<ConnectionPage> {
   bool _autoConnectScheduled = false;
 
   @override
+  void didUpdateWidget(covariant ConnectionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.startWithCamera ||
+        oldWidget.connection.phase != ConnectionAttemptPhase.connecting ||
+        !widget.connection.hasFailed) {
+      return;
+    }
+    final String reason = widget.connection.reason ?? '连接对方设备失败，请检查对方状态后重试。';
+    final String? fingerprint = widget.connection.pinMismatched
+        ? widget.connection.peerFingerprint
+        : null;
+    final String message = fingerprint == null
+        ? reason
+        : '$reason\n检测到的证书指纹：$fingerprint';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reportScanFailure(message);
+    });
+  }
+
+  @override
   void initState() {
     super.initState();
     if (widget.startWithCamera) {
@@ -264,36 +284,64 @@ class _ConnectionPageState extends State<ConnectionPage> {
       _cameraPermissionError = null;
     });
     try {
-      final PlatformPermissionState permission = await ensurePlatformPermission(
-        widget.permissionGateway,
-        PlatformPermissionKind.camera,
-      );
+      final PlatformPermissionState permission =
+          await _checkAndRequestCameraPermission();
       if (!mounted) return;
       if (permission != PlatformPermissionState.granted) {
-        setState(() {
-          _cameraPermissionError = permission == PlatformPermissionState.denied
-              ? '摄像头权限未授予。请授权后再次点击扫描，或改用图片导入。'
-              : '当前无法检查或使用摄像头权限，请改用图片导入。';
-        });
+        final String message = permission == PlatformPermissionState.denied
+            ? '摄像头权限未授予，请在系统设置中允许 NearSend 使用相机后重试。'
+            : '系统未能确认相机权限状态，请检查系统相机权限设置后重试。';
+        _reportScanFailure(message);
         return;
       }
-      final String? value = await Navigator.of(context).push<String>(
-        MaterialPageRoute<String>(
+      final Object? result = await Navigator.of(context).push<Object?>(
+        MaterialPageRoute<Object?>(
           builder:
               widget.cameraScannerPageBuilder ??
               (_) => const MobilePairingScannerPage(),
         ),
       );
-      if (value != null && mounted) _acceptImportedText(value);
-    } on Object {
+      if (!mounted) return;
+      if (result is String) {
+        _acceptImportedText(result);
+      } else if (result is PairingScanFailure) {
+        _reportScanFailure(result.message);
+      } else if (widget.startWithCamera) {
+        // A user-cancelled scanner returns quietly to the home page.
+        Navigator.of(context).pop<Object?>();
+      }
+    } on Object catch (error) {
       if (mounted) {
-        setState(() {
-          _cameraPermissionError = '摄像头权限检查失败，请重试或改用图片导入。';
-        });
+        _reportScanFailure('检查或申请相机权限失败：$error');
       }
     } finally {
-      if (mounted) setState(() => _checkingCameraPermission = false);
+      if (mounted && !widget.startWithCamera) {
+        setState(() => _checkingCameraPermission = false);
+      }
     }
+  }
+
+  void _reportScanFailure(String message) {
+    if (widget.startWithCamera) {
+      Navigator.of(context).pop<Object?>(PairingScanFailure(message));
+    } else {
+      setState(() => _cameraPermissionError = message);
+    }
+  }
+
+  Future<PlatformPermissionState> _checkAndRequestCameraPermission() async {
+    final PlatformPermissionState current = await widget.permissionGateway
+        .check(PlatformPermissionKind.camera);
+    if (current == PlatformPermissionState.granted) return current;
+
+    final PlatformPermissionState requested = await widget.permissionGateway
+        .request(PlatformPermissionKind.camera);
+    if (requested != PlatformPermissionState.granted) return requested;
+
+    // Re-read the native state after the user responds. A successful request
+    // callback alone is not enough to start the camera if the OS grant changed
+    // while the scanner route was being opened.
+    return widget.permissionGateway.check(PlatformPermissionKind.camera);
   }
 
   void _connectImported() {
