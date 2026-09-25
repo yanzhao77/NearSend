@@ -55,13 +55,16 @@ python3 tooling/checks/check_secrets.py --verbose
 
 ## `check_ci_workflow.py`
 
-把 `.github/workflows/ci.yml` 自己在注释里声明的不变量变成**可执行的检查**。
+把 `.github/workflows/ci.yml` 与预览发版工作流声明的不变量变成**可执行的检查**。
 注释里的承诺不是保证，因此本脚本强制：
 
 - 每个 `uses:` 都固定到 40 位提交 SHA——标签被移动会静默改变以本仓库权限运行的代码；
 - 不存在 `continue-on-error`——不能失败的闸门不是闸门；
 - `permissions` 保持只读；
 - 工作流的 `FLUTTER_VERSION` 与 `tooling/ci/install_flutter.sh` 中安装的版本一致，两处不得漂移。
+- 预览发布必须带 GitHub prerelease 标志并使用 preview 构建渠道；
+- 手动发布必须指定完整目标提交，并核验该提交位于 `master` 且已有精确匹配的成功 push CI；
+- 顶层权限保持只读，只有 publish job 可获得 `contents: write`。
 
 ```bash
 python3 tooling/checks/check_ci_workflow.py

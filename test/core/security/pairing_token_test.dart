@@ -102,6 +102,40 @@ void main() {
       );
     });
 
+    test('revoking removes only the named outstanding token', () {
+      final IssuedPairingToken first = issuer.issue(
+        sessionId: sessionId,
+        tokenBytes: bytes(1),
+      );
+      final IssuedPairingToken second = issuer.issue(
+        sessionId: otherSession,
+        tokenBytes: bytes(2),
+      );
+
+      expect(issuer.revoke(sessionId), isTrue);
+      expect(issuer.revoke(sessionId), isFalse);
+      expect(
+        issuer
+            .consume(
+              source: source,
+              sessionId: sessionId,
+              pairToken: first.token,
+            )
+            .rejection,
+        PairingRejection.unknownSession,
+      );
+      expect(
+        issuer
+            .consume(
+              source: source,
+              sessionId: otherSession,
+              pairToken: second.token,
+            )
+            .isAccepted,
+        isTrue,
+      );
+    });
+
     test('a session id that is not a canonical UUID is refused', () {
       expect(
         () => issuer.issue(sessionId: 'not-a-uuid', tokenBytes: bytes(1)),

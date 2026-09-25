@@ -29,15 +29,16 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _refresh();
+      if (mounted) unawaited(_refresh());
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
 
-  void _refresh() {
-    widget.session?.refreshPairingCode();
+  Future<void> _refresh() async {
+    await widget.session?.refreshPairingCode();
+    if (!mounted) return;
     _age
       ..reset()
       ..start();
@@ -92,7 +93,7 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
                   const ListTile(
                     leading: Icon(Icons.check_circle_outline),
                     title: Text('设备已连接'),
-                    subtitle: Text('返回首页可查看已配对设备，在“传输”栏发送或接收文件。'),
+                    subtitle: Text('返回首页可查看本次扫码会话，在“传输”栏发送或接收文件。'),
                   )
                 else if (paired)
                   const Text('设备已配对，当前未连接。请检查对方设备和本地网络。')

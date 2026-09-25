@@ -26,6 +26,7 @@ class HomePage extends StatelessWidget {
     this.bluetoothFailureReason,
     this.onBluetoothReadyChanged,
     this.bluetoothDevices = const <RadarDevice>[],
+    this.qrSessionDevices = const <RadarDevice>[],
     this.pairedDevices = const <RadarDevice>[],
     this.onRadarDevicePressed,
   });
@@ -44,6 +45,7 @@ class HomePage extends StatelessWidget {
   final String? bluetoothFailureReason;
   final ValueChanged<bool>? onBluetoothReadyChanged;
   final List<RadarDevice> bluetoothDevices;
+  final List<RadarDevice> qrSessionDevices;
   final List<RadarDevice> pairedDevices;
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
 
@@ -71,7 +73,12 @@ class HomePage extends StatelessWidget {
                   onPressed: () => Navigator.of(context).pushNamed('/local-qr'),
                 ),
                 const SizedBox(height: NearSendSpacing.md),
-                _PairedDevicesSection(
+                _QrSessionSection(
+                  devices: qrSessionDevices,
+                  onDevicePressed: onRadarDevicePressed,
+                ),
+                const SizedBox(height: NearSendSpacing.md),
+                _VerifiedDevicesSection(
                   devices: pairedDevices,
                   onDevicePressed: onRadarDevicePressed,
                 ),
@@ -225,8 +232,8 @@ class _DiscoverySection extends StatelessWidget {
   }
 }
 
-class _PairedDevicesSection extends StatelessWidget {
-  const _PairedDevicesSection({
+class _QrSessionSection extends StatelessWidget {
+  const _QrSessionSection({
     required this.devices,
     required this.onDevicePressed,
   });
@@ -238,12 +245,42 @@ class _PairedDevicesSection extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
-      Text('已配对设备', style: Theme.of(context).textTheme.titleMedium),
+      Text('本次扫码会话', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: NearSendSpacing.xs),
       if (devices.isEmpty)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: NearSendSpacing.md),
-          child: Text('暂无已配对设备，点击本机设备出示二维码，或扫描对方二维码连接。'),
+          child: Text('暂无扫码会话。会话到期后会自动移除，不会作为历史设备保存。'),
+        )
+      else
+        _DeviceList(
+          devices: devices,
+          onDevicePressed: onDevicePressed,
+          paired: true,
+        ),
+    ],
+  );
+}
+
+class _VerifiedDevicesSection extends StatelessWidget {
+  const _VerifiedDevicesSection({
+    required this.devices,
+    required this.onDevicePressed,
+  });
+
+  final List<RadarDevice> devices;
+  final ValueChanged<RadarDevice>? onDevicePressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text('已验证设备历史', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: NearSendSpacing.xs),
+      if (devices.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: NearSendSpacing.md),
+          child: Text('暂无已验证的历史设备。显示名称本身不代表可信身份。'),
         )
       else
         _DeviceList(

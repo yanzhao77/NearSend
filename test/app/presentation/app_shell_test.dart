@@ -30,7 +30,8 @@ void main() {
     expect(find.text('接收文件'), findsOneWidget);
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
-    expect(find.text('已配对设备'), findsOneWidget);
+    expect(find.text('本次扫码会话'), findsOneWidget);
+    expect(find.text('已验证设备历史'), findsOneWidget);
     expect(find.text('发送文件'), findsNothing);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 

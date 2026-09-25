@@ -171,7 +171,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               id: 'qr-out:${payload.serverFingerprint}',
               name: _outgoingName ?? '已扫码设备',
               detail: '二维码配对 · 本次会话',
-              isKnown: true,
+              isKnown: false,
               isReady:
                   peer!.isConnected &&
                   _outgoingRecent &&
@@ -658,9 +658,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               onReceive: () => Navigator.of(context).pushNamed(
                 _receiving != null ||
                         (_incoming != null &&
-                            _radar.pairedDevices.any(
-                              (device) => device.isReady,
-                            ))
+                            _radar.devices.any((device) => device.isReady))
                     ? NearSendApp.receiveRoute
                     : NearSendApp.connectRoute,
                 arguments: 'receive',

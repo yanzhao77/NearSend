@@ -93,6 +93,7 @@ class PairingService implements ControlAuthenticator {
   final MonotonicMillis _clock;
   final int _sessionTtlMillis;
   late final PairingTokenIssuer _issuer;
+  String? _publishedPairingSessionId;
 
   /// Access tokens by digest. The token itself is never a key or a value.
   final Map<String, _PairedSession> _sessionsByDigest =
@@ -111,20 +112,22 @@ class PairingService implements ControlAuthenticator {
   }
 
   /// The number of live sessions, for tests and diagnostics. Never the tokens.
-  int get liveSessionCount => _sessionsByDigest.length;
+  int get liveSessionCount {
+    _dropExpiredSessions(_clock());
+    return _sessionsByDigest.length;
+  }
 
   /// Presentation only: a client label is not a persistent device identity.
   /// Readiness requires recent authenticated traffic and an unexpired token.
   List<PairedClientPresence> get pairedClients {
     final int now = _clock();
+    _dropExpiredSessions(now);
     return List<PairedClientPresence>.unmodifiable([
       for (final session in _sessionsByDigest.values)
         PairedClientPresence(
           sessionId: session.sessionId,
           label: session.clientLabel,
-          isRecent:
-              session.expiresAtMillis > now &&
-              now - session.lastSeenMillis < 30000,
+          isRecent: now - session.lastSeenMillis < 30000,
         ),
     ]);
   }
@@ -144,6 +147,8 @@ class PairingService implements ControlAuthenticator {
   /// token no longer authenticates, so counting it as a live client would produce exactly the wait
   /// this getter exists to avoid.
   bool hasPairedClient(String sessionId) {
+    final int now = _clock();
+    _dropExpiredSessions(now);
     final String? digest = _digestBySession[sessionId];
     if (digest == null) {
       return false;
@@ -152,7 +157,7 @@ class PairingService implements ControlAuthenticator {
     if (session == null || session.sessionId != sessionId) {
       return false;
     }
-    return session.expiresAtMillis > _clock();
+    return session.expiresAtMillis > now;
   }
 
   /// Re-points the candidates at the port the socket actually bound.
@@ -171,6 +176,9 @@ class PairingService implements ControlAuthenticator {
   /// Any session already existing for [sessionId] loses its access token: §3 says a lost
   /// pairing response means "重新生成 QR", and a screenshot of the previous code must not
   /// remain a working credential once a new one exists.
+  ///
+  /// Opening a different session also revokes the previously published QR's unconsumed pairing
+  /// token. It does not revoke an access token already exchanged from that QR.
   PairingPayload openSession({String? sessionId}) {
     final String id = sessionId ?? randomUuidV4();
     final List<int> tokenBytes = generatePairingTokenBytes();
@@ -178,6 +186,14 @@ class PairingService implements ControlAuthenticator {
       sessionId: id,
       tokenBytes: tokenBytes,
     );
+
+    // A service publishes one current QR. Issue first so an entropy/validation failure leaves the
+    // previous visible code valid, then revoke only the old code's unconsumed one-time token.
+    final String? previousPublished = _publishedPairingSessionId;
+    if (previousPublished != null && previousPublished != id) {
+      _issuer.revoke(previousPublished);
+    }
+    _publishedPairingSessionId = id;
 
     // §3: a new QR replaces the old one, so the previous access token for this session stops
     // working. Leaving it live would make a screenshot of the earlier code a credential.
@@ -194,6 +210,9 @@ class PairingService implements ControlAuthenticator {
       expiresInSeconds: ProtocolLimits.pairTokenTtlSeconds,
     );
   }
+
+  /// Replaces an unconsumed QR while preserving sessions that already paired successfully.
+  PairingPayload refreshSession() => openSession();
 
   /// Serves `POST /v1/pair`.
   ///
@@ -273,20 +292,33 @@ class PairingService implements ControlAuthenticator {
     if (session == null) {
       return null;
     }
-    if (_clock() >= session.expiresAtMillis) {
-      _sessionsByDigest.remove(digest);
+    final int now = _clock();
+    if (now >= session.expiresAtMillis) {
+      _dropExpiredSessions(now);
       return null;
     }
     // The peer id is the session, not a device fingerprint. §3 makes the client label
     // display-only and the peer identity is established separately (T04-01's peer
     // repository), so claiming a device identity here would be inventing one.
-    session.lastSeenMillis = _clock();
+    session.lastSeenMillis = now;
     return SessionGrant(peerId: session.sessionId);
   }
 
   @override
-  String toString() =>
-      'PairingService(${_sessionsByDigest.length} live sessions)';
+  String toString() => 'PairingService($liveSessionCount live sessions)';
+
+  void _dropExpiredSessions(int now) {
+    final List<MapEntry<String, _PairedSession>> expired = _sessionsByDigest
+        .entries
+        .where((entry) => now >= entry.value.expiresAtMillis)
+        .toList(growable: false);
+    for (final MapEntry<String, _PairedSession> entry in expired) {
+      _sessionsByDigest.remove(entry.key);
+      if (_digestBySession[entry.value.sessionId] == entry.key) {
+        _digestBySession.remove(entry.value.sessionId);
+      }
+    }
+  }
 }
 
 final class _PairedSession {

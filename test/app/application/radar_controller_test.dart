@@ -20,16 +20,18 @@ void main() {
       radar.syncQrSessions(const [
         PairedClientPresence(sessionId: 'qr', label: 'Phone', isRecent: true),
       ]);
-      expect(radar.pairedDevices.single.name, 'Phone');
-      expect(radar.pairedDevices.single.isReady, isTrue);
+      expect(radar.qrSessionDevices.single.name, 'Phone');
+      expect(radar.qrSessionDevices.single.isReady, isTrue);
+      expect(radar.qrSessionDevices.single.isKnown, isFalse);
+      expect(radar.pairedDevices, isEmpty);
       expect(radar.wifiDevices, isEmpty);
       expect(radar.bluetoothDevices, isEmpty);
       radar.syncQrSessions(const [
         PairedClientPresence(sessionId: 'qr', label: 'Phone', isRecent: false),
       ]);
-      expect(radar.pairedDevices.single.isReady, isFalse);
+      expect(radar.qrSessionDevices.single.isReady, isFalse);
       radar.syncQrSessions(const []);
-      expect(radar.pairedDevices, isEmpty);
+      expect(radar.qrSessionDevices, isEmpty);
     },
   );
 

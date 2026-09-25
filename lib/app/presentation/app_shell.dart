@@ -158,6 +158,7 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
       bluetoothFailureReason: widget.radar?.bluetoothFailureReason,
       onBluetoothReadyChanged: widget.onBluetoothReadyChanged,
       bluetoothDevices: widget.radar?.bluetoothDevices ?? const <RadarDevice>[],
+      qrSessionDevices: widget.radar?.qrSessionDevices ?? const <RadarDevice>[],
       pairedDevices: widget.radar?.pairedDevices ?? const <RadarDevice>[],
       onRadarDevicePressed: widget.onRadarDevicePressed,
     ),

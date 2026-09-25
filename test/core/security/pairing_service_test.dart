@@ -68,7 +68,8 @@ void main() {
     expect(service.authenticate(token: token, nowMillis: now), isNotNull);
     expect(service.pairedClients.single.isRecent, isTrue);
     now = ProtocolLimits.sessionAccessTokenTtlSeconds * 1000;
-    expect(service.pairedClients.single.isRecent, isFalse);
+    expect(service.pairedClients, isEmpty);
+    expect(service.liveSessionCount, 0);
   });
 
   test('another QR preserves active connections and same-session reissue revokes presence', () {
@@ -78,6 +79,25 @@ void main() {
     expect(service.pairedClients.single.isRecent, isTrue);
     service.openSession(sessionId: payload.sessionId);
     expect(service.pairedClients, isEmpty);
+  });
+
+  test('refresh revokes the old QR but preserves an established session', () {
+    final PairingPayload established = service.openSession();
+    final String accessToken = sessionTokenFrom(
+      pairIt(requestFor(established)),
+    );
+    final PairingPayload pending = service.openSession();
+
+    final PairingPayload refreshed = service.refreshSession();
+
+    expect(refreshed.sessionId, isNot(pending.sessionId));
+    expect(pairIt(requestFor(pending)).status, 401);
+    expect(pairIt(requestFor(refreshed)).status, 200);
+    expect(
+      service.authenticate(token: accessToken, nowMillis: now),
+      isA<SessionGrant>(),
+      reason: 'refreshing a visible QR must not disconnect an established transfer session',
+    );
   });
 
   group('opening a session', () {

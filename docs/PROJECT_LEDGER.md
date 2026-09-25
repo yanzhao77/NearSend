@@ -10,7 +10,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 已成功发布预览版 `v0.1.3`；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和 Flutter SDK 复测仍是明确限制。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`，共享主题、组件、响应式应用壳、真实任务/空间/设置读模型和主要传输页面已进入主干。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。GitHub Actions 最新预览基线为 `v0.1.7`（`684166a`）；Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
 
 ## 1. 状态口径
 
@@ -44,7 +44,7 @@
 | D11 | 质量与验收策略 | 已完成：设计 | [质量策略](testing/QUALITY_AND_ACCEPTANCE.md) | 设备阈值待目标端基线形成后冻结 |
 | D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡统一放在 [docs/tasks/](tasks/README.md)，见 ADR-0001 |
 | R01 | Flutter客户端与原生适配 | 部分完成：工程、核心层、UI 基线与代码级业务链路 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md)、[T12-10](tasks/T12-10.md) | T12 UI 基线已由 PR #61 合并；真实设备文件端口、恢复编排、Windows 取件器、Flutter SDK 复测和完整 UI 平台验收仍未完成 |
-| R02 | 安装包、签名构建及发布CI | 部分完成：自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.3 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.3) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
+| R02 | 安装包、签名构建及发布CI | 部分完成：预览版自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.7 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.7) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；后续工作流将 Release 标记为 prerelease，并核验手动发布目标的 master CI；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | CI 门禁和发布流水线均已在 GitHub Actions 验证；发布签名与正式分发仍属 T10 |
 | R04 | 接收方持久化层 | 部分完成：schema v9 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md)、[1.2 状态](releases/1.2/STATUS.md) | schema v1→v9、块权威、租约、幂等、manifest staging、任务凭证、来源引用、非机密设置（v7）、接收输出计划（v8）及公开身份元数据/peer 历史（v9）均已实现并测试；真实 OS `ENOSPC`、真机 `syncData`、平台权限撤销与断电耐久性仍未验证 |
 
@@ -83,7 +83,7 @@
 | T07 Android热点集成 | 阻塞于B01/B02 | 无互联网、无路由器端到端完成 |
 | T08 反向/多文件 | 待开始 | 角色矩阵、部分失败、小文件队列通过 |
 | T09 iOS集成 | 待开始，早期探针阻塞 | 六方向与iOS生命周期通过 |
-| T10 安装升级与发布 | **进行中**：GitHub Actions 自动发版和 `v0.1.3` 已完成；签名、升级、迁移兼容和用户独立试用待完成 | 迁移、兼容、签名与用户独立试用通过 |
+| T10 安装升级与发布 | **进行中**：GitHub Actions 预览发版和 `v0.1.7` 已完成；正式签名、升级、迁移兼容和用户独立试用待完成 | 迁移、兼容、签名与用户独立试用通过 |
 
 ### 4.1 首批可领取任务
 

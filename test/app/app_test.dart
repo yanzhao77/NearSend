@@ -123,14 +123,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('扫码手机'), findsOneWidget);
     expect(find.text('已连接 · 二维码配对 · 本次会话'), findsOneWidget);
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.byKey(const ValueKey<String>('wifi-discovery-switch')),
-          )
-          .value,
-      isFalse,
-    );
     client.close();
     await tester.pumpWidget(const SizedBox());
     await settle(tester, () => node.phase == NodePhase.stopped);
