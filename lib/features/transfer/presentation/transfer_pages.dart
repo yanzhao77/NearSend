@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/theme/design_tokens.dart';
@@ -94,6 +96,7 @@ class ConnectionPage extends StatefulWidget {
     this.qrImageGateway,
     this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
     this.cameraScannerPageBuilder,
+    this.startWithCamera = false,
     this.starting = false,
     this.unavailableReason,
     this.connection = const ConnectionAttempt(),
@@ -126,6 +129,7 @@ class ConnectionPage extends StatefulWidget {
   final QrImageGateway? qrImageGateway;
   final PlatformPermissionGateway permissionGateway;
   final WidgetBuilder? cameraScannerPageBuilder;
+  final bool startWithCamera;
 
   /// Whether this device's own node is still starting.
   final bool starting;
@@ -192,6 +196,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
   PairingImportState _import = const PairingImportState();
   bool _checkingCameraPermission = false;
   String? _cameraPermissionError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startWithCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_scan());
+      });
+    }
+  }
 
   @override
   void dispose() {

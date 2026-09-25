@@ -256,6 +256,33 @@ void main() {
       expect(find.textContaining('摄像头权限未授予'), findsOneWidget);
     });
 
+    testWidgets(
+      'starts the camera flow when opened from the home scan action',
+      (tester) async {
+        final _PermissionGateway permissions = _PermissionGateway(
+          checked: PlatformPermissionState.granted,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildNearSendTheme(Brightness.light),
+            home: ConnectionPage(
+              payload: null,
+              enableCameraScanner: true,
+              startWithCamera: true,
+              permissionGateway: permissions,
+              cameraScannerPageBuilder: (_) =>
+                  const Scaffold(body: Text('scanner opened')),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        expect(permissions.checks, 1);
+        expect(find.text('scanner opened'), findsOneWidget);
+      },
+    );
+
     testWidgets('camera permission is rechecked for every scanner use', (
       tester,
     ) async {

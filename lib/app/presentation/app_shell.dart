@@ -28,6 +28,7 @@ class NearSendAppShell extends StatefulWidget {
     this.onWifiReadyChanged,
     this.onBluetoothReadyChanged,
     this.onRadarDevicePressed,
+    this.onScanPairing,
   });
 
   final TaskCatalogController tasks;
@@ -43,6 +44,7 @@ class NearSendAppShell extends StatefulWidget {
   final ValueChanged<bool>? onWifiReadyChanged;
   final ValueChanged<bool>? onBluetoothReadyChanged;
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
+  final VoidCallback? onScanPairing;
 
   @override
   State<NearSendAppShell> createState() => _NearSendAppShellState();
@@ -161,6 +163,7 @@ class _NearSendAppShellState extends State<NearSendAppShell> {
       qrSessionDevices: widget.radar?.qrSessionDevices ?? const <RadarDevice>[],
       pairedDevices: widget.radar?.pairedDevices ?? const <RadarDevice>[],
       onRadarDevicePressed: widget.onRadarDevicePressed,
+      onScanPairing: widget.onScanPairing,
     ),
     1 => TransferOverviewPage(
       onSend: widget.onSend,

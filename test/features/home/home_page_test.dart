@@ -39,6 +39,17 @@ void main() {
     expect(find.text(HomePage.emptyStateExplanation), findsOneWidget);
   });
 
+  testWidgets('home scan action is wired to the camera flow', (tester) async {
+    bool scanned = false;
+    await tester.pumpWidget(
+      MaterialApp(home: HomePage(onScanPairing: () => scanned = true)),
+    );
+
+    expect(find.text('扫描对方二维码'), findsOneWidget);
+    await tester.tap(find.text('扫描对方二维码'));
+    expect(scanned, isTrue);
+  });
+
   testWidgets(
     'does not render a continue-task action while none is recoverable',
     (tester) async {
