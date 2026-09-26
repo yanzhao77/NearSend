@@ -18,15 +18,15 @@
 
 ## 现在就下载
 
-截至 2026-09-25，最新 GitHub Release 基线是 **[v0.1.7](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.7)**，对应提交 `684166a`，仅适合内部预览和验证。后续预览版会明确标记为 GitHub prerelease；自动发布只接受 `master` 成功 CI 的精确提交，手动发布也必须指定并核验目标提交。
+截至 2026-09-26，最新 GitHub 预览版是 **[v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)**，对应 `master` 合并提交 `e1cfb30`，仅适合内部预览和验证。自动发布只接受 `master` 成功 CI 的精确提交；手动发布也必须指定并核验目标提交。
 
 | 平台 | 安装包 | 说明 |
 | --- | --- | --- |
-| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.7/NearSend-0.1.7-android.apk) | 当前使用 debug signing，仅供内部测试；不能作为正式升级链 |
-| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.7/NearSend-0.1.7-windows-x64.zip) | 解压后运行桌面程序 |
-| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.7/NearSend-0.1.7-macos.zip) | 未签名、未 notarization |
-| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.7/NearSend-0.1.7-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.7/NearSend-0.1.7-linux-x64.tar.gz) | 当前只构建 amd64 |
-| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.7/SHA256SUMS.txt) | 发布流水线自动生成 |
+| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.10/NearSend-0.1.10-android.apk) | 当前使用 debug signing，仅供内部测试；不能作为正式升级链 |
+| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.10/NearSend-0.1.10-windows-x64.zip) | 解压后运行桌面程序 |
+| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.10/NearSend-0.1.10-macos.zip) | 未签名、未 notarization |
+| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.10/NearSend-0.1.10-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.10/NearSend-0.1.10-linux-x64.tar.gz) | 当前只构建 amd64 |
+| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.10/SHA256SUMS.txt) | 发布流水线自动生成 |
 
 > **预览版本边界**：构建产物和代码级双节点测试已经由 CI 验证，但 Android ↔ Windows 的真实设备双向大文件传输、断点恢复和正式签名发布仍未完成。不要把当前 APK、ZIP 或 DEB 当作稳定版或商店发行包。
 
@@ -45,7 +45,7 @@ NearSend 的重点是可靠性：文件通过流式读写和有界缓冲处理�
 | 协议与数据模型 | `LFTM1` / `LFTC1` 清单编码、状态模型、错误模型和固定向量已有 Dart 独立实现；协议仍是草案，尚未冻结 |
 | 安全控制面 | TLS 1.3 下限、证书指纹绑定、一次性配对令牌、会话授权和控制端点已有实现与测试 |
 | 数据面 | SQLite manifest staging、授权、分块读写、终检与导出编排已有代码级测试；断点恢复的应用层编排仍在进行 |
-| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；1.2 开发分支已接入系统目录/文件动作、接收确认、mDNS/BLE、二维码、雷达和热点引导边界，目标设备双向流程仍需验证 |
+| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；Android/iOS 首页扫一扫入口、运行时相机权限检查、扫码后自动连接及失败返回提示已合并到 master。2026-09-27 本地验收分支将 Android `mobile_scanner` 升至 7.4.2；25102RKBEC / Android 17 的 release APK 已启动相机并成功扫描 Windows 连接码，页面报告已实时验证并就绪。Windows 收到 Android 发出的 1 MiB 接收请求，但 v0.1.10 桌面端的空间预检一直待完成，文件尚未被接受或校验落盘；本地代码已加空间查询超时并保留未知空间风险确认，尚未构建/实机复验。双向文件传输与断网恢复仍未完成 |
 | 自动化发布 | `master` 的 CI 成功后自动构建 Android、Windows、macOS、Linux 并创建 GitHub Release，附带 release notes 与 SHA-256 清单 |
 
 **当前没有承诺的能力**：互联网远程传输、云端中转、BLE 文件承载、目录实时同步、后台无限运行、Windows MSIX、Android Play/AAB、正式代码签名和 iOS 发布。
@@ -93,9 +93,10 @@ flowchart TB
 
 NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协议、配对、存储、分块、终检、UI 装配和 GitHub 发布流水线的可审阅实现；但这些实现必须和对应证据一起阅读，不能把“代码存在”“单元测试通过”或“CI 构建成功”当作完整产品验收。
 
-截至 **2026-09-24**：
+截至 **2026-09-26**：
 
-- `v0.1.7` 已由 GitHub Actions 发布，包含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 `SHA256SUMS.txt`；它仍是预览基线，不代表正式签名或双机产品验收完成。
+- 最新预览版 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10) 已由 GitHub Actions 发布，目标提交为 `e1cfb30541106a39a8aba2087bf6906dcbdf60a8`，包含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 `SHA256SUMS.txt`；仍不代表正式签名或双机产品验收完成。
+- 首页与传输导航 [PR #71](https://github.com/yanzhao77/NearSend/pull/71)、首页扫一扫并自动连接 [PR #73](https://github.com/yanzhao77/NearSend/pull/73)、逐次检查相机权限及扫码/连接失败返回提示 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 均已合并到 `master`；分别进入 v0.1.7、v0.1.9 和 v0.1.10。2026-09-26 真机相机权限弹窗通过，但相机启动失败，实际扫码尚未通过；Android ↔ Windows 双向传输、断网重连和大文件断点恢复仍未执行，详情见[验收记录](docs/releases/1.2/ACCEPTANCE.md)。
 - T12 UI 全平台改造已通过 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) squash 合并到 `master`，合并提交为 `880dfb8`；共享主题、组件、响应式应用壳、真实任务/空间/设置读模型、配对/发送/接收/任务页面和平台适配代码已进入主干。
 - UI 代码级验收已归档，覆盖 Light/Dark、动态字体 200%、窄屏、长文案、空间 `sufficient`/`insufficient`/`unknown`、五阶段传输状态和真实数据库读模型；这些结果不替代目标设备验收。
 - 控制面、数据面和界面已有“真实两个节点 + 真实 TLS”的代码级测试，覆盖清单、授权、分块、校验和导出路径。

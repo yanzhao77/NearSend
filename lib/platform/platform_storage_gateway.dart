@@ -154,12 +154,19 @@ class MethodChannelAndroidStorageGateway implements PlatformStorageGateway {
 }
 
 class MethodChannelWindowsStorageGateway implements PlatformStorageGateway {
-  MethodChannelWindowsStorageGateway({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel(channelName);
+  MethodChannelWindowsStorageGateway({
+    MethodChannel? channel,
+    this.measureFreeSpaceTimeout = const Duration(seconds: 5),
+  }) : _channel = channel ?? const MethodChannel(channelName);
 
   static const String channelName = 'com.nearsend.app/files';
 
   final MethodChannel _channel;
+
+  /// A hung native query must not leave the receive screen at "pre-check pending" forever.
+  /// A timeout is represented as unknown, never as sufficient; the UI requires explicit user
+  /// acknowledgement before it enables acceptance.
+  final Duration measureFreeSpaceTimeout;
 
   @override
   String get platformLabel => 'Windows';
@@ -198,10 +205,11 @@ class MethodChannelWindowsStorageGateway implements PlatformStorageGateway {
   Future<StorageMeasurement> measureFreeSpace({
     required StorageLocationRef? location,
   }) async {
-    final Object? value = await _channel.invokeMethod<Object?>(
-      'measureFreeSpace',
-      <String, Object?>{'locationRef': location?.opaqueValue},
-    );
+    final Object? value = await _channel
+        .invokeMethod<Object?>('measureFreeSpace', <String, Object?>{
+          'locationRef': location?.opaqueValue,
+        })
+        .timeout(measureFreeSpaceTimeout, onTimeout: () => null);
     return _measurementFrom(value);
   }
 }

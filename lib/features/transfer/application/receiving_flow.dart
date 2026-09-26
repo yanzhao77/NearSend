@@ -142,6 +142,39 @@ class ReceivingFlow extends ChangeNotifier {
     ];
   }
 
+  /// Rejects an offer without exposing file bytes or changing its manifest.
+  Future<bool> reject(OfferSummary offer) async {
+    if (isBusy ||
+        !_offers.any(
+          (OfferSummary pending) =>
+              pending.transferId == offer.transferId &&
+              pending.manifestDigest == offer.manifestDigest,
+        )) {
+      return false;
+    }
+    try {
+      await wire.decide(
+        transferId: offer.transferId,
+        manifestDigest: offer.manifestDigest,
+        accept: false,
+      );
+      _offers = _offers
+          .where(
+            (OfferSummary pending) => pending.transferId != offer.transferId,
+          )
+          .toList(growable: false);
+      if (_offers.isEmpty && _phase == ReceivePhase.offered) {
+        _phase = ReceivePhase.idle;
+      }
+      _notify();
+      return true;
+    } on Object {
+      _failureReason = failedReason;
+      _notify();
+      return false;
+    }
+  }
+
   /// Accepts [offer] and pulls it to [saveLocationRef].
   ///
   /// [saveLocationRef] is the directory the files are written into, and it is required rather than

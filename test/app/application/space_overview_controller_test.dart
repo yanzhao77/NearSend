@@ -14,25 +14,25 @@ void main() {
     expect(controller.overview.volumes.single.verdict, SpaceVerdict.unknown);
   });
 
-  test(
-    'known measurement is exposed without inventing a required amount',
-    () async {
-      final SpaceOverviewController controller = SpaceOverviewController(
-        gateway: _FakeStorageGateway(
-          measurement: const StorageMeasurement(
-            volume: VolumeId('disk-1'),
-            label: '主磁盘',
-            availability: VolumeAvailability.known(1024),
-          ),
+  test('known idle capacity is not presented as unknown without a transfer', () async {
+    final SpaceOverviewController controller = SpaceOverviewController(
+      gateway: _FakeStorageGateway(
+        measurement: const StorageMeasurement(
+          volume: VolumeId('disk-1'),
+          label: '主磁盘',
+          availability: VolumeAvailability.known(1024),
         ),
-      );
-      await controller.refresh();
+      ),
+    );
+    await controller.refresh();
 
-      expect(controller.overview.volumes.single.label, '主磁盘');
-      expect(controller.overview.volumes.single.availability.freeBytes, 1024);
-      expect(controller.overview.volumes.single.verdict, SpaceVerdict.unknown);
-    },
-  );
+    expect(controller.overview.volumes.single.label, '主磁盘');
+    expect(controller.overview.volumes.single.availability.freeBytes, 1024);
+    expect(controller.overview.hasUnknown, isFalse);
+    // There is no transfer requirement to compare against yet, so this is not a
+    // sufficient-for-transfer verdict either.
+    expect(controller.overview.volumes.single.verdict, SpaceVerdict.unknown);
+  });
 }
 
 class _FakeStorageGateway implements PlatformStorageGateway {

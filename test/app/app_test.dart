@@ -519,20 +519,23 @@ void main() {
       await settle(tester, () => visible(ConnectionPage.connectedNote));
       expect(find.text(ConnectionPage.connectedNote), findsOneWidget);
 
-      await tapText(tester, ConnectionPage.continueLabelReceive);
-      // Asked on a timer, so the offer shows up without the user doing anything: a few cycle of the
-      // harness gives the poll its real round trip.
+      // The app-level inbox surfaces the peer's offer while this device is still on the connection
+      // screen; accepting the prompt then opens the existing save-location confirmation.
       await settle(
         tester,
-        () => visible('1 个文件 · ${formatBytes(payload.length)}'),
+        () => visible('收到文件') && visible('界面接收.bin'),
         attempts: 60,
       );
       expect(
+        find.text('收到文件'),
+        findsOneWidget,
+        reason: 'the connected receiver must be prompted independently of its current route',
+      );
+      await tapText(tester, '接收');
+      await tester.pumpAndSettle();
+      expect(
         find.text('1 个文件 · ${formatBytes(payload.length)}'),
         findsOneWidget,
-        reason:
-            '§6 has no push: the receiving device learns what is offered by asking, and the screen '
-            'has to show what came back rather than an empty list that looks like a fault',
       );
 
       await tester.enterText(find.byType(TextField), saveTo.path);
@@ -663,24 +666,21 @@ void main() {
 
       await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
       await tester.pump();
-      await tapText(tester, '传输');
-      await tapText(tester, '接收文件');
-      await tester.pumpAndSettle();
-      // Authenticated incoming session opens reception directly; no self-pairing required.
+      // The offer is surfaced above the home screen; the receiver need not open the receive page.
       await settle(
         tester,
-        () =>
-            visible(ReceivePage.pushSectionHeading) &&
-            visible('1 个文件 · ${formatBytes(payload.length)}'),
+        () => visible('收到文件') && visible('推送界面.bin'),
         attempts: 60,
       );
       expect(
-        find.text(ReceivePage.pushSectionHeading),
+        find.text('收到文件'),
         findsOneWidget,
-        reason:
-            'a push is learned from this device\'s own database, not from the peer: the client that '
-            'proposed it may never be asked anything',
+        reason: 'the app-level inbox must prompt while the receiver is still on its home screen',
       );
+      expect(find.text('推送界面.bin'), findsOneWidget);
+      await tapText(tester, '接收');
+      await tester.pumpAndSettle();
+      expect(find.text(ReceivePage.pushSectionHeading), findsOneWidget);
       expect(
         find.text('1 个文件 · ${formatBytes(payload.length)}'),
         findsOneWidget,

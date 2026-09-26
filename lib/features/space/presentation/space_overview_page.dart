@@ -58,8 +58,8 @@ class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
                   padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
                   child: NsSpaceBreakdown(
                     title: volume.label,
-                    status: _status(volume.verdict),
-                    statusLabel: _statusLabel(volume.verdict),
+                    status: _status(volume),
+                    statusLabel: _statusLabel(volume),
                     lines: <NsSpaceLine>[
                       NsSpaceLine(
                         label: '可用空间',
@@ -68,7 +68,7 @@ class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
                       NsSpaceLine(
                         label: '本次新增需求',
                         value: volume.requiredBytes == null
-                            ? '未知'
+                            ? '无待接收文件'
                             : _formatBytes(volume.requiredBytes!),
                       ),
                     ],
@@ -86,17 +86,27 @@ class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
     );
   }
 
-  static NsSpaceStatus _status(SpaceVerdict verdict) => switch (verdict) {
-    SpaceVerdict.sufficient => NsSpaceStatus.sufficient,
-    SpaceVerdict.insufficient => NsSpaceStatus.insufficient,
-    SpaceVerdict.unknown => NsSpaceStatus.unknown,
-  };
+  static NsSpaceStatus _status(SpaceVolumeOverview volume) {
+    if (volume.requiredBytes == null && volume.availability.isKnown) {
+      return NsSpaceStatus.measured;
+    }
+    return switch (volume.verdict) {
+      SpaceVerdict.sufficient => NsSpaceStatus.sufficient,
+      SpaceVerdict.insufficient => NsSpaceStatus.insufficient,
+      SpaceVerdict.unknown => NsSpaceStatus.unknown,
+    };
+  }
 
-  static String _statusLabel(SpaceVerdict verdict) => switch (verdict) {
-    SpaceVerdict.sufficient => '空间充足',
-    SpaceVerdict.insufficient => '空间不足',
-    SpaceVerdict.unknown => '无法确认',
-  };
+  static String _statusLabel(SpaceVolumeOverview volume) {
+    if (volume.requiredBytes == null && volume.availability.isKnown) {
+      return '容量已读取';
+    }
+    return switch (volume.verdict) {
+      SpaceVerdict.sufficient => '空间充足',
+      SpaceVerdict.insufficient => '空间不足',
+      SpaceVerdict.unknown => '无法确认',
+    };
+  }
 
   static String _freeLabel(VolumeAvailability availability) =>
       availability.freeBytes == null

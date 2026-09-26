@@ -62,6 +62,7 @@ class ReceivePage extends StatefulWidget {
     this.onRememberDefault,
     this.initialLocation,
     this.onAcceptPush,
+    this.autoPromptTransferId,
   });
 
   final ReceivePhase phase;
@@ -128,6 +129,9 @@ class ReceivePage extends StatefulWidget {
   )?
   onAcceptPush;
 
+  /// Offer id selected by the app-level prompt; open the detailed save confirmation once it appears.
+  final String? autoPromptTransferId;
+
   static const String heading = '接收文件';
   static const String emptyNote = '对方还没有提供文件。保持连接，这里会自动刷新。';
   static const String saveLocationHint = '保存到哪个目录（需要填写）';
@@ -177,12 +181,14 @@ class _ReceivePageState extends State<ReceivePage> {
   bool _unknownSpaceAcknowledged = false;
   String? _confirmationError;
   bool _preparingConfirmation = false;
+  String? _autoPromptScheduledFor;
 
   @override
   void initState() {
     super.initState();
     _applyInitialLocation(widget.initialLocation);
     _startPolling();
+    _maybeAutoPromptOffer();
   }
 
   @override
@@ -206,6 +212,37 @@ class _ReceivePageState extends State<ReceivePage> {
         oldWidget.pushPhase != widget.pushPhase) {
       _startPolling();
     }
+    _maybeAutoPromptOffer();
+  }
+
+  void _maybeAutoPromptOffer() {
+    final String? transferId = widget.autoPromptTransferId;
+    if (transferId == null || _autoPromptScheduledFor == transferId) return;
+    final ServerOffer? pushed = _firstOrNull(
+      widget.pushOffers.where(
+        (ServerOffer offer) => offer.transferId == transferId,
+      ),
+    );
+    final OfferSummary? pulled = _firstOrNull(
+      widget.offers.where(
+        (OfferSummary offer) => offer.transferId == transferId,
+      ),
+    );
+    if (pushed == null && pulled == null) return;
+    _autoPromptScheduledFor = transferId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (pushed != null) {
+        unawaited(_confirmPushOffer(pushed));
+      } else if (pulled != null) {
+        unawaited(_confirmPullOffer(pulled));
+      }
+    });
+  }
+
+  T? _firstOrNull<T>(Iterable<T> values) {
+    final Iterator<T> iterator = values.iterator;
+    return iterator.moveNext() ? iterator.current : null;
   }
 
   static bool _samePushOffers(
