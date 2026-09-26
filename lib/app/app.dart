@@ -36,6 +36,7 @@ import 'package:nearsend/features/transfer/application/sending_session.dart';
 import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
+import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_network_gateway.dart';
@@ -134,6 +135,7 @@ class NearSendApp extends StatefulWidget {
 }
 
 class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   late final TaskCatalogController _tasks = TaskCatalogController();
   late final SpaceOverviewController _space = SpaceOverviewController(
     gateway: widget.storageGateway,
@@ -155,6 +157,10 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
           : const UnavailablePlatformNetworkGateway());
   JoinedWifiLease? _joinedWifi;
   Timer? _pairingPresenceTimer;
+  Timer? _offerPollTimer;
+  bool _pollingOffers = false;
+  bool _showingOfferPrompt = false;
+  final Set<String> _promptedOfferIds = <String>{};
   bool _probingPeer = false;
   bool _outgoingRecent = false;
   final Stopwatch _outgoingAge = Stopwatch();
@@ -286,8 +292,176 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       _radarDiscovery = discovery.events.listen(_radar.handleMdns);
     }
     unawaited(_space.refresh());
+    _startOfferPolling();
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  void _startOfferPolling() {
+    _offerPollTimer?.cancel();
+    if (_disposing || _incoming == null) return;
+    unawaited(_pollIncomingOffers());
+    _offerPollTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => unawaited(_pollIncomingOffers()),
+    );
+  }
+
+  Future<void> _pollIncomingOffers() async {
+    if (_disposing || _pollingOffers) return;
+    _pollingOffers = true;
+    try {
+      await _incoming?.refresh();
+      await _receiving?.refresh();
+      if (_disposing) return;
+
+      final List<ServerOffer> pushed = _incoming?.pending ?? const [];
+      final List<OfferSummary> pulled = _receiving?.offers ?? const [];
+      final Set<String> currentIds = <String>{
+        for (final ServerOffer offer in pushed) offer.transferId,
+        for (final OfferSummary offer in pulled) offer.transferId,
+      };
+      _promptedOfferIds.removeWhere((String id) => !currentIds.contains(id));
+      if (_showingOfferPrompt ||
+          _incoming?.isBusy == true ||
+          _receiving?.isBusy == true) {
+        return;
+      }
+
+      ServerOffer? serverOffer;
+      OfferSummary? clientOffer;
+      for (final ServerOffer offer in pushed) {
+        if (!_promptedOfferIds.contains(offer.transferId)) {
+          serverOffer = offer;
+          break;
+        }
+      }
+      if (serverOffer == null) {
+        for (final OfferSummary offer in pulled) {
+          if (!_promptedOfferIds.contains(offer.transferId)) {
+            clientOffer = offer;
+            break;
+          }
+        }
+      }
+      if (serverOffer == null && clientOffer == null) return;
+      _showingOfferPrompt = true;
+      try {
+        await _showIncomingOfferPrompt(
+          serverOffer: serverOffer,
+          clientOffer: clientOffer,
+        );
+      } finally {
+        _showingOfferPrompt = false;
+      }
+    } finally {
+      _pollingOffers = false;
+    }
+  }
+
+  Future<void> _showIncomingOfferPrompt({
+    ServerOffer? serverOffer,
+    OfferSummary? clientOffer,
+  }) async {
+    final String? transferId =
+        serverOffer?.transferId ?? clientOffer?.transferId;
+    final NavigatorState? navigator = _navigatorKey.currentState;
+    if (transferId == null || navigator == null) return;
+    _promptedOfferIds.add(transferId);
+
+    List<ReceiveFilePreview> files;
+    try {
+      files = serverOffer != null
+          ? _incoming!.preview(serverOffer)
+          : await _receiving!.preview(clientOffer!);
+    } on Object {
+      // A dropped peer must not produce a misleading partial file list or accept action.
+      _promptedOfferIds.remove(transferId);
+      return;
+    }
+    if (files.isEmpty || !mounted || _disposing) {
+      _promptedOfferIds.remove(transferId);
+      return;
+    }
+
+    final bool? accept = await showDialog<bool>(
+      context: navigator.context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        final Size viewport = MediaQuery.sizeOf(dialogContext);
+        final double width = (viewport.width - 80)
+            .clamp(240.0, 520.0)
+            .toDouble();
+        final double height = (viewport.height - 220)
+            .clamp(240.0, 520.0)
+            .toDouble();
+        return AlertDialog(
+          title: const Text('收到文件'),
+          content: SizedBox(
+            width: width,
+            height: height,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  '对端设备 · ${files.length} 个文件 · '
+                  '${formatBytes(files.fold<int>(0, (int sum, ReceiveFilePreview file) => sum + file.sizeBytes))}',
+                ),
+                const SizedBox(height: NearSendSpacing.sm),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: files.length,
+                    separatorBuilder: (_, _) =>
+                        const Divider(height: NearSendSpacing.sm),
+                    itemBuilder: (BuildContext context, int index) {
+                      final ReceiveFilePreview file = files[index];
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.insert_drive_file_outlined),
+                        title: Text(file.originalPath),
+                        subtitle: Text(formatBytes(file.sizeBytes)),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: NearSendSpacing.xs),
+                const Text('选择接收后，还需确认保存位置和空间信息。'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('拒绝'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.download_outlined),
+              label: const Text('接收'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || _disposing) return;
+    if (accept == false) {
+      final bool rejected = serverOffer != null
+          ? (_incoming?.reject(serverOffer) ?? false)
+          : await (_receiving?.reject(clientOffer!) ??
+                Future<bool>.value(false));
+      if (!rejected) {
+        _promptedOfferIds.remove(transferId);
+      }
+      return;
+    }
+    if (accept == true) {
+      await navigator.pushNamed<void>(
+        NearSendApp.receiveRoute,
+        arguments: transferId,
+      );
+    } else {
+      _promptedOfferIds.remove(transferId);
     }
   }
 
@@ -295,6 +469,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   void dispose() {
     _disposing = true;
     _pairingPresenceTimer?.cancel();
+    _offerPollTimer?.cancel();
     _wifiDesired = false;
     _bluetoothDesired = false;
     WidgetsBinding.instance.removeObserver(this);
@@ -325,7 +500,12 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_disposing || state == AppLifecycleState.resumed) return;
+    if (_disposing) return;
+    if (state == AppLifecycleState.resumed) {
+      _startOfferPolling();
+      return;
+    }
+    _offerPollTimer?.cancel();
     if (_wifiDesired) {
       _requestWifiReady(false);
     }
@@ -657,6 +837,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               AppThemePreference.dark => ThemeMode.dark,
             };
         return MaterialApp(
+          navigatorKey: _navigatorKey,
           title: 'NearSend',
           debugShowCheckedModeBanner: false,
           theme: buildNearSendTheme(Brightness.light),
@@ -819,6 +1000,12 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               );
             },
             NearSendApp.receiveRoute: (BuildContext context) {
+              final Object? routeArgument = ModalRoute.of(context)
+                  ?.settings
+                  .arguments;
+              final String? autoPromptTransferId = routeArgument is String
+                  ? routeArgument
+                  : null;
               final ReceivingFlow? receiving = _receiving;
               final ServerReceivingFlow? incoming = _incoming;
               if (receiving == null && incoming == null) {
@@ -872,6 +1059,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                       ? null
                       : (offer) async => incoming.preview(offer),
                   initialLocation: _settings.settings.defaultReceiveLocation,
+                  autoPromptTransferId: autoPromptTransferId,
                   onPickLocation:
                       widget.storageGateway == null ||
                           !widget.storageGateway!.supportsDirectorySelection

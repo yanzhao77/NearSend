@@ -207,40 +207,38 @@ void main() {
     );
   });
 
-  test('an offer nobody accepted leaves nothing behind', () async {
-    final OutgoingPlan plan = await offer();
-    final ReceivingFlow subject = flow();
-    await subject.refresh();
+  test(
+    'rejecting an offer from the receiving flow leaves nothing behind',
+    () async {
+      await offer();
+      final ReceivingFlow subject = flow();
+      final List<OfferSummary> offers = await subject.refresh();
 
-    // The other answer on the confirmation screen. It is taken on the wire rather than through the
-    // flow, because the flow's own entry point is 接受 and a refusal must also be recordable.
-    await wire.decide(
-      transferId: transferId,
-      manifestDigest: plan.manifestDigest,
-      accept: false,
-    );
+      expect(await subject.reject(offers.single), isTrue);
 
-    expect(server.transfers.taskState(transferId).wireName, 'CANCELLED');
-    expect(
-      server.authorizations.read(transferId)?.isAccepted,
-      isNot(true),
-      reason: 'a refused transfer must not leave an approval behind',
-    );
-    expect(
-      client.tasks.committedBytesForTask(transferId),
-      0,
-      reason: 'nothing may have been written for a transfer that was never accepted',
-    );
-    expect(
-      exportsDirectory().existsSync(),
-      isFalse,
-      reason:
-          'no bytes means no target directory either: creating one would leave the trace of a '
-          'transfer that never happened',
-    );
-    expect(subject.phase, ReceivePhase.offered);
-    expect(subject.outputPlans.readTransfer(transferId), isEmpty);
-  });
+      expect(server.transfers.taskState(transferId).wireName, 'CANCELLED');
+      expect(
+        server.authorizations.read(transferId)?.isAccepted,
+        isNot(true),
+        reason: 'a refused transfer must not leave an approval behind',
+      );
+      expect(
+        client.tasks.committedBytesForTask(transferId),
+        0,
+        reason: 'nothing may have been written for a transfer that was never accepted',
+      );
+      expect(
+        exportsDirectory().existsSync(),
+        isFalse,
+        reason:
+            'no bytes means no target directory either: creating one would leave the trace of a '
+            'transfer that never happened',
+      );
+      expect(subject.phase, ReceivePhase.idle);
+      expect(subject.offers, isEmpty);
+      expect(subject.outputPlans.readTransfer(transferId), isEmpty);
+    },
+  );
 }
 
 class _ObservingOutputPlans extends ReceiveOutputPlanRepository {

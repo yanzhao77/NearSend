@@ -6,6 +6,7 @@ import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
+import 'package:nearsend/core/storage/manifest_staging_store.dart';
 import 'package:nearsend/core/storage/saved_file_reference.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/storage/transfer_repository.dart';
@@ -194,6 +195,43 @@ class ServerReceivingFlow extends ChangeNotifier {
         sizeBytes: file.sizeBytes,
       ),
   ];
+
+  /// Rejects a sealed offer locally before any file bytes have been authorized.
+  ///
+  /// Rejection is terminal for this offer: persist the user's decision, cancel the waiting task,
+  /// release its sealed proposal and revoke any credentials before removing it from the inbox.
+  bool reject(ServerOffer offer) {
+    if (isBusy ||
+        !_pending.any(
+          (ServerOffer pending) =>
+              pending.transferId == offer.transferId &&
+              pending.manifestDigest == offer.manifestDigest,
+        )) {
+      return false;
+    }
+    final FrozenManifest? frozen = engine.staging.frozenManifest(
+      offer.transferId,
+    );
+    if (frozen == null || frozen.manifestDigest != offer.manifestDigest) {
+      return false;
+    }
+    engine.authorizations.recordDecision(
+      transferId: offer.transferId,
+      manifestDigest: frozen.manifestDigest,
+      decision: TransferDecision.rejected,
+    );
+    engine.transfers.transitionTask(
+      taskId: offer.transferId,
+      to: TransferState.cancelled,
+    );
+    engine.staging.release(offer.transferId, StagingReleaseReason.cancelled);
+    engine.credentials.revokeAll(offer.transferId);
+    _pending = _pending
+        .where((ServerOffer pending) => pending.transferId != offer.transferId)
+        .toList(growable: false);
+    _notify();
+    return true;
+  }
 
   /// Accepts [offer] and waits for the bytes to arrive, then verifies and saves them.
   ///

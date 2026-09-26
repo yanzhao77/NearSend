@@ -11,6 +11,8 @@ import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
 import 'package:nearsend/core/storage/source_bytes.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
+import 'package:nearsend/core/storage/task_authorization_repository.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
@@ -336,6 +338,34 @@ void main() {
           'and asking again must not walk a finished receive backwards into deciding - the screen '
           'would lose the result it is showing',
     );
+  });
+
+  test('rejecting an offer cancels the waiting task before any bytes are authorized', () async {
+    final SendingFlow sending = guestFlow(
+      authorizationTimeout: const Duration(seconds: 3),
+    );
+    await sending.addPaths(<String>[sourceFile().path]);
+    final ServerReceivingFlow receiving = ServerReceivingFlow(
+      engine: host.engine,
+      now: () => 1000,
+      commitPollInterval: const Duration(milliseconds: 25),
+    );
+
+    final Future<bool> pushed = sending.send();
+    await waitForOffer(receiving);
+    final ServerOffer offer = receiving.pending.single;
+
+    expect(receiving.reject(offer), isTrue);
+    expect(
+      host.engine.transfers.taskState(transferId),
+      TransferState.cancelled,
+    );
+    expect(
+      host.authorizations.read(transferId)?.decision,
+      TransferDecision.rejected,
+    );
+    expect(receiving.pending, isEmpty);
+    expect(await pushed, isFalse);
   });
 }
 
