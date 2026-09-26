@@ -45,7 +45,7 @@ NearSend 的重点是可靠性：文件通过流式读写和有界缓冲处理�
 | 协议与数据模型 | `LFTM1` / `LFTC1` 清单编码、状态模型、错误模型和固定向量已有 Dart 独立实现；协议仍是草案，尚未冻结 |
 | 安全控制面 | TLS 1.3 下限、证书指纹绑定、一次性配对令牌、会话授权和控制端点已有实现与测试 |
 | 数据面 | SQLite manifest staging、授权、分块读写、终检与导出编排已有代码级测试；断点恢复的应用层编排仍在进行 |
-| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；Android/iOS 首页扫一扫入口、运行时相机权限检查、扫码后自动连接及失败返回提示已合并到 master，目标设备双向流程和真机相机行为仍需验证 |
+| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；Android/iOS 首页扫一扫入口、运行时相机权限检查、扫码后自动连接及失败返回提示已合并到 master。2026-09-26 在 25102RKBEC / Android 17 上相机权限请求成功，但 `mobile_scanner` 启动相机报 `genericError` / native `NullPointerException`，未完成扫码；Android ↔ Windows 实机配对仍未建立 |
 | 自动化发布 | `master` 的 CI 成功后自动构建 Android、Windows、macOS、Linux 并创建 GitHub Release，附带 release notes 与 SHA-256 清单 |
 
 **当前没有承诺的能力**：互联网远程传输、云端中转、BLE 文件承载、目录实时同步、后台无限运行、Windows MSIX、Android Play/AAB、正式代码签名和 iOS 发布。
@@ -96,7 +96,7 @@ NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协
 截至 **2026-09-26**：
 
 - 最新预览版 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10) 已由 GitHub Actions 发布，目标提交为 `e1cfb30541106a39a8aba2087bf6906dcbdf60a8`，包含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 `SHA256SUMS.txt`；仍不代表正式签名或双机产品验收完成。
-- 首页与传输导航 [PR #71](https://github.com/yanzhao77/NearSend/pull/71)、首页扫一扫并自动连接 [PR #73](https://github.com/yanzhao77/NearSend/pull/73)、逐次检查相机权限及扫码/连接失败返回提示 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 均已合并到 `master`；分别进入 v0.1.7、v0.1.9 和 v0.1.10。真机扫码、权限弹窗与双机流程仍待验收。
+- 首页与传输导航 [PR #71](https://github.com/yanzhao77/NearSend/pull/71)、首页扫一扫并自动连接 [PR #73](https://github.com/yanzhao77/NearSend/pull/73)、逐次检查相机权限及扫码/连接失败返回提示 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 均已合并到 `master`；分别进入 v0.1.7、v0.1.9 和 v0.1.10。2026-09-26 真机相机权限弹窗通过，但相机启动失败，实际扫码尚未通过；Android ↔ Windows 双向传输、断网重连和大文件断点恢复仍未执行，详情见[验收记录](docs/releases/1.2/ACCEPTANCE.md)。
 - T12 UI 全平台改造已通过 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) squash 合并到 `master`，合并提交为 `880dfb8`；共享主题、组件、响应式应用壳、真实任务/空间/设置读模型、配对/发送/接收/任务页面和平台适配代码已进入主干。
 - UI 代码级验收已归档，覆盖 Light/Dark、动态字体 200%、窄屏、长文案、空间 `sufficient`/`insufficient`/`unknown`、五阶段传输状态和真实数据库读模型；这些结果不替代目标设备验收。
 - 控制面、数据面和界面已有“真实两个节点 + 真实 TLS”的代码级测试，覆盖清单、授权、分块、校验和导出路径。

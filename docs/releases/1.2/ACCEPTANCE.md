@@ -1,9 +1,21 @@
 # NearSend 1.2 验收记录
 
-更新日期：2026-09-25
+更新日期：2026-09-26
 
 状态说明：`通过` 必须有命令或实机证据；`未执行` 表示没有证据；`受阻` 必须写明缺失条件。
 自动化测试不能替代实机网络、权限和生命周期验证。
+
+## 2026-09-26 Android 相机与双机验收尝试
+
+| 检查 | 状态 | 证据或阻塞 |
+|---|---|---|
+| Android 本地 release APK 构建/安装 | 通过 | 当前工作树 `flutter build apk --release` 成功；APK SHA-256：`56FAB722F9B3BF3D4A548918AE39F1BA7F00FF1A18F1B5248921C3B27771DD1E`；通过 USB ADB 安装成功。此为本地验收构建，不是已发布的 v0.1.10 APK |
+| Android 首次相机权限请求 | 通过 | 25102RKBEC / Android 17（API 37）首次进入“扫一扫连接设备”时系统弹出相机权限；选择“仅在使用中允许”后系统状态为 `CAMERA granted=true` |
+| Android 相机预览/扫码启动 | 失败 | 授权后相机启动即报“相机启动失败（genericError）”；`mobile_scanner/scanner/method` 返回 `NullPointerException`（`cx.h` 等混淆栈）；页面显示“扫一扫失败”并返回首页。权限已授予但未进入可用预览，故没有扫码成功证据 |
+| Windows 当前工作树 release 构建 | 受阻 | `flutter build windows --release` 被 Flutter 的符号链接要求阻断，提示需启用 Windows Developer Mode；本轮未更改系统安全/开发者设置 |
+| Android ↔ Windows 二维码配对、双向文件传输与断网恢复 | 受阻 | 相机启动失败，无法扫码配对；当前工作树 Windows release 未能构建。未执行任何实际文件传输或断网恢复，不能据此判定协议/传输成功 |
+
+注：仅采集相机权限状态与 `mobile_scanner` 方法通道异常摘要；未保存或记录二维码载荷、令牌或用户文件内容。Windows 与手机此前位于同一 5 GHz Wi-Fi 网络，但没有建立配对连接。
 
 ## 2026-09-25 二维码刷新与预览发版门禁复核
 
@@ -93,11 +105,11 @@
 
 | 用例 | 状态 | 证据或阻塞 |
 |---|---|---|
-| A01 Android ↔ Windows，同一 Wi-Fi | 未执行 | 需要本轮双机证据 |
+| A01 Android ↔ Windows，同一 Wi-Fi | 受阻 | 2026-09-26 尝试；Android 授权后相机启动报 `genericError` / native `NullPointerException`，无法扫码配对；当前工作树 Windows release 构建也因缺少符号链接支持受阻。无传输证据 |
 | A02 Android ↔ Windows，不同 Wi-Fi，BLE 配对与热点 | 未执行 | 需要目标硬件与 Windows 主机 |
 | A03 无路由器、无互联网 | 未执行 | 需要 Android 热点与 Windows 加入实测 |
 | A04 AP 隔离或 mDNS 阻断 | 未执行 | 失败状态和手动连接保留已有自动化；仍需要可控网络环境验证真实发现丢失 |
-| A05 蓝牙关闭或拒权后的二维码路径 | 未执行 | 需要目标设备 |
+| A05 蓝牙关闭或拒权后的二维码路径 | 受阻 | Android 首次相机授权成功，但扫描器未能启动；未验证二维码连接。需先修复/定位 `mobile_scanner` native 初始化异常后重测 |
 | A06 Windows 无摄像头导入二维码图片 | 未执行 | 需要 Windows 主机 |
 | A07 Windows 无 BLE 外设能力 | 未执行 | 需要对应蓝牙适配器 |
 | A08 蜂窝网络与无互联网热点并存 | 未执行 | 需要 Android 真机与路由检查 |

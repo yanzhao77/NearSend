@@ -4,13 +4,13 @@
 
 ## 本次分支增量（2026-09-26）：扫一扫相机权限复核
 
-状态：已随 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 合并到 `master`，合并提交 `e1cfb30`，并进入预览版 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)。每次进入扫码流程先读取系统相机权限；未授权时发起系统请求，并在用户响应后再次读取实际权限状态，只有确认授权才进入扫码页。相机权限拒绝、扫码器启动失败、无效/多个二维码或扫码后的连接失败时，流程返回首页并弹框展示原因；用户主动取消则安静返回。手动进入连接页扫码时仍在当前页显示失败说明。当前环境没有连接 Android/iOS 真机，尚未实测系统授权弹窗和相机预览。
+状态：已随 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 合并到 `master`，合并提交 `e1cfb30`，并进入预览版 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)。每次进入扫码流程先读取系统相机权限；未授权时发起系统请求，并在用户响应后再次读取实际权限状态，只有确认授权才进入扫码页。相机权限拒绝、扫码器启动失败、无效/多个二维码或扫码后的连接失败时，流程返回首页并弹框展示原因；用户主动取消则安静返回。手动进入连接页扫码时仍在当前页显示失败说明。2026-09-26 在 25102RKBEC / Android 17（API 37）上以本地 release APK 实测：系统相机权限弹窗出现，选择“仅在使用中允许”后 `CAMERA granted=true`；但 `mobile_scanner` 启动相机时报 `genericError`，native 方法通道抛 `NullPointerException`，未进入预览或成功扫码。该问题已记录在[验收矩阵](releases/1.2/ACCEPTANCE.md)，修复并复测前扫码入口不通过。
 
 ## 本次分支增量（2026-09-25）：首页相机扫码入口
 
 状态：已由 [PR #73](https://github.com/yanzhao77/NearSend/pull/73) 合并到 `master`（合并提交 `5964255`），并进入预览版 [v0.1.9](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.9)；代码和自动化测试通过，尚未替代 Android/Windows 双机实测。首页移动端“扫一扫连接设备”直接进入系统相机扫码页，复用严格载荷解析和摄像头权限链路；扫码成功后自动发起连接，TLS 层仍校验二维码中的指纹，不匹配即阻断。桌面端不显示没有相机实现的入口，继续使用连接页中的图片导入或手动信息路径；发现广播没有一次性令牌和指纹，不能绕过扫码直接配对。
 
-功能分支基于 `a74e264`（预览版 [v0.1.8](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.8)）增加首页相机扫码与扫码后自动连接；已通过 PR #73 合并至 `master`。真机相机权限、实际扫码、自动指纹校验和断网重连仍需按验收矩阵人工复核。
+功能分支基于 `a74e264`（预览版 [v0.1.8](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.8)）增加首页相机扫码与扫码后自动连接；已通过 PR #73 合并至 `master`。2026-09-26 Android 真机相机权限弹窗已通过，但相机启动失败；实际扫码、自动指纹校验和断网重连仍需在修复相机异常后按验收矩阵复核。
 
 ## 本次分支增量（2026-09-24）：设备首页 / 传输导航
 
