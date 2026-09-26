@@ -1,10 +1,16 @@
 # NearSend 项目现状与进度台账
 
-更新日期：2026-09-26。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果、T12 UI 与近期首页/扫码 PR 合并状态。最新预览版为 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)，对应 `master` 合并提交 `e1cfb30541106a39a8aba2087bf6906dcbdf60a8`。后续以本文件最新Git版本为准，不用聊天记录代替状态。
+更新日期：2026-09-27。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果、T12 UI 与近期首页/扫码 PR 合并状态。最新预览版仍为 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)，对应 `master` 合并提交 `e1cfb30541106a39a8aba2087bf6906dcbdf60a8`。本地验收分支 `fix/android-camera-initialization` 的 Android 相机实测进展见下方；这些改动尚未提交或合并，不能视为 v0.1.10 已更新。
+
+## 本次验收增量（2026-09-27）：Android 扫码恢复与 Windows 接收请求
+
+状态：**扫码与配对已通过；实际文件落盘尚未通过。** 在 `fix/android-camera-initialization` 将 `mobile_scanner` 从 7.1.3 更新到 7.4.2 后，以本地 Android release APK 在 Xiaomi 25102RKBEC / Android 17（API 37）启动相机成功；手机扫描 Windows NearSend 的连接二维码后，Android 页面显示已实时验证并就绪，Windows 首页也显示本次扫码会话已连接。Android 选择仅用于验收的合成文件 `acceptance-1m.bin`（1 MiB）并发送后，Windows“接收文件”页出现待确认请求；截至记录时尚无接收按钮可用的可复现页面状态，验收文件未落盘，尚不能声称文件传输成功。未执行反向传输、大文件续传或断网重连。
+
+当前 Windows NearSend 是 v0.1.10 预览包；本地工作树 `flutter build windows --release` 仍受 Windows 符号链接支持限制，未更改开发者模式或系统安全设置。用户随后报告已选 `windows-received` 并看到“空间未知”；前一次接收页文本快照仍显示位置名 `NearSend`、两条 1 MiB offer 为“空间预检待完成”，与用户报告不一致。最新可读 UI 快照停在“传输”分流页，存在“接收”按钮；桌面窗口截图通道两次超时后已停止 UI 自动化，尚未观察接收详情页中的按钮状态。验收目录经文件系统确认存在且为空。扫码依赖更新来源：[mobile_scanner 更新日志](https://pub.dev/packages/mobile_scanner/changelog)。完整命令、设备与文件哈希记录见[验收矩阵](releases/1.2/ACCEPTANCE.md)。
 
 ## 本次分支增量（2026-09-26）：扫一扫相机权限复核
 
-状态：已随 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 合并到 `master`，合并提交 `e1cfb30`，并进入预览版 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)。每次进入扫码流程先读取系统相机权限；未授权时发起系统请求，并在用户响应后再次读取实际权限状态，只有确认授权才进入扫码页。相机权限拒绝、扫码器启动失败、无效/多个二维码或扫码后的连接失败时，流程返回首页并弹框展示原因；用户主动取消则安静返回。手动进入连接页扫码时仍在当前页显示失败说明。2026-09-26 在 25102RKBEC / Android 17（API 37）上以本地 release APK 实测：系统相机权限弹窗出现，选择“仅在使用中允许”后 `CAMERA granted=true`；但 `mobile_scanner` 启动相机时报 `genericError`，native 方法通道抛 `NullPointerException`，未进入预览或成功扫码。该问题已记录在[验收矩阵](releases/1.2/ACCEPTANCE.md)，修复并复测前扫码入口不通过。
+状态：已随 [PR #74](https://github.com/yanzhao77/NearSend/pull/74) 合并到 `master`，合并提交 `e1cfb30`，并进入预览版 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)。每次进入扫码流程先读取系统相机权限；未授权时发起系统请求，并在用户响应后再次读取实际权限状态，只有确认授权才进入扫码页。相机权限拒绝、扫码器启动失败、无效/多个二维码或扫码后的连接失败时，流程返回首页并弹框展示原因；用户主动取消则安静返回。手动进入连接页扫码时仍在当前页显示失败说明。2026-09-26 初测时 release 相机启动报 `genericError` / native `NullPointerException`；2026-09-27 本地验收分支升级 `mobile_scanner 7.4.2` 后，release 真机相机预览、扫码 Windows 连接码及扫码后自动建立已验证会话均通过。依赖修改尚未提交/合并，只有在此修复进入目标分支并重新发布后，才能视为发版问题关闭。
 
 ## 本次分支增量（2026-09-25）：首页相机扫码入口
 
@@ -20,7 +26,7 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`；设备首页/传输导航、首页扫一扫入口及扫码权限与失败返回分别由 PR #71、#73、#74 合并进入 `master`，最新预览版为 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)（`e1cfb30`）。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`；设备首页/传输导航、首页扫一扫入口及扫码权限与失败返回分别由 PR #71、#73、#74 合并进入 `master`，最新预览版仍为 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)（`e1cfb30`）。2026-09-27 本地验收分支已证明 Android release 相机启动、扫描 Windows 连接码及自动建立已验证会话可用；但 Android→Windows 1 MiB 请求尚未完成 Windows 接收、哈希核对，反向传输、大文件恢复和断网重连仍未完成。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
 
 ## 1. 状态口径
 
