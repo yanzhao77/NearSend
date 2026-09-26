@@ -550,6 +550,60 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets(
+    'a selected location with unknown space needs acknowledgement before receive',
+    (tester) async {
+      const ServerOffer pushed = ServerOffer(
+        transferId: '88888888-9999-4aaa-8000-cccccccccccc',
+        manifestDigest:
+            'abababababababababababababababababababababababababababababababab',
+        direction: TransferDirection.clientToServer,
+        fileCount: 1,
+        totalBytes: 1024 * 1024,
+      );
+      const StorageLocationRef location = StorageLocationRef(
+        kind: StorageLocationKind.nativeDirectory,
+        opaqueValue: r'C:\workspace\received',
+        displayName: 'received',
+      );
+      int checkCalls = 0;
+
+      await pump(
+        tester,
+        phase: ReceivePhase.idle,
+        pushOffers: const <ServerOffer>[pushed],
+        onPickLocation: () async => location,
+        onCheckPushSpace: (_, _) async {
+          checkCalls++;
+          return const SpaceEstimateSnapshot(
+            verdict: SpaceVerdict.unknown,
+            requiredBytes: 1024 * 1024,
+            volumes: <SpaceVolumeSnapshot>[],
+          );
+        },
+        onAcceptPush: (_, _) async => true,
+      );
+
+      expect(find.text('接收并保存'), findsNothing);
+      final Finder pickLocation = find.text('选择保存位置');
+      await tester.ensureVisible(pickLocation);
+      await tester.tap(pickLocation);
+      await tester.pumpAndSettle();
+
+      expect(checkCalls, 1);
+      expect(find.text('received'), findsOneWidget);
+      expect(find.text(ReceivePage.spaceUnknownNote), findsOneWidget);
+      final Finder acknowledgement = find.text(
+        ReceivePage.unknownSpaceAcknowledgement,
+      );
+      await tester.ensureVisible(acknowledgement);
+      await tester.tap(acknowledgement);
+      await tester.pump();
+      expect(find.text('接收并保存'), findsOneWidget);
+      await unmount(tester);
+    },
+  );
+
   testWidgets('saved file actions use the real target reference', (
     tester,
   ) async {

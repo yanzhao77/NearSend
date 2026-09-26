@@ -13,10 +13,10 @@
 | Android release 相机预览 | 通过 | Xiaomi 25102RKBEC / Android 17（API 37），本地 release APK（SHA-256：`406B19027D2F0031476CC40296B3BE8138893C9BE60A127B152F58EC15D88FEB`）安装后进入“扫一扫连接设备”；相机 client 在系统状态中活动，页面未报 `genericError` |
 | Android 扫描 Windows 连接码与自动连接 | 通过 | 用户确认手机扫到 Windows 首页二维码；Android 页面报告“已连接：系统已自动校验对方证书指纹”，首页和 Windows 首页均显示本次扫码会话已连接。未记录二维码、令牌或指纹值 |
 | Android→Windows 1 MiB offer | 部分通过 | 使用一次性合成文件 `acceptance-1m.bin`；Android 端源文件与主机生成文件 SHA-256 相同（`30E14955EBF1352266DC2FF8067E68104607E750ABB9D3B36582B8AF909FCB58`）。Windows“接收文件”页已显示 1 MiB 待确认 offer；截至更新时用户仍报告找不到接收按钮，目标目录内未发现已接收文件，故没有字节落盘/回读/目标端哈希证据 |
-| Windows 接收按钮路径 | 受阻待定位 | 用户报告已选 `windows-received` 并看到“空间未知”；此前接收页快照则显示位置名 `NearSend`、两条 offer 为“空间预检待完成”，状态不一致。最新可读快照停在“传输”分流页并显示“接收”按钮，未进入接收详情页；随后 Windows 桌面窗口截图通道连续两次超时，停止自动化操作。验收目录存在且为空。需用户手动进入“接收”详情，核对目标位置、未知空间确认项和“接收并保存”按钮，再完成显式接收 |
+| Windows 接收按钮/空间预检 | 代码修复待实机 | 用户截图显示位置已选为 `windows-received`，但空间预检长期停在“待完成”，无确认框/接收按钮。Windows 网关现有 5 秒超时后返回 `unknown`；用户仍须勾选未知空间风险确认。网关超时和接收页门禁测试通过；当前工作树 Windows 构建因 Flutter 插件符号链接要求被阻断，修复未装入桌面实机 |
 | Android↔Windows 反向传输、断网重连与大文件恢复 | 未执行 | 单方向小文件 offer 尚未完成接收；未执行反向文件传输、断开网络、>4 GiB 断点恢复或最终哈希比对 |
-| 自动化 | 通过 | `flutter analyze --no-pub` 无问题；`flutter test --no-pub --reporter compact` 1397 项通过；格式检查 232 files / 0 changed；`git diff --check` 通过。另 `flutter test test/features/transfer/transfer_pages_test.dart --no-pub` 29 项通过 |
-| Windows 当前工作树 release 构建 | 受阻 | `flutter build windows --release` 被 Flutter 符号链接要求阻断；本轮未更改 Windows Developer Mode 或安全设置。实机端使用已安装的 v0.1.10 Windows 预览包，不代表当前工作树构建 |
+| 自动化 | 通过 | `flutter analyze --no-pub` 无问题；`flutter test --no-pub --reporter compact` 1399 项通过；Windows 网关定向测试 4 项、接收页定向测试 17 项通过；格式检查 232 files / 0 changed。 |
+| Windows 当前工作树 release 构建 | 受阻 | `flutter build windows --release --no-pub` 被 Flutter 符号链接要求阻断，提示启用 Developer Mode；本轮未更改系统开发者/安全设置。实机端仍运行已安装的 v0.1.10 Windows 预览包，不代表当前工作树修复构建 |
 
 本次只对合成测试文件进行传输尝试。目标 Windows 目录未验证到接收文件，因此**不得将请求到达、连接成功或自动化用例计作真实文件传输通过**。
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -81,4 +83,31 @@ void main() {
     expect(result.volume, const VolumeId('unknown'));
     expect(result.availability.freeBytes, isNull);
   });
+
+  test(
+    'Windows free-space timeout resolves to unknown instead of pending',
+    () async {
+      final Completer<Object?> nativeResponse = Completer<Object?>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall call) {
+            expect(call.method, 'measureFreeSpace');
+            return nativeResponse.future;
+          });
+
+      final StorageMeasurement result =
+          await MethodChannelWindowsStorageGateway(
+            measureFreeSpaceTimeout: const Duration(milliseconds: 10),
+          ).measureFreeSpace(
+            location: const StorageLocationRef(
+              kind: StorageLocationKind.nativeDirectory,
+              opaqueValue: r'C:\workspace\received',
+              displayName: 'received',
+            ),
+          );
+      nativeResponse.complete(null);
+
+      expect(result.volume, const VolumeId('unknown'));
+      expect(result.availability.freeBytes, isNull);
+    },
+  );
 }

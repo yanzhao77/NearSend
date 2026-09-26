@@ -4,9 +4,9 @@
 
 ## 本次验收增量（2026-09-27）：Android 扫码恢复与 Windows 接收请求
 
-状态：**扫码与配对已通过；实际文件落盘尚未通过。** 在 `fix/android-camera-initialization` 将 `mobile_scanner` 从 7.1.3 更新到 7.4.2 后，以本地 Android release APK 在 Xiaomi 25102RKBEC / Android 17（API 37）启动相机成功；手机扫描 Windows NearSend 的连接二维码后，Android 页面显示已实时验证并就绪，Windows 首页也显示本次扫码会话已连接。Android 选择仅用于验收的合成文件 `acceptance-1m.bin`（1 MiB）并发送后，Windows“接收文件”页出现待确认请求；截至记录时尚无接收按钮可用的可复现页面状态，验收文件未落盘，尚不能声称文件传输成功。未执行反向传输、大文件续传或断网重连。
+状态：**扫码与配对已通过；实际文件落盘尚未通过。** 在 `fix/android-camera-initialization` 将 `mobile_scanner` 从 7.1.3 更新到 7.4.2 后，以本地 Android release APK 在 Xiaomi 25102RKBEC / Android 17（API 37）启动相机成功；手机扫描 Windows NearSend 的连接二维码后，Android 页面显示已实时验证并就绪，Windows 首页也显示本次扫码会话已连接。Android 选择仅用于验收的合成文件 `acceptance-1m.bin`（1 MiB）并发送后，Windows“接收文件”页出现待确认请求；用户提供截图显示已选 `windows-received`，但空间预检仍卡在“待完成”，接收按钮未显示。验收文件未落盘，尚不能声称文件传输成功。未执行反向传输、大文件续传或断网重连。
 
-当前 Windows NearSend 是 v0.1.10 预览包；本地工作树 `flutter build windows --release` 仍受 Windows 符号链接支持限制，未更改开发者模式或系统安全设置。用户随后报告已选 `windows-received` 并看到“空间未知”；前一次接收页文本快照仍显示位置名 `NearSend`、两条 1 MiB offer 为“空间预检待完成”，与用户报告不一致。最新可读 UI 快照停在“传输”分流页，存在“接收”按钮；桌面窗口截图通道两次超时后已停止 UI 自动化，尚未观察接收详情页中的按钮状态。验收目录经文件系统确认存在且为空。扫码依赖更新来源：[mobile_scanner 更新日志](https://pub.dev/packages/mobile_scanner/changelog)。完整命令、设备与文件哈希记录见[验收矩阵](releases/1.2/ACCEPTANCE.md)。
+当前 Windows NearSend 是 v0.1.10 预览包；用户提供的接收页截图确认 `windows-received` 已选中，但两条 1 MiB offer 仍停在“空间预检待完成”，没有确认框或接收按钮。为避免平台容量查询悬挂时永久显示 pending，本地代码现给 Windows 查询加 5 秒超时，并将超时如实映射为“未知”（绝不当成足够）；接收按钮仍须用户明确勾选风险确认。网关超时、接收页确认门禁、全量测试已通过，但本地 `flutter build windows --release --no-pub` 仍提示需 Developer Mode 才能创建插件符号链接；未更改系统安全设置，修复尚未构建或装入正在运行的 v0.1.10 桌面程序。验收目录经文件系统确认存在且为空，实际文件仍未接收。扫码依赖更新来源：[mobile_scanner 更新日志](https://pub.dev/packages/mobile_scanner/changelog)。完整命令、设备与文件哈希记录见[验收矩阵](releases/1.2/ACCEPTANCE.md)。
 
 ## 本次分支增量（2026-09-26）：扫一扫相机权限复核
 
