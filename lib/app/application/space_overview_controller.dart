@@ -43,9 +43,10 @@ class SpaceOverview {
   final List<SpaceVolumeOverview> volumes;
   final StorageLocationRef? location;
 
-  bool get hasUnknown => volumes.any(
-    (SpaceVolumeOverview volume) => volume.verdict == SpaceVerdict.unknown,
-  );
+  /// Whether the platform failed to measure capacity. A known free-space value with no active
+  /// transfer has no requirement to compare against; that is "not evaluated", not "unknown".
+  bool get hasUnknown =>
+      volumes.any((SpaceVolumeOverview volume) => !volume.availability.isKnown);
 }
 
 class SpaceOverviewController extends ChangeNotifier {

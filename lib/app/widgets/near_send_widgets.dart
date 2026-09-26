@@ -10,7 +10,7 @@ enum NsStatusTone { neutral, info, active, success, warning, error }
 enum NsStageState { complete, active, pending, blocked }
 
 /// Status of a space estimate.
-enum NsSpaceStatus { sufficient, insufficient, unknown }
+enum NsSpaceStatus { sufficient, insufficient, unknown, measured }
 
 /// Status rendered by a task card.
 enum NsTaskStatus {
@@ -444,6 +444,7 @@ class NsSpaceBreakdown extends StatelessWidget {
       NsSpaceStatus.sufficient => NsStatusTone.success,
       NsSpaceStatus.insufficient => NsStatusTone.error,
       NsSpaceStatus.unknown => NsStatusTone.warning,
+      NsSpaceStatus.measured => NsStatusTone.info,
     };
     final _NsSemanticStyle semantic = _NsSemanticStyle.of(context, tone);
     return Container(
