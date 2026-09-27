@@ -159,6 +159,12 @@ class ServerReceivingFlow extends ChangeNotifier {
       if (declaration == null) {
         continue;
       }
+      // This inbox belongs to the server-side receiver. The task table also contains this node's
+      // locally-created server_to_client offers, which use the same waitingAccept state; showing
+      // those here makes a sender see its own outgoing file as an incoming request.
+      if (declaration.direction != TransferDirection.clientToServer.wireValue) {
+        continue;
+      }
       // The same three conditions §7's `GET /v1/offers` applies to a client's view, because a
       // server's own user and its client must not be offered different things: the task must be
       // waiting for a decision, a **sealed** manifest must exist, and it must be the manifest the

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/protocol_limits.dart';
+import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/export_naming.dart';
 import 'package:nearsend/core/storage/receive_output_plan_repository.dart';
@@ -15,6 +16,7 @@ import 'package:nearsend/core/storage/task_authorization_repository.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
+import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
@@ -147,6 +149,43 @@ void main() {
     },
     saveLocationRef: saved.path,
   );
+
+  test('does not list this node’s own offer as an incoming offer', () async {
+    const String outgoingTransferId = '88888888-7777-4666-8555-444444444444';
+    final PairingPayload published = host.openPairingSession();
+    final File source = sourceFile();
+
+    await host.engine.prepareOutgoing(
+      transferId: outgoingTransferId,
+      direction: TransferDirection.serverToClient,
+      peerId: published.sessionId,
+      choices: <OutgoingFileChoice>[
+        OutgoingFileChoice(
+          fileId: fileId,
+          relativePath: '推送接收.bin',
+          path: source.path,
+        ),
+      ],
+    );
+    expect(
+      host.engine.transfers.taskState(outgoingTransferId),
+      TransferState.waitingAccept,
+    );
+
+    final ServerReceivingFlow receiving = ServerReceivingFlow(
+      engine: host.engine,
+      now: () => 1000,
+    );
+    await receiving.refresh();
+
+    expect(
+      receiving.pending,
+      isEmpty,
+      reason:
+          'this node created a server-to-client offer; only a client-to-server '
+          'push is an offer this server should ask its user to receive',
+    );
+  });
 
   test('a client push is accepted, received and saved by the server', () async {
     final SendingFlow sending = guestFlow();
