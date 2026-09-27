@@ -74,6 +74,26 @@ class _SpaceOverviewPageState extends State<SpaceOverviewPage> {
                     ],
                   ),
                 ),
+              const SizedBox(height: NearSendSpacing.md),
+              Text('已接收文件', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: NearSendSpacing.sm),
+              if (overview.savedFiles.isEmpty)
+                const NsInfoBanner(
+                  title: '暂无已保存的接收文件',
+                  message: '校验并成功保存到本机的文件会显示在这里。',
+                  tone: NsStatusTone.info,
+                )
+              else
+                for (final file in overview.savedFiles)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: NearSendSpacing.sm),
+                    child: ListTile(
+                      leading: const Icon(Icons.check_circle_outline),
+                      title: Text(file.fileName),
+                      subtitle: SelectableText('保存位置：${file.destination}'),
+                      trailing: Text(_formatBytes(file.sizeBytes)),
+                    ),
+                  ),
               const NsInfoBanner(
                 title: '清理范围',
                 message: '已导出的用户文件不属于清理范围。清理入口会在有真实可删除的暂存数据时启用。',
