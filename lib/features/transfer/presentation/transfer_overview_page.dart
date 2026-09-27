@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:nearsend/app/theme/design_tokens.dart';
 import 'package:nearsend/app/widgets/near_send_widgets.dart';
 
-/// Sending and receiving share the existing secure connection routes.
+/// Entry points for the send and receive flows.
 class TransferOverviewPage extends StatelessWidget {
   const TransferOverviewPage({super.key, this.onSend, this.onReceive});
   final VoidCallback? onSend;
@@ -18,22 +18,15 @@ class TransferOverviewPage extends StatelessWidget {
           _ActionCard(
             icon: Icons.north_east,
             title: '发送文件',
-            message: '选择文件，连接本地设备并等待对方确认。',
-            onPressed:
-                onSend ??
-                () =>
-                    Navigator.of(context)
-                        .pushNamed('/connect', arguments: 'send'),
+            message: '选择文件并发送给当前已连接的设备。',
+            onPressed: onSend ?? () => Navigator.of(context).pushNamed('/send'),
           ),
           _ActionCard(
             icon: Icons.south,
             title: '接收文件',
             message: '查看对方提供的文件，确认位置后接收并保存。',
             onPressed:
-                onReceive ??
-                () =>
-                    Navigator.of(context)
-                        .pushNamed('/connect', arguments: 'receive'),
+                onReceive ?? () => Navigator.of(context).pushNamed('/receive'),
           ),
         ];
         return ListView(

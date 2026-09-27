@@ -19,10 +19,8 @@ class ReceiveConfirmation {
   const ReceiveConfirmation({
     required this.location,
     required this.outputNames,
-    this.rememberAsDefault = false,
   });
 
   final StorageLocationRef location;
   final Map<String, String> outputNames;
-  final bool rememberAsDefault;
 }
