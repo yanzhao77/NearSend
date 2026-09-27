@@ -141,9 +141,9 @@ void main() {
 
     await tester.pumpWidget(NearSendApp(session: node, peer: peer));
     await tester.pump();
-    await tester.tap(find.text('传输'));
-    await tester.pump();
-    await tester.tap(find.text('发送文件'));
+    Navigator.of(
+      tester.element(find.byType(NearSendAppShell)),
+    ).pushNamed(NearSendApp.connectRoute, arguments: NearSendApp.sendArgument);
     await tester.pumpAndSettle();
 
     final String pin = node.payload!.serverFingerprint;
@@ -215,16 +215,33 @@ void main() {
     await settle(tester, () => node.phase == NodePhase.stopped);
   });
 
-  testWidgets('a build with no node says so rather than showing a fake pin', (
+  testWidgets(
+    'sending without a connected device shows a dialog, not local info',
+    (tester) async {
+      await tester.pumpWidget(const NearSendApp());
+      await tester.tap(find.text('传输'));
+      await tester.pump();
+      await tester.tap(find.text('发送文件'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('目前没有设备连接'), findsOneWidget);
+      expect(find.text('本机连接信息'), findsNothing);
+      expect(find.text(ConnectionPage.emptySessionNote), findsNothing);
+    },
+  );
+
+  testWidgets('receiving opens receive page without connection information', (
     tester,
   ) async {
     await tester.pumpWidget(const NearSendApp());
     await tester.tap(find.text('传输'));
     await tester.pump();
-    await tester.tap(find.text('发送文件'));
+    await tester.tap(find.text('接收文件'));
     await tester.pumpAndSettle();
 
-    expect(find.text(ConnectionPage.emptySessionNote), findsOneWidget);
+    expect(find.text('本机节点尚未就绪，无法接收。'), findsOneWidget);
+    expect(find.text('本机连接信息'), findsNothing);
+    expect(find.text(ConnectionPage.emptySessionNote), findsNothing);
   });
 
   testWidgets('a radar device route shows the selected peer, not local info', (
@@ -255,31 +272,29 @@ void main() {
     expect(find.text('本机连接信息'), findsNothing);
   });
 
-  testWidgets('a node that could not start states the reason', (tester) async {
-    final NodeSession node = NodeSession(
-      resolveDirectory: () async {
-        throw const PlatformFileFailure('no application directory');
-      },
-      candidateAddresses: const <String>['127.0.0.1'],
-    );
-    await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
-    await node.start();
-    await tester.pump();
+  testWidgets(
+    'sending after node startup failure still hides connection info',
+    (tester) async {
+      final NodeSession node = NodeSession(
+        resolveDirectory: () async {
+          throw const PlatformFileFailure('no application directory');
+        },
+        candidateAddresses: const <String>['127.0.0.1'],
+      );
+      await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
+      await node.start();
+      await tester.pump();
 
-    await tester.tap(find.text('传输'));
-    await tester.pump();
-    await tester.tap(find.text('发送文件'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('传输'));
+      await tester.pump();
+      await tester.tap(find.text('发送文件'));
+      await tester.pumpAndSettle();
 
-    expect(find.text(NodeSession.noDirectoryReason), findsOneWidget);
-    expect(
-      find.text(ConnectionPage.emptySessionNote),
-      findsNothing,
-      reason:
-          '"nothing published yet" and "this device could not open its own files" are different '
-          'answers, and the first would send the user looking for a fault in the other device',
-    );
-  });
+      expect(find.text('目前没有设备连接'), findsOneWidget);
+      expect(find.text(NodeSession.noDirectoryReason), findsNothing);
+      expect(find.text('本机连接信息'), findsNothing);
+    },
+  );
 
   testWidgets(
     'a file chosen in the interface arrives at the peer, byte for byte',
@@ -334,9 +349,10 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.tap(find.text('传输'));
-      await tester.pump();
-      await tester.tap(find.text('发送文件'));
+      Navigator.of(tester.element(find.byType(NearSendAppShell))).pushNamed(
+        NearSendApp.connectRoute,
+        arguments: NearSendApp.sendArgument,
+      );
       await tester.pumpAndSettle();
 
       // The connection information the other device publishes, pasted the way a user who cannot use
@@ -509,8 +525,10 @@ void main() {
 
       await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
       await tester.pump();
-      await tapText(tester, '传输');
-      await tapText(tester, '接收文件');
+      Navigator.of(tester.element(find.byType(NearSendAppShell))).pushNamed(
+        NearSendApp.connectRoute,
+        arguments: NearSendApp.receiveArgument,
+      );
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), offer.encode());

@@ -52,7 +52,8 @@ void main() {
     StorageLocationRef? initialLocation,
     Future<StorageLocationRef?> Function()? onPickLocation,
     Future<StorageLocationRef> Function(StorageLocationRef)? onValidateLocation,
-    void Function(StorageLocationRef)? onRememberDefault,
+    void Function(StorageLocationRef)? onLocationConfirmed,
+    bool requireLocationConfirmation = true,
     Future<SpaceEstimateSnapshot?> Function(ServerOffer, StorageLocationRef)?
     onCheckPushSpace,
   }) => tester.pumpWidget(
@@ -78,7 +79,8 @@ void main() {
         initialLocation: initialLocation,
         onPickLocation: onPickLocation,
         onValidateLocation: onValidateLocation,
-        onRememberDefault: onRememberDefault,
+        onLocationConfirmed: onLocationConfirmed,
+        requireLocationConfirmation: requireLocationConfirmation,
         onCheckPushSpace: onCheckPushSpace,
         onAcceptPush: onAcceptPush,
         // Long enough that a test never trips it by accident; the polling behaviour has its own
@@ -355,7 +357,7 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('confirmed location can be persisted as the new default', (
+  testWidgets('first confirmed location is saved as default for the launch', (
     tester,
   ) async {
     StorageLocationRef? remembered;
@@ -370,17 +372,86 @@ void main() {
       phase: ReceivePhase.offered,
       offers: <OfferSummary>[offer],
       initialLocation: location,
-      onRememberDefault: (StorageLocationRef selected) {
+      onLocationConfirmed: (StorageLocationRef selected) {
         remembered = selected;
       },
     );
 
     await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
     await tester.pump();
-    await tester.tap(find.text('设为默认接收位置'));
     await tester.tap(find.widgetWithText(FilledButton, '接收并保存').last);
     await tester.pump();
     expect(remembered, location);
+    await unmount(tester);
+  });
+
+  testWidgets(
+    'subsequent receive uses the default without a confirmation dialog',
+    (tester) async {
+      const StorageLocationRef location = StorageLocationRef(
+        kind: StorageLocationKind.nativeDirectory,
+        opaqueValue: '/tmp/received',
+        displayName: 'received',
+        permissionState: StoragePermissionState.granted,
+      );
+      ReceiveConfirmation? accepted;
+      await pump(
+        tester,
+        phase: ReceivePhase.offered,
+        offers: <OfferSummary>[offer],
+        initialLocation: location,
+        requireLocationConfirmation: false,
+        onAccept: (_, ReceiveConfirmation confirmation) async {
+          accepted = confirmation;
+          return true;
+        },
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('确认接收文件'), findsNothing);
+      expect(accepted?.location, location);
+      expect(accepted?.outputNames, isEmpty);
+      await unmount(tester);
+    },
+  );
+
+  testWidgets('subsequent receive still refuses a revoked default location', (
+    tester,
+  ) async {
+    const StorageLocationRef location = StorageLocationRef(
+      kind: StorageLocationKind.androidDocumentTree,
+      opaqueValue: 'content://provider/tree/receive',
+      displayName: '接收目录',
+      permissionState: StoragePermissionState.granted,
+    );
+    int accepts = 0;
+    await pump(
+      tester,
+      phase: ReceivePhase.offered,
+      offers: <OfferSummary>[offer],
+      initialLocation: location,
+      requireLocationConfirmation: false,
+      onValidateLocation: (StorageLocationRef _) async =>
+          const StorageLocationRef(
+            kind: StorageLocationKind.androidDocumentTree,
+            opaqueValue: 'content://provider/tree/receive',
+            displayName: '接收目录',
+            permissionState: StoragePermissionState.denied,
+          ),
+      onAccept: (_, _) async {
+        accepts++;
+        return true;
+      },
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '接收并保存'));
+    await tester.pumpAndSettle();
+
+    expect(accepts, 0);
+    expect(find.text('默认保存位置不可用，请重新选择保存位置。'), findsOneWidget);
+    expect(find.text('确认接收文件'), findsNothing);
     await unmount(tester);
   });
 

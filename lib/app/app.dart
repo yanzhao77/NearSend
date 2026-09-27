@@ -55,9 +55,9 @@ import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 ///
 /// ## Why the connection route takes an argument
 ///
-/// `docs/ui/UI_UX_SPEC.md` §4 gives send and receive the same first step from the user's point of
-/// view - establish a connection - and different wording for it. So one route serves both and is
-/// told which, rather than two near-identical pages that would drift.
+/// The route remains the explicit pairing surface for QR scans and discovered peers. Its argument
+/// distinguishes a pairing-only visit from an action-specific visit, so it can return to the right
+/// flow without making the send and receive buttons themselves display local connection details.
 ///
 /// ## Why the sessions are here and are owned here
 ///
@@ -161,6 +161,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   Timer? _offerPollTimer;
   bool _pollingOffers = false;
   bool _showingOfferPrompt = false;
+  bool _receiveLocationConfirmedThisLaunch = false;
   final Set<String> _promptedOfferIds = <String>{};
   bool _probingPeer = false;
   bool _outgoingRecent = false;
@@ -187,6 +188,27 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  Future<void> _showNoConnectedDeviceDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        content: const Text('目前没有设备连接'),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmReceiveLocationForLaunch(StorageLocationRef location) {
+    if (_receiveLocationConfirmedThisLaunch) return;
+    _settings.updateDefaultReceiveLocation(location);
+    _receiveLocationConfirmedThisLaunch = true;
   }
 
   void _syncPairingPresence() {
@@ -427,7 +449,12 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: NearSendSpacing.xs),
-                const Text('选择接收后，还需确认保存位置和空间信息。'),
+                Text(
+                  _receiveLocationConfirmedThisLaunch &&
+                          _settings.settings.defaultReceiveLocation != null
+                      ? '接收后将使用默认保存位置，并先执行空间检查。'
+                      : '接收后需要确认保存位置和空间信息。',
+                ),
               ],
             ),
           ),
@@ -857,20 +884,15 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               deviceName: _settings.settings.deviceName,
               connectionLabel: _connectionLabel,
               connectionTone: _connectionTone,
-              onSend: () => Navigator.of(context).pushNamed(
-                _flow != null && widget.peer?.isConnected == true
-                    ? NearSendApp.sendRoute
-                    : NearSendApp.connectRoute,
-                arguments: 'send',
-              ),
-              onReceive: () => Navigator.of(context).pushNamed(
-                _receiving != null ||
-                        (_incoming != null &&
-                            _radar.devices.any((device) => device.isReady))
-                    ? NearSendApp.receiveRoute
-                    : NearSendApp.connectRoute,
-                arguments: 'receive',
-              ),
+              onSend: () {
+                if (_flow == null || widget.peer?.isConnected != true) {
+                  unawaited(_showNoConnectedDeviceDialog(context));
+                  return;
+                }
+                Navigator.of(context).pushNamed(NearSendApp.sendRoute);
+              },
+              onReceive: () =>
+                  Navigator.of(context).pushNamed(NearSendApp.receiveRoute),
               onContinueTask: () =>
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
               onWifiReadyChanged: _requestWifiReady,
@@ -1075,6 +1097,8 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                       : (offer) async => incoming.preview(offer),
                   initialLocation: _settings.settings.defaultReceiveLocation,
                   autoPromptTransferId: autoPromptTransferId,
+                  requireLocationConfirmation:
+                      !_receiveLocationConfirmedThisLaunch,
                   onPickLocation:
                       widget.storageGateway == null ||
                           !widget.storageGateway!.supportsDirectorySelection
@@ -1082,7 +1106,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                       : _pickReceiveDirectory,
                   onValidateLocation:
                       widget.storageGateway?.validateReceiveLocation,
-                  onRememberDefault: _settings.updateDefaultReceiveLocation,
+                  onLocationConfirmed: _confirmReceiveLocationForLaunch,
                   onAcceptPush: incoming == null
                       ? null
                       : (offer, confirmation) async => incoming.accept(

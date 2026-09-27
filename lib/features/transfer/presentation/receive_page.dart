@@ -59,7 +59,8 @@ class ReceivePage extends StatefulWidget {
     this.onPreviewPush,
     this.onPickLocation,
     this.onValidateLocation,
-    this.onRememberDefault,
+    this.onLocationConfirmed,
+    this.requireLocationConfirmation = true,
     this.initialLocation,
     this.onAcceptPush,
     this.autoPromptTransferId,
@@ -121,7 +122,9 @@ class ReceivePage extends StatefulWidget {
   final Future<StorageLocationRef?> Function()? onPickLocation;
   final Future<StorageLocationRef> Function(StorageLocationRef location)?
   onValidateLocation;
-  final FutureOr<void> Function(StorageLocationRef location)? onRememberDefault;
+  final FutureOr<void> Function(StorageLocationRef location)?
+  onLocationConfirmed;
+  final bool requireLocationConfirmation;
   final StorageLocationRef? initialLocation;
   final Future<bool> Function(
     ServerOffer offer,
@@ -182,6 +185,7 @@ class _ReceivePageState extends State<ReceivePage> {
   String? _confirmationError;
   bool _preparingConfirmation = false;
   String? _autoPromptScheduledFor;
+  bool _locationConfirmedThisPage = false;
 
   @override
   void initState() {
@@ -635,26 +639,46 @@ class _ReceivePageState extends State<ReceivePage> {
         setState(() => _confirmationError = '对方没有提供可接收的文件。');
         return;
       }
-      final ReceiveConfirmation? confirmation =
-          await showDialog<ReceiveConfirmation>(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) => _ReceiveConfirmationDialog(
-              files: files,
-              initialLocation: initialLocation,
-              onPickLocation: widget.onPickLocation,
-              onValidateLocation: widget.onValidateLocation,
-            ),
-          );
+      final bool requireConfirmation =
+          widget.requireLocationConfirmation && !_locationConfirmedThisPage;
+      final ReceiveConfirmation? confirmation;
+      if (requireConfirmation) {
+        confirmation = await showDialog<ReceiveConfirmation>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) => _ReceiveConfirmationDialog(
+            files: files,
+            initialLocation: initialLocation,
+            onPickLocation: widget.onPickLocation,
+            onValidateLocation: widget.onValidateLocation,
+          ),
+        );
+      } else {
+        final StorageLocationRef validated =
+            await widget.onValidateLocation?.call(initialLocation) ??
+            initialLocation;
+        if (validated.permissionState == StoragePermissionState.denied ||
+            validated.permissionState == StoragePermissionState.unavailable) {
+          setState(() {
+            _confirmationError = '默认保存位置不可用，请重新选择保存位置。';
+          });
+          return;
+        }
+        confirmation = ReceiveConfirmation(
+          location: validated,
+          outputNames: const <String, String>{},
+        );
+      }
       if (!mounted || confirmation == null) return;
+      if (requireConfirmation) {
+        _locationConfirmedThisPage = true;
+        await widget.onLocationConfirmed?.call(confirmation.location);
+      }
       final bool mayAccept =
           beforeAccept == null || await beforeAccept(confirmation);
       if (!mayAccept || !mounted) return;
       _selectedLocation = confirmation.location;
       _location.text = confirmation.location.displayName;
-      if (confirmation.rememberAsDefault) {
-        await widget.onRememberDefault?.call(confirmation.location);
-      }
       await accept(confirmation);
     } on Object {
       if (mounted) {
@@ -862,7 +886,6 @@ class _ReceiveConfirmationDialogState
   late final Map<String, TextEditingController> _names;
   final Map<String, String> _nameErrors = <String, String>{};
   late StorageLocationRef _location;
-  bool _rememberAsDefault = false;
   bool _validating = false;
   String? _locationError;
 
@@ -943,13 +966,9 @@ class _ReceiveConfirmationDialogState
         });
         return;
       }
-      Navigator.of(context).pop(
-        ReceiveConfirmation(
-          location: validated,
-          outputNames: outputNames,
-          rememberAsDefault: _rememberAsDefault,
-        ),
-      );
+      Navigator.of(
+        context,
+      ).pop(ReceiveConfirmation(location: validated, outputNames: outputNames));
     } on Object {
       if (mounted) {
         setState(() {
@@ -1029,15 +1048,9 @@ class _ReceiveConfirmationDialogState
                   const SizedBox(height: NearSendSpacing.sm),
               ],
               const SizedBox(height: NearSendSpacing.sm),
-              CheckboxListTile(
-                value: _rememberAsDefault,
-                onChanged: _validating
-                    ? null
-                    : (bool? value) =>
-                          setState(() => _rememberAsDefault = value ?? false),
-                title: const Text('设为默认接收位置'),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
+              Text(
+                '确认后，此位置将设为默认；本次打开期间后续接收将自动使用该位置。',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
