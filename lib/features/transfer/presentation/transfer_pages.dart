@@ -92,6 +92,8 @@ class ConnectionPage extends StatefulWidget {
     required this.payload,
     this.onConnect,
     this.onConnectBootstrap,
+    this.onScannedConnect,
+    this.onScannedConnectBootstrap,
     this.enableCameraScanner = false,
     this.qrImageGateway,
     this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
@@ -126,6 +128,9 @@ class ConnectionPage extends StatefulWidget {
   /// absent control with a stated reason is the honest version.
   final void Function(PairingPayload payload)? onConnect;
   final void Function(BootstrapPairingPayload payload)? onConnectBootstrap;
+  final Future<bool> Function(PairingPayload payload)? onScannedConnect;
+  final Future<bool> Function(BootstrapPairingPayload payload)?
+  onScannedConnectBootstrap;
   final bool enableCameraScanner;
   final QrImageGateway? qrImageGateway;
   final PlatformPermissionGateway permissionGateway;
@@ -204,13 +209,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
   bool _checkingCameraPermission = false;
   String? _cameraPermissionError;
   bool _autoConnectScheduled = false;
+  bool _scanConnectionInProgress = false;
 
   @override
   void didUpdateWidget(covariant ConnectionPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.startWithCamera ||
         oldWidget.connection.phase != ConnectionAttemptPhase.connecting ||
-        !widget.connection.hasFailed) {
+        !widget.connection.hasFailed ||
+        widget.connectImmediately) {
       return;
     }
     final String reason = widget.connection.reason ?? '连接对方设备失败，请检查对方状态后重试。';
@@ -346,6 +353,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   void _connectImported() {
     final BootstrapPairingPayload? bootstrap = _import.bootstrap;
+    if (widget.connectImmediately) {
+      unawaited(_connectScanned(bootstrap));
+      return;
+    }
     if (bootstrap != null) {
       widget.onConnectBootstrap?.call(bootstrap);
     } else {
@@ -353,8 +364,75 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
   }
 
+  Future<void> _connectScanned(BootstrapPairingPayload? bootstrap) async {
+    if (_scanConnectionInProgress) return;
+    final Future<bool> Function()? connect = bootstrap == null
+        ? (widget.onScannedConnect == null
+              ? null
+              : () => widget.onScannedConnect!(_import.payload!))
+        : (widget.onScannedConnectBootstrap == null
+              ? null
+              : () => widget.onScannedConnectBootstrap!(bootstrap));
+    if (connect == null) {
+      _reportScanFailure(ConnectionPage.noConnectorNote);
+      return;
+    }
+
+    _scanConnectionInProgress = true;
+    bool connected = false;
+    Object? failure;
+    final NavigatorState navigator = Navigator.of(context);
+    final Future<void> dialogClosed = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) => const AlertDialog(
+        title: Text('正在连接中'),
+        content: Row(
+          children: <Widget>[
+            SizedBox.square(
+              dimension: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            SizedBox(width: 16),
+            Expanded(child: Text('正在安全校验并连接对方设备…')),
+          ],
+        ),
+      ),
+    );
+    try {
+      connected = await connect();
+      if (!connected) {
+        failure = widget.connection.reason ?? '连接失败，请检查对方设备和本地网络后重试。';
+      }
+    } on Object catch (error) {
+      failure = error;
+    }
+    if (!mounted) return;
+
+    navigator.pop();
+    await dialogClosed;
+    if (!mounted) return;
+    if (connected) {
+      navigator.pop<Object?>();
+      return;
+    }
+
+    final String reason = failure?.toString() ?? '连接失败，请重试。';
+    final String? fingerprint = widget.connection.pinMismatched
+        ? widget.connection.peerFingerprint
+        : null;
+    navigator.pop<Object?>(
+      PairingScanFailure(
+        fingerprint == null ? reason : '$reason\n检测到的证书指纹：$fingerprint',
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.connectImmediately) {
+      return const Scaffold(body: SizedBox.expand());
+    }
     final NearSendColors palette = NearSendColors.of(
       Theme.of(context).brightness,
     );

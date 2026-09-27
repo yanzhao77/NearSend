@@ -90,6 +90,18 @@ class TaskDetail {
       files.where((TaskFileOverview file) => file.isFailed).length;
 }
 
+class SavedIncomingFileOverview {
+  const SavedIncomingFileOverview({
+    required this.fileName,
+    required this.sizeBytes,
+    required this.destination,
+  });
+
+  final String fileName;
+  final int sizeBytes;
+  final String destination;
+}
+
 enum TaskCatalogFilter { all, active, paused, recoverable, completed, failed }
 
 /// Read model for task pages. It has no write path and never derives progress from byte counters
@@ -103,6 +115,52 @@ class TaskCatalogController extends ChangeNotifier {
   Object? get error => _error;
   bool get hasRecoverableTasks =>
       _tasks.any((TaskOverview task) => task.isRecoverable);
+
+  List<SavedIncomingFileOverview> get savedIncomingFiles {
+    final NearSendDatabase? database = _database;
+    if (database == null) return const <SavedIncomingFileOverview>[];
+    final rows = database.db.select(
+      '''
+SELECT f.relative_path, f.size_bytes, e.target_uri, e.saved_path,
+       o.final_target_ref
+FROM tasks t
+JOIN files f ON f.task_id = t.task_id
+JOIN exports e ON e.file_id = f.file_id
+LEFT JOIN ${StorageSchema.receiveOutputPlansTable} o
+  ON o.file_id = f.file_id AND o.transfer_id = f.task_id
+WHERE t.direction = ? AND f.export_state = 'completed' AND e.result = 'saved'
+ORDER BY t.updated_at DESC, f.rowid DESC;
+''',
+      <Object?>[TransferDirection.clientToServer.wireValue],
+    );
+    return List<SavedIncomingFileOverview>.unmodifiable(
+      <SavedIncomingFileOverview>[
+        for (final row in rows) _savedFileFromRow(row),
+      ],
+    );
+  }
+
+  static SavedIncomingFileOverview _savedFileFromRow(dynamic row) {
+    final String relativePath = row['relative_path'] as String;
+    final String savedPath = row['saved_path'] as String? ?? relativePath;
+    final String? targetUri = row['target_uri'] as String?;
+    return SavedIncomingFileOverview(
+      fileName: savedPath,
+      sizeBytes: row['size_bytes'] as int,
+      destination:
+          row['final_target_ref'] as String? ??
+          _joinLocation(targetUri, savedPath),
+    );
+  }
+
+  static String _joinLocation(String? targetUri, String savedPath) {
+    if (targetUri == null || targetUri.isEmpty) return savedPath;
+    final String separator = targetUri.contains('\\') ? '\\' : '/';
+    final String trimmed = targetUri.endsWith('/') || targetUri.endsWith('\\')
+        ? targetUri.substring(0, targetUri.length - 1)
+        : targetUri;
+    return '$trimmed$separator$savedPath';
+  }
 
   void attach(NearSendDatabase? database) {
     _database = database;

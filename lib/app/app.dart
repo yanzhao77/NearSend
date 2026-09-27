@@ -139,6 +139,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   late final TaskCatalogController _tasks = TaskCatalogController();
   late final SpaceOverviewController _space = SpaceOverviewController(
     gateway: widget.storageGateway,
+    tasks: _tasks,
   );
   late final SettingsController _settings = SettingsController();
   late final RadarController _radar = RadarController();
@@ -681,7 +682,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     return true;
   }
 
-  Future<void> connectBootstrap(BootstrapPairingPayload payload) async {
+  Future<bool> connectBootstrap(BootstrapPairingPayload payload) async {
     JoinedWifiLease? joined;
     final BootstrapWifiOffer? wifi = payload.wifi;
     try {
@@ -699,13 +700,16 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
         );
         _joinedWifi = joined;
       }
-      if (!await connect(payload.pairing) && joined != null) {
+      final bool connected = await connect(payload.pairing);
+      if (!connected && joined != null) {
         await _releaseJoinedWifi(joined);
       }
+      return connected;
     } on Object {
       if (joined != null) {
         await _releaseJoinedWifi(joined);
       }
+      return false;
     }
   }
 
@@ -956,6 +960,17 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                             displayName: selectedDevice?.name,
                           ),
                     onConnectBootstrap: widget.peer == null
+                        ? null
+                        : (payload) {
+                            unawaited(connectBootstrap(payload));
+                          },
+                    onScannedConnect: widget.peer == null
+                        ? null
+                        : (payload) => connect(
+                            payload,
+                            displayName: selectedDevice?.name,
+                          ),
+                    onScannedConnectBootstrap: widget.peer == null
                         ? null
                         : connectBootstrap,
                     enableCameraScanner:

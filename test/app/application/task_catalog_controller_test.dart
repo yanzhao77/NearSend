@@ -96,6 +96,22 @@ VALUES ('file-failed', 1, 4, 4, 'b', 'missing', NULL);
 INSERT INTO exports (file_id, target_uri, result, recorded_at)
 VALUES ('file-failed', 'opaque://documents', 'failed', 4);
 ''');
+    database.db.execute('''
+INSERT INTO tasks (
+  task_id, role, direction, state, protocol_major, protocol_minor,
+  lease_epoch, manifest_digest, created_at, updated_at
+) VALUES ('task-outgoing', 'sender', 'server_to_client', 'completed', 1, 0, 1, NULL, 1, 5);
+''');
+    database.db.execute('''
+INSERT INTO files (
+  file_id, task_id, relative_path, size_bytes, chunk_size_bytes, chunk_count,
+  file_sha256, chunk_manifest_digest, export_state, created_at
+) VALUES ('file-outgoing', 'task-outgoing', 'sent.txt', 4, 4, 1, 'sha', 'manifest', 'completed', 1);
+''');
+    database.db.execute('''
+INSERT INTO exports (file_id, target_uri, result, recorded_at, saved_path)
+VALUES ('file-outgoing', 'opaque://documents', 'saved', 5, 'sent.txt');
+''');
 
     final TaskCatalogController controller = TaskCatalogController()
       ..attach(database);
@@ -108,5 +124,12 @@ VALUES ('file-failed', 'opaque://documents', 'failed', 4);
     expect(detail.files.last.isFailed, isTrue);
     expect(detail.files.last.committedBytes, 4);
     expect(detail.failedFileCount, 1);
+    expect(controller.savedIncomingFiles, hasLength(1));
+    expect(controller.savedIncomingFiles.single.fileName, 'saved.txt');
+    expect(controller.savedIncomingFiles.single.sizeBytes, 4);
+    expect(
+      controller.savedIncomingFiles.single.destination,
+      'content://documents/saved-file',
+    );
   });
 }

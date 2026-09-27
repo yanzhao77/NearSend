@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -319,6 +320,7 @@ void main() {
       tester,
     ) async {
       PairingPayload? connectedPayload;
+      final Completer<bool> connection = Completer<bool>();
       final PairingPayload payload = PairingPayload.parse(
         '{"kind":"lft-pair","protocolMajor":1,"protocolMinor":0,'
         '"serverFingerprint":"abababababababababababababababababababababababababababababababab",'
@@ -329,22 +331,59 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: buildNearSendTheme(Brightness.light),
-          home: ConnectionPage(
-            payload: null,
-            connectImmediately: true,
-            onConnect: (PairingPayload value) => connectedPayload = value,
+          home: Builder(
+            builder: (BuildContext context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ConnectionPage(
+                        payload: null,
+                        enableCameraScanner: true,
+                        startWithCamera: true,
+                        connectImmediately: true,
+                        permissionGateway: _PermissionGateway(
+                          checked: PlatformPermissionState.granted,
+                        ),
+                        cameraScannerPageBuilder:
+                            (BuildContext scannerContext) => Scaffold(
+                              body: TextButton(
+                                onPressed: () =>
+                                    Navigator.of(scannerContext)
+                                        .pop(jsonEncode(payload.toJson())),
+                                child: const Text('模拟扫码'),
+                              ),
+                            ),
+                        onScannedConnect: (PairingPayload value) {
+                          connectedPayload = value;
+                          return connection.future;
+                        },
+                      ),
+                    ),
+                  ),
+                  child: const Text('home'),
+                ),
+              ),
+            ),
           ),
         ),
       );
 
-      await tester.enterText(
-        find.byType(TextField),
-        jsonEncode(payload.toJson()),
-      );
+      await tester.tap(find.text('home'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('模拟扫码'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
 
       expect(connectedPayload?.encode(), payload.encode());
+      expect(find.text('正在连接中'), findsOneWidget);
+      expect(find.text('连接信息'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
       expect(find.widgetWithText(FilledButton, '连接'), findsNothing);
+
+      connection.complete(true);
+      await tester.pumpAndSettle();
+      expect(find.text('home'), findsOneWidget);
     });
 
     testWidgets('shows the pin, the candidates and the session', (
