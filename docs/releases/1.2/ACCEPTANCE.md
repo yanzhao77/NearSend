@@ -5,6 +5,20 @@
 状态说明：`通过` 必须有命令或实机证据；`未执行` 表示没有证据；`受阻` 必须写明缺失条件。
 自动化测试不能替代实机网络、权限和生命周期验证。
 
+## 2026-09-27 v0.1.11 Android↔Windows 实机传输与断网复测
+
+设备：Xiaomi 25102RKBEC / Android 17（API 37，Android 包 versionCode 18、versionName 0.1.11）；Windows 运行 v0.1.11 release 包。两端当时接入同一 5 GHz 局域网。二维码内容、令牌、指纹和用户文件内容均未记录。
+
+| 检查 | 状态 | 证据或阻塞 |
+|---|---|---|
+| Android→Windows 文件落盘 | 通过（单文件） | Android 发送用户指定的 `code.md`，Windows 在 `build/acceptance-v0.1.10/windows-received/code.md` 收到 6,683 字节；Android 源文件与 Windows 目标文件 SHA-256 均为 `0E3A56CC830B72723771C45C1C407C4AF68A263D7C7676702535CF538AEC3701`。未读取文件内容。Android 发送页在 Windows 已报告接收成功后仍显示“已送达，等待对方校验并保存”，双方终态显示不一致，需另行修复/复核 |
+| Windows→Android 1 MiB 文件 | 未通过 | Windows 连接 Android 本机二维码后发送验收文件，Windows 显示“等待对方接受”；Android 未弹出接收提示，手动打开“接收文件”页仍看不到该 offer。随后取消。没有接收文件或目标端哈希证据 |
+| Android 128 MiB 传输准备 | 受阻 | Android 源文件 `reconnect-128m.bin` 为 134,217,728 字节，源 SHA-256 与 Windows 合成样本相同（`7FBCF33839654A2A75AE65BA7913E301726013996AA4B6A04D9968E1F6713B09`）。发送操作后 Android 弹出一笔含 `code.md` 与 `reconnect-128m.bin` 两项、合计 128 MiB 的接收确认，但 Windows 没有对应发送任务；该 offer 已拒绝，Android 发送页显示“传输未能完成：连接可能已中断”。方向/会话不明，不计作传输通过 |
+| 断网与恢复 | 未执行 | 尚未进行人为 Wi-Fi 中断/恢复，也没有断点续传、重启后恢复或目标文件哈希证据；不把上面的自然连接错误当作断网恢复测试 |
+| 二维码双向连接 | 部分通过 | Android 扫描 Windows 二维码后已连接；Windows 从临时导入的 Android 二维码图片连接成功，Android 显示“设备已连接”。导入用截图在连接后从专用临时目录删除。连接成功本身不代表双向文件传输成功 |
+
+结论：当前仅证明 Android→Windows 一笔文件内容逐字节一致；Windows→Android 和断网恢复仍未验收。下一步需先查清 Android 弹出接收确认时为何没有对应 Windows 发送任务/反向 offer 未进入接收页，再进行双向单文件哈希验证，最后执行可观测的 Wi-Fi 中断与恢复。**不得将配对成功、发送端等待状态或方向不明的 offer 作为收发通过证据。**
+
 ## 2026-09-27 Android 扫码与 Android→Windows 接收请求复测
 
 | 检查 | 状态 | 证据或阻塞 |
