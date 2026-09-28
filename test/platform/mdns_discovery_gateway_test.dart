@@ -163,6 +163,27 @@ void main() {
     },
   );
 
+  test('gateway retains a discovery received before it subscribes', () async {
+    final _FakeAdapter adapter = _FakeAdapter();
+    adapter.session.add(_upsert(remoteId));
+    final MdnsDiscoveryGateway gateway = MdnsDiscoveryGateway(adapter: adapter);
+    final List<MdnsDiscoveryEvent> events = <MdnsDiscoveryEvent>[];
+    final StreamSubscription<MdnsDiscoveryEvent> subscription = gateway.events
+        .listen(events.add);
+
+    await gateway.start(MdnsPublication(instanceId: localId, port: 8443));
+    await pumpEventQueue();
+
+    expect(events.whereType<MdnsPeerUpserted>(), hasLength(1));
+    expect(
+      events.whereType<MdnsPeerUpserted>().single.peer.instanceId,
+      remoteId,
+    );
+
+    await gateway.stop();
+    await subscription.cancel();
+  });
+
   test('concurrent start calls share one platform session', () async {
     final _FakeAdapter adapter = _FakeAdapter(delayStart: true);
     final MdnsDiscoveryGateway gateway = MdnsDiscoveryGateway(adapter: adapter);
@@ -179,6 +200,27 @@ void main() {
     expect(adapter.starts, 1);
     await gateway.stop();
   });
+
+  test(
+    'stop does not wait for pending platform start and disposes it later',
+    () async {
+      final _FakeAdapter adapter = _FakeAdapter(delayStart: true);
+      final MdnsDiscoveryGateway gateway = MdnsDiscoveryGateway(
+        adapter: adapter,
+      );
+      final Future<void> starting = gateway.start(
+        MdnsPublication(instanceId: localId, port: 8443),
+      );
+
+      await gateway.stop().timeout(const Duration(milliseconds: 100));
+      expect(gateway.isRunning, isFalse);
+
+      adapter.completeStart();
+      await starting;
+      expect(adapter.session.stops, 1);
+      expect(gateway.isRunning, isFalse);
+    },
+  );
 }
 
 MdnsPlatformUpsert _upsert(String instanceId) => MdnsPlatformUpsert(
@@ -215,7 +257,7 @@ class _FakeAdapter implements MdnsPlatformAdapter {
 
 class _FakeSession implements MdnsPlatformSession {
   final StreamController<MdnsPlatformEvent> _events =
-      StreamController<MdnsPlatformEvent>.broadcast();
+      StreamController<MdnsPlatformEvent>();
   int stops = 0;
 
   @override

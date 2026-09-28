@@ -126,6 +126,7 @@ void main() {
   /// its own engine plans, and its client proposes to the host.
   SendingFlow guestFlow({
     Duration authorizationTimeout = const Duration(seconds: 20),
+    Duration completionTimeout = const Duration(seconds: 5),
   }) => SendingFlow(
     session: SendingSession(engine: guest.engine, wire: guestToHost),
     selection: FileSelectionController(gateway: null, idFactory: () => fileId),
@@ -135,6 +136,8 @@ void main() {
     peerHasPaired: () => false,
     authorizationPollInterval: const Duration(milliseconds: 25),
     authorizationTimeout: authorizationTimeout,
+    completionPollInterval: const Duration(milliseconds: 25),
+    completionTimeout: completionTimeout,
   );
 
   /// The free space the caller measured. Stated here rather than measured because this layer must
@@ -232,17 +235,25 @@ void main() {
       outputNames: const <String, String>{fileId: '服务端副本.bin'},
     );
 
+    expect(await received, isTrue);
+    expect(
+      (await guestToHost.status(transferId: transferId)).state,
+      TransferState.completed,
+    );
     expect(await pushed, isTrue);
     expect(
       sending.phase,
-      SendPhase.awaitingVerification,
+      SendPhase.savedByPeer,
       reason:
-          'the pushing side knows the bytes arrived and nothing more: verifying and saving are the '
-          'receiver\'s work, and in this direction the receiver is the other node',
+          'the sender moves past awaiting verification only after the receiver reports its '
+          'authoritative completed state',
     );
-
-    expect(await received, isTrue);
     expect(receiving.phase, ServerReceivePhase.saved);
+    expect(receiving.activeFiles, hasLength(1));
+    expect(receiving.activeFiles.single.suggestedName, '推送接收.bin');
+    expect(receiving.currentFileName, '推送接收.bin');
+    expect(receiving.progress!.transferredBytes, payload.length);
+    expect(receiving.progress!.totalBytes, payload.length);
     expect(receiving.savedPaths, hasLength(1));
     expect(receiving.savedFiles, hasLength(1));
     expect(

@@ -23,6 +23,7 @@ import 'dart:typed_data';
 
 import 'package:nearsend/core/network/control_message.dart';
 import 'package:nearsend/core/network/https_control_client.dart';
+import 'package:nearsend/core/network/transfer_lifecycle_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/protocol/api_routes.dart';
 import 'package:nearsend/core/protocol/chunk_manifest.dart';
@@ -60,9 +61,13 @@ class TransferClient {
 
   String? _sessionToken;
   String? _taskAccessToken;
+  String? _peerDeviceName;
+  String? _peerPlatform;
 
   String? get sessionToken => _sessionToken;
   String? get taskAccessToken => _taskAccessToken;
+  String? get peerDeviceName => _peerDeviceName;
+  String? get peerPlatform => _peerPlatform;
 
   /// Pairs using §3's payload, keeping the session token.
   ///
@@ -98,7 +103,39 @@ class TransferClient {
       );
     }
     _sessionToken = token;
+    _peerDeviceName = _parseDeviceNameHeader(
+      response.headers['x-nearsend-device-name'],
+    );
+    _peerPlatform = _parsePlatformHeader(
+      response.headers['x-nearsend-platform'],
+    );
   }
+
+  static String? _parseDeviceNameHeader(String? encoded) {
+    if (encoded == null || encoded.isEmpty || encoded.contains('=')) {
+      return null;
+    }
+    try {
+      final List<int> bytes = base64Url.decode(base64Url.normalize(encoded));
+      if (base64Url.encode(bytes).replaceAll('=', '') != encoded ||
+          bytes.length > 64) {
+        return null;
+      }
+      final String name = utf8.decode(bytes).trim();
+      if (name.isEmpty ||
+          name.runes.any((int rune) => rune < 0x20 || rune == 0x7f)) {
+        return null;
+      }
+      return name;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String? _parsePlatformHeader(String? value) =>
+      value != null && RegExp(r'^[a-z0-9][a-z0-9._-]{0,23}$').hasMatch(value)
+      ? value
+      : null;
 
   /// `POST /v1/transfers` - a client may only propose `client_to_server` (§7).
   Future<String> createTransfer({
@@ -407,6 +444,20 @@ class TransferClient {
       },
     );
     _assertSuccess(response, 'complete the file');
+  }
+
+  /// Reads the peer's authoritative task state while this node is the sender (§9).
+  ///
+  /// The task access token is scoped to this accepted transfer. In particular, a sender only
+  /// treats `COMPLETED` as success after the receiver reports it here; all chunks being
+  /// acknowledged is not evidence that verification or export finished.
+  Future<TransferStatusBody> status({required String transferId}) async {
+    final ReceivedControlResponse response = await _send(
+      method: HttpMethod.get,
+      target: '/v1/transfers/$transferId/status',
+    );
+    _assertSuccess(response, 'read transfer status');
+    return TransferStatusBody.parse(response.decodeJsonBody());
   }
 
   void close() => _client.close();

@@ -43,6 +43,37 @@ VALUES ('file-1', 2, 8, 4, 'c', 'committed', 2);
     expect(controller.tasks.single.status, TaskOverviewStatus.active);
   });
 
+  test(
+    'clearing task display hides current rows without deleting task data',
+    () {
+      final NearSendDatabase database = NearSendDatabase.open(
+        path: NearSendDatabase.inMemoryPath,
+      );
+      addTearDown(database.close);
+      database.db.execute('''
+INSERT INTO tasks (
+  task_id, role, direction, state, protocol_major, protocol_minor,
+  lease_epoch, manifest_digest, created_at, updated_at
+) VALUES ('task-visible', 'receiver', 'client_to_server', 'completed', 1, 0, 1, NULL, 1, 2);
+''');
+      final TaskCatalogController controller = TaskCatalogController()
+        ..attach(database);
+
+      controller.clearDisplayedTasks();
+
+      expect(
+        controller.tasks,
+        hasLength(1),
+        reason: 'the database record is retained',
+      );
+      expect(controller.filtered(TaskCatalogFilter.all), isEmpty);
+
+      controller.refresh();
+      expect(controller.filtered(TaskCatalogFilter.all), isEmpty);
+      expect(database.db.select('SELECT task_id FROM tasks'), hasLength(1));
+    },
+  );
+
   test('task details read file states and export records from SQLite', () {
     final NearSendDatabase database = NearSendDatabase.open(
       path: NearSendDatabase.inMemoryPath,

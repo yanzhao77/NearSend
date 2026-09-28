@@ -26,6 +26,8 @@ Dart >=3.9.2，与项目固定 Dart 3.13.4 / Flutter 3.47.5 兼容。仓库未�
   Android 12+ 使用 scan/connect/advertise，旧版本按实际系统使用 Bluetooth 和位置权限。
 - 停止顺序为停止扫描、停止广告、断开 central 连接、移除 GATT service、取消事件订阅。单个资源
   释放失败不跳过其余清理。
+- 平台会话在原生扫描启动期间可能已经收到首批广告；向上层暴露的会话事件流必须在上层订阅前
+  缓冲事件，不能用无缓存 broadcast stream 丢弃启动窗口内的发现结果。
 - Windows peripheral 不提供连接状态流，使用 characteristic 订阅状态管理反向通知；Android 同时
   监听真实连接状态。该差异限制在平台适配层。
 

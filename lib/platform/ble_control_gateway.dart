@@ -225,6 +225,8 @@ class BleControlGateway {
   BlePlatformSession? _session;
   StreamSubscription<BlePlatformEvent>? _subscription;
   Future<void>? _startAttempt;
+  int _generation = 0;
+  int? _startAttemptGeneration;
   BlePublication? _publication;
 
   Stream<BleControlEvent> get events => _events.stream;
@@ -237,14 +239,20 @@ class BleControlGateway {
     if (_session != null) return Future<void>.value();
     final Future<void>? pending = _startAttempt;
     if (pending != null) return pending;
-    final Future<void> attempt = _start(publication);
+    final int generation = _generation;
+    _startAttemptGeneration = generation;
+    final Future<void> attempt = _start(publication, generation);
     _startAttempt = attempt;
     return attempt;
   }
 
-  Future<void> _start(BlePublication publication) async {
+  Future<void> _start(BlePublication publication, int generation) async {
     try {
       final BlePlatformSession session = await _adapter.start(publication);
+      if (generation != _generation) {
+        await session.stop();
+        return;
+      }
       _publication = publication;
       _session = session;
       _subscription = session.events.listen(
@@ -253,7 +261,10 @@ class BleControlGateway {
             _events.add(const BleControlIssue('ble.eventStreamFailed')),
       );
     } finally {
-      _startAttempt = null;
+      if (_startAttemptGeneration == generation) {
+        _startAttempt = null;
+        _startAttemptGeneration = null;
+      }
     }
   }
 
@@ -368,8 +379,12 @@ class BleControlGateway {
   }
 
   Future<void> stop() async {
-    final Future<void>? pending = _startAttempt;
-    if (pending != null) await pending;
+    // A native authorization/advertising call can remain pending indefinitely.
+    // Invalidate it without awaiting; if it later returns, _start disposes the
+    // stale platform session instead of resurrecting discovery after stop.
+    _generation++;
+    _startAttempt = null;
+    _startAttemptGeneration = null;
     final BlePlatformSession? session = _session;
     _session = null;
     _publication = null;
@@ -454,8 +469,10 @@ class _BluetoothLowEnergyPlatformSession implements BlePlatformSession {
   final CentralManager _centralManager;
   final PeripheralManager _peripheralManager;
   final BlePublication _publication;
+  // Scanning starts before the adapter returns this session. Buffer any scan
+  // result delivered during startup until BleControlGateway attaches a listener.
   final StreamController<BlePlatformEvent> _events =
-      StreamController<BlePlatformEvent>.broadcast();
+      StreamController<BlePlatformEvent>();
   final List<StreamSubscription<Object?>> _subscriptions =
       <StreamSubscription<Object?>>[];
   final Map<String, Peripheral> _discovered = <String, Peripheral>{};
@@ -775,7 +792,16 @@ class _BluetoothLowEnergyPlatformSession implements BlePlatformSession {
     _connectedPeripherals.clear();
     _subscribedCentrals.clear();
     _connectedPeerIds.clear();
-    await _events.close();
+    final Future<void> closingEvents = _events.close();
+    // A start invalidated while native scan startup is still pending has no
+    // gateway listener attached to this session. Single-subscription stream
+    // close futures wait for a listener in that case, even though native
+    // resources have already been released; do not keep the stale start alive.
+    if (_events.hasListener) {
+      await closingEvents;
+    } else {
+      unawaited(closingEvents);
+    }
   }
 
   static String _peerId(BluetoothLowEnergyPeer peer) => peer.uuid.toString();

@@ -195,6 +195,14 @@ class NearSendNode {
   final TransferCreationEndpoint creationEndpoint;
   final HttpsControlServer server;
 
+  /// Updates display-only metadata advertised for future pairing sessions.
+  void updateLocalDeviceInfo({
+    required String deviceName,
+    required String platform,
+  }) {
+    pairing.updateLocalDeviceInfo(deviceName: deviceName, platform: platform);
+  }
+
   /// The pin a client must compare against: `SHA-256(leaf certificate DER)` (§2).
   String get pin => identity.pin;
 
@@ -257,6 +265,8 @@ class NearSendNode {
     required List<String> candidateAddresses,
     int port = 0,
     String commonName = 'NearSend',
+    String deviceName = 'NearSend',
+    String platform = 'unknown',
     SourceBytes Function(String sourceRef, int sizeBytes)? sourceResolver,
     ExportSink Function(LocalStagingLayout, StagingFileSink)? exportSinkFactory,
     ExportNamingPolicy exportNaming = const ExportNamingPolicy(),
@@ -314,6 +324,8 @@ class NearSendNode {
 
     final PairingService pairing = PairingService(
       serverFingerprint: identity.pin,
+      deviceName: deviceName,
+      platform: platform,
       candidates: <PairingCandidate>[
         for (final String address in candidateAddresses)
           PairingCandidate(host: address, port: port),

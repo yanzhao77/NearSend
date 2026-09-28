@@ -22,6 +22,7 @@ void main() {
     repository.write(
       const AppSettings(
         deviceName: '办公室电脑',
+        deviceNameIsCustom: true,
         defaultReceiveLocation: StorageLocationRef(
           kind: StorageLocationKind.androidDocumentTree,
           opaqueValue: 'content://provider/tree/receive',
@@ -54,12 +55,13 @@ void main() {
       [for (final row in rows) row['setting_key']],
       containsAll(<String>[
         'device_name',
+        'device_name_is_custom',
         'default_receive_location',
         'theme_preference',
         'reduce_motion',
       ]),
     );
-    expect(rows.length, 4);
+    expect(rows.length, 5);
     expect(
       database.db.select(
         "SELECT name FROM sqlite_master WHERE name LIKE '%token%' OR name LIKE '%private%';",
@@ -68,6 +70,31 @@ void main() {
       reason:
           'credentials and private keys do not belong in the settings schema',
     );
+  });
+
+  test('uses detected system name when no custom name has been saved', () {
+    final AppSettingsRepository repository = AppSettingsRepository(database);
+
+    final AppSettings settings = repository.read(
+      defaultDeviceName: 'LAPTOP-123',
+    );
+
+    expect(settings.deviceName, 'LAPTOP-123');
+    expect(settings.deviceNameIsCustom, isFalse);
+  });
+
+  test('replaces the legacy NearSend placeholder with the detected name', () {
+    database.db.execute(
+      'INSERT INTO ${StorageSchema.appSettingsTable} '
+      '(setting_key, setting_value, updated_at) VALUES (?, ?, ?);',
+      <Object?>['device_name', 'NearSend', 1],
+    );
+
+    final AppSettings settings = AppSettingsRepository(database)
+        .read(defaultDeviceName: 'DESKTOP-123');
+
+    expect(settings.deviceName, 'DESKTOP-123');
+    expect(settings.deviceNameIsCustom, isFalse);
   });
 
   test('clearing the default location removes the stored value', () {

@@ -38,6 +38,8 @@ class NodeRuntime {
     required this.directory,
     this.port = 0,
     this.commonName = 'NearSend',
+    this.deviceName = 'NearSend',
+    this.platform = 'unknown',
     this.gateway,
     this.candidateAddresses,
     this.identityProvider = const EphemeralInstallationIdentityProvider(),
@@ -53,6 +55,8 @@ class NodeRuntime {
   final int port;
 
   final String commonName;
+  String deviceName;
+  String platform;
 
   /// The platform file gateway, when this platform's files are documents rather than paths.
   final AndroidFileGateway? gateway;
@@ -75,6 +79,15 @@ class NodeRuntime {
   bool get hasPersistentIdentity => identityProvider.isPersistent;
 
   InstallationIdentity? get identity => _identity;
+
+  void setLocalDeviceInfo({
+    required String deviceName,
+    required String platform,
+  }) {
+    this.deviceName = deviceName;
+    this.platform = platform;
+    _node?.updateLocalDeviceInfo(deviceName: deviceName, platform: platform);
+  }
 
   /// Opens and starts the node, and issues the first pairing payload.
   ///
@@ -112,6 +125,8 @@ class NodeRuntime {
       candidateAddresses: candidates,
       port: port,
       commonName: commonName,
+      deviceName: deviceName,
+      platform: platform,
       sourceResolver: _resolverFor(gateway),
       exportSinkFactory: gateway == null
           ? null

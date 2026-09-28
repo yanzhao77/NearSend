@@ -13,6 +13,7 @@ import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_identity_store.dart';
 import 'package:nearsend/platform/platform_file_actions.dart';
+import 'package:nearsend/platform/device_info_gateway.dart';
 
 /// Starts the application, with this device's node behind it.
 ///
@@ -53,6 +54,7 @@ Future<void> main() async {
         discovery: MdnsDiscoveryGateway(),
       ),
       peer: PeerSession(),
+      deviceInfoGateway: const MethodChannelDeviceInfoGateway(),
       storageGateway: storageGateway,
       bleGateway: Platform.isAndroid || Platform.isWindows
           ? BleControlGateway()

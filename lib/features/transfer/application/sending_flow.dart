@@ -8,6 +8,7 @@ import 'package:nearsend/core/protocol/protocol_limits.dart';
 import 'package:nearsend/core/protocol/relative_path.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
 import 'package:nearsend/core/protocol/transfer_state.dart';
+import 'package:nearsend/core/network/transfer_lifecycle_endpoint.dart';
 import 'package:nearsend/core/security/pairing_service.dart';
 import 'package:nearsend/core/storage/receiver_mirror_repository.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
@@ -54,6 +55,8 @@ class SendingFlow extends ChangeNotifier {
     this.peerFetchTimeout = const Duration(seconds: 120),
     this.authorizationPollInterval = const Duration(milliseconds: 750),
     this.authorizationTimeout = const Duration(seconds: 120),
+    this.completionPollInterval = const Duration(seconds: 1),
+    this.completionTimeout = const Duration(minutes: 10),
     String Function()? transferIdFactory,
   }) : _transferIdFactory = transferIdFactory ?? randomUuidV4;
 
@@ -100,6 +103,13 @@ class SendingFlow extends ChangeNotifier {
 
   /// How long the sender waits for that answer before giving up.
   final Duration authorizationTimeout;
+
+  /// How often the sender asks whether the receiver finished verifying and saving.
+  final Duration completionPollInterval;
+
+  /// How long this send call waits for the receiver's final state before leaving the screen in
+  /// its honest “awaiting verification” state. Timing out does not mark the transfer complete.
+  final Duration completionTimeout;
 
   final String Function() _transferIdFactory;
 
@@ -330,7 +340,47 @@ class SendingFlow extends ChangeNotifier {
     }
 
     _set(SendPhase.awaitingVerification);
+    await _awaitPeerCompletion(plan);
     return true;
+  }
+
+  /// Waits for the receiver's task state, rather than treating delivery of the last chunk as
+  /// completion. Status is authenticated with the task token granted for this accepted transfer.
+  Future<void> _awaitPeerCompletion(OutgoingPlan plan) async {
+    final Stopwatch waited = Stopwatch()..start();
+    while (waited.elapsed < completionTimeout) {
+      try {
+        final TransferStatusBody status = await session.wire.status(
+          transferId: plan.transferId,
+        );
+        if (status.transferId != plan.transferId ||
+            status.manifestDigest != plan.manifestDigest ||
+            status.authority != StatusAuthority.receiver) {
+          throw SendingRefused('对方返回的传输状态与本次文件不一致，无法确认保存结果。');
+        }
+        if (status.state == TransferState.completed) {
+          _flow?.applyCompleted(atMillis: now());
+          _set(SendPhase.savedByPeer);
+          return;
+        }
+        if (status.state == TransferState.cancelled ||
+            status.state == TransferState.failed ||
+            status.state == TransferState.partiallyCompleted) {
+          throw SendingRefused('对方没有完成这次传输（${status.state.wireName}）。');
+        }
+        if (status.state == TransferState.verifying ||
+            status.state == TransferState.exporting) {
+          _flow?.applyTaskState(status.state, atMillis: now());
+          _notify();
+        }
+      } on SendingRefused {
+        rethrow;
+      } on Object {
+        // A temporary status-query failure is not evidence of either success or failure. Keep
+        // waiting and retry within the bound; on expiry the phase remains awaitingVerification.
+      }
+      await Future<void>.delayed(completionPollInterval);
+    }
   }
 
   /// Asks whether the peer has accepted, until it has or the bound runs out.

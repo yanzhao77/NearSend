@@ -60,6 +60,8 @@ void main() {
     host = await NearSendNode.open(
       directory: '${root.path}${Platform.pathSeparator}host',
       candidateAddresses: const <String>['127.0.0.1'],
+      deviceName: 'Office PC',
+      platform: 'windows',
       sourceResolver: resolve,
     );
     await host.start();
@@ -77,6 +79,8 @@ void main() {
       port: host.server.boundPort,
     );
     await guestToHost.pairFrom(published, clientLabel: 'guest');
+    expect(guestToHost.peerDeviceName, 'Office PC');
+    expect(guestToHost.peerPlatform, 'windows');
   });
 
   tearDown(() async {

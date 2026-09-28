@@ -3,6 +3,8 @@ package com.nearsend.app
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.provider.OpenableColumns
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -50,6 +52,7 @@ class MainActivity : FlutterActivity() {
 
     private val channelName = "com.nearsend.app/files"
     private val identityChannelName = "com.nearsend.app/secure_identity"
+    private val deviceInfoChannelName = "com.nearsend.app/device_info"
 
     /** The single in-flight pick, so a second request cannot race the first. */
     private var pendingPick: MethodChannel.Result? = null
@@ -67,10 +70,31 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result -> handle(call, result) }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, identityChannelName)
             .setMethodCallHandler { call, result -> handleIdentity(call, result) }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, deviceInfoChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "readDeviceName" -> result.success(readDeviceName())
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             AndroidNetworkBootstrap.channelName,
         ).setMethodCallHandler { call, result -> networkBootstrap.handle(call, result) }
+    }
+
+    private fun readDeviceName(): String {
+        val configuredName = runCatching {
+            Settings.Global.getString(contentResolver, "device_name")
+        }.getOrNull()?.trim()
+        if (!configuredName.isNullOrEmpty()) return configuredName
+
+        val bluetoothName = runCatching {
+            Settings.Secure.getString(contentResolver, "bluetooth_name")
+        }.getOrNull()?.trim()
+        if (!bluetoothName.isNullOrEmpty()) return bluetoothName
+
+        return Build.MODEL?.trim()?.takeIf(String::isNotEmpty) ?: "Android设备"
     }
 
     private fun handleIdentity(call: MethodCall, result: MethodChannel.Result) {

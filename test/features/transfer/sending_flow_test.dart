@@ -112,6 +112,8 @@ void main() {
 
   SendingFlow flow({
     Duration authorizationTimeout = const Duration(seconds: 20),
+    Duration completionTimeout = const Duration(milliseconds: 100),
+    Duration completionPollInterval = const Duration(milliseconds: 10),
   }) => SendingFlow(
     session: SendingSession(engine: client.engine, wire: wire),
     selection: controller,
@@ -119,6 +121,8 @@ void main() {
     transferIdFactory: () => transferId,
     authorizationPollInterval: const Duration(milliseconds: 20),
     authorizationTimeout: authorizationTimeout,
+    completionTimeout: completionTimeout,
+    completionPollInterval: completionPollInterval,
   );
 
   /// Accepts the offer on the receiving side, which on a server that is not the addressee is a local
@@ -166,7 +170,10 @@ void main() {
       .single;
 
   test('a selected document becomes a verified file on the receiver', () async {
-    final SendingFlow subject = flow();
+    final SendingFlow subject = flow(
+      completionTimeout: const Duration(milliseconds: 50),
+      completionPollInterval: const Duration(milliseconds: 5),
+    );
     await subject.pick();
 
     expect(subject.phase, SendPhase.ready);

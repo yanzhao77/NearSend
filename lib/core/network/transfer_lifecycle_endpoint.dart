@@ -432,6 +432,18 @@ class TransferLifecycleEndpoint {
       if (cursor != null && transferId.compareTo(cursor) <= 0) {
         continue;
       }
+      final TransferDeclaration? declaration = transfers.readDeclaration(
+        transferId,
+      );
+      // `/offers` is the server's inbox for work it created for this paired
+      // client to pull. A client_to_server task is instead a push proposed by
+      // this very client; echoing it here makes the sender treat its own file
+      // as a new incoming offer. The server-side receiver handles that task
+      // from its local inbox.
+      if (declaration == null ||
+          declaration.direction != TransferDirection.serverToClient.wireValue) {
+        continue;
+      }
       final TransferState state = transfers.taskState(transferId);
       if (state != TransferState.waitingAccept &&
           state != TransferState.ready) {
@@ -443,8 +455,7 @@ class TransferLifecycleEndpoint {
         // manifest the authority for both. An offer before the seal would have to invent them.
         continue;
       }
-      if (frozen.manifestDigest !=
-          transfers.readDeclaration(transferId)?.manifestDigest) {
+      if (frozen.manifestDigest != declaration.manifestDigest) {
         continue;
       }
       page.add(

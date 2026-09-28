@@ -49,6 +49,11 @@ class ReceivePage extends StatefulWidget {
     this.refreshInterval = const Duration(seconds: 2),
     this.pushOffers = const <ServerOffer>[],
     this.pushPhase = ServerReceivePhase.waiting,
+    this.pushProgress,
+    this.pushFileName,
+    this.pushFileNumber = 0,
+    this.pushFileCount = 0,
+    this.pushActiveFiles = const <ReceiveFilePreview>[],
     this.pushSpaceVerdict,
     this.pushSpaceEstimate,
     this.pushFailureReason,
@@ -98,6 +103,11 @@ class ReceivePage extends StatefulWidget {
   /// the only thing missing is the user's answer.
   final List<ServerOffer> pushOffers;
   final ServerReceivePhase pushPhase;
+  final TransferProgress? pushProgress;
+  final String? pushFileName;
+  final int pushFileNumber;
+  final int pushFileCount;
+  final List<ReceiveFilePreview> pushActiveFiles;
 
   /// What the space plan said, when one was run for a pushed transfer.
   ///
@@ -391,14 +401,17 @@ class _ReceivePageState extends State<ReceivePage> {
               padding: const EdgeInsets.all(NearSendSpacing.lg),
               children: <Widget>[
                 Text(
-                  ReceivePage.phaseLabel(widget.phase),
+                  _isPushing
+                      ? ReceivePage.pushPhaseLabel(widget.pushPhase)
+                      : ReceivePage.phaseLabel(widget.phase),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: NearSendSpacing.md),
                 // Only while an offer could still arrive. After a failure, 对方还没有提供文件 is a
                 // different and false statement: it invites the user to keep waiting for something
                 // this screen has stopped asking about.
-                if (widget.offers.isEmpty &&
+                if (!_isPushing &&
+                    widget.offers.isEmpty &&
                     (widget.phase == ReceivePhase.idle ||
                         widget.phase == ReceivePhase.offered))
                   const NsInfoBanner(
@@ -406,6 +419,38 @@ class _ReceivePageState extends State<ReceivePage> {
                     message: ReceivePage.emptyNote,
                     tone: NsStatusTone.info,
                   ),
+                if (_isPushing && widget.pushProgress != null)
+                  _PushProgressSection(
+                    progress: widget.pushProgress!,
+                    fileName: widget.pushFileName,
+                    fileNumber: widget.pushFileNumber,
+                    fileCount: widget.pushFileCount,
+                  ),
+                if (_isPushing &&
+                    widget.pushActiveFiles.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: NearSendSpacing.sm),
+                  for (
+                    int index = 0;
+                    index < widget.pushActiveFiles.length;
+                    index++
+                  )
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        bottom: NearSendSpacing.xs,
+                      ),
+                      child: NsFileRow(
+                        fileName: widget.pushActiveFiles[index].suggestedName,
+                        sizeLabel: formatBytes(
+                          widget.pushActiveFiles[index].sizeBytes,
+                        ),
+                        statusLabel: _pushFileStatus(index),
+                        statusTone: index + 1 == widget.pushFileNumber
+                            ? NsStatusTone.info
+                            : NsStatusTone.neutral,
+                        icon: Icons.insert_drive_file_outlined,
+                      ),
+                    ),
+                ],
                 for (final OfferSummary offer in widget.offers) ...<Widget>[
                   NsFileRow(
                     fileName: '来自对方的文件',
@@ -486,35 +531,45 @@ class _ReceivePageState extends State<ReceivePage> {
                     ReceivePage.pushPhaseLabel(widget.pushPhase),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  for (final ServerOffer offer
-                      in widget.pushOffers) ...<Widget>[
-                    const SizedBox(height: NearSendSpacing.sm),
-                    NsFileRow(
-                      fileName: '来自对方的文件',
-                      sizeLabel: formatBytes(offer.totalBytes),
-                      statusLabel: '${offer.fileCount} 个文件 · 待确认',
-                      statusTone: NsStatusTone.warning,
-                      icon: Icons.move_to_inbox_outlined,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: NearSendSpacing.xs),
-                      child: Text(
-                        '${offer.fileCount} 个文件 · ${formatBytes(offer.totalBytes)}',
-                        style: Theme.of(context).textTheme.bodySmall,
+                  if (!_isPushing)
+                    for (final ServerOffer offer
+                        in widget.pushOffers) ...<Widget>[
+                      const SizedBox(height: NearSendSpacing.sm),
+                      NsFileRow(
+                        fileName: '来自对方的文件',
+                        sizeLabel: formatBytes(offer.totalBytes),
+                        statusLabel: _isPushing
+                            ? ReceivePage.pushPhaseLabel(widget.pushPhase)
+                            : '${offer.fileCount} 个文件 · 待确认',
+                        statusTone: _isPushing
+                            ? NsStatusTone.info
+                            : NsStatusTone.warning,
+                        icon: Icons.move_to_inbox_outlined,
                       ),
-                    ),
-                    ..._spaceWidgets(context, offer),
-                    if (canAcceptPush(offer))
                       Padding(
-                        padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                        child: NsPrimaryButton(
-                          onPressed: () => unawaited(_confirmPushOffer(offer)),
-                          icon: Icons.check,
-                          label: '接收并保存',
+                        padding: const EdgeInsets.only(top: NearSendSpacing.xs),
+                        child: Text(
+                          '${offer.fileCount} 个文件 · ${formatBytes(offer.totalBytes)}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
-                  ],
-                  if (widget.pushOffers.isNotEmpty && _selectedLocation == null)
+                      ..._spaceWidgets(context, offer),
+                      if (canAcceptPush(offer))
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            top: NearSendSpacing.sm,
+                          ),
+                          child: NsPrimaryButton(
+                            onPressed: () =>
+                                unawaited(_confirmPushOffer(offer)),
+                            icon: Icons.check,
+                            label: '接收并保存',
+                          ),
+                        ),
+                    ],
+                  if (!_isPushing &&
+                      widget.pushOffers.isNotEmpty &&
+                      _selectedLocation == null)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.xs),
                       child: NsInfoBanner(
@@ -855,6 +910,17 @@ class _ReceivePageState extends State<ReceivePage> {
       widget.pushPhase == ServerReceivePhase.receiving ||
       widget.pushPhase == ServerReceivePhase.verifying;
 
+  String _pushFileStatus(int index) {
+    if (index < widget.pushSavedFiles.length) return '已保存';
+    if (widget.pushPhase == ServerReceivePhase.saved) return '已保存';
+    if (widget.pushPhase == ServerReceivePhase.verifying) {
+      return index + 1 == widget.pushFileNumber ? '校验并保存中' : '等待接收';
+    }
+    if (index + 1 < widget.pushFileNumber) return '已接收';
+    if (index + 1 == widget.pushFileNumber) return '接收中';
+    return '等待接收';
+  }
+
   @override
   void reassemble() {
     super.reassemble();
@@ -1074,6 +1140,46 @@ class _ReceiveConfirmationDialogState
       ],
     );
   }
+}
+
+class _PushProgressSection extends StatelessWidget {
+  const _PushProgressSection({
+    required this.progress,
+    required this.fileName,
+    required this.fileNumber,
+    required this.fileCount,
+  });
+
+  final TransferProgress progress;
+  final String? fileName;
+  final int fileNumber;
+  final int fileCount;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      if (fileCount > 1 && fileNumber > 0)
+        Text(
+          '第 $fileNumber / $fileCount 个文件',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      const SizedBox(height: NearSendSpacing.sm),
+      if (fileName != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: NearSendSpacing.xs),
+          child: Text(fileName!, style: Theme.of(context).textTheme.bodyMedium),
+        ),
+      if (progress.fraction != null)
+        LinearProgressIndicator(value: progress.fraction)
+      else
+        const LinearProgressIndicator(),
+      const SizedBox(height: NearSendSpacing.sm),
+      _Stat(label: '已收 / 总量', value: progress.byteLabel),
+      _Stat(label: '速度', value: progress.speedLabel),
+      _Stat(label: '剩余时间', value: progress.remainingLabel),
+    ],
+  );
 }
 
 class _PhaseSection extends StatelessWidget {

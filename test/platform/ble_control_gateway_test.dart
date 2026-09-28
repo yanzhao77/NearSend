@@ -101,6 +101,32 @@ void main() {
     },
   );
 
+  test('gateway retains a BLE discovery received during startup', () async {
+    final _FakeBleAdapter adapter = _FakeBleAdapter();
+    adapter.session.add(
+      BlePlatformPeerDiscovered(
+        peerId: 'peer-a',
+        advertisement: BlePublication.fromInstanceId(
+          '22222222-2222-4222-8222-222222222222',
+        ).advertisement,
+        rssi: -55,
+      ),
+    );
+    final BleControlGateway gateway = BleControlGateway(adapter: adapter);
+    final List<BleControlEvent> events = <BleControlEvent>[];
+    final StreamSubscription<BleControlEvent> subscription = gateway.events
+        .listen(events.add);
+
+    await gateway.start(BlePublication.fromInstanceId(localId));
+    await pumpEventQueue();
+
+    expect(events.whereType<BlePeerDiscovered>(), hasLength(1));
+    expect(events.whereType<BlePeerDiscovered>().single.peerId, 'peer-a');
+
+    await gateway.stop();
+    await subscription.cancel();
+  });
+
   test(
     'gateway fragments outbound messages and increments sequence after send',
     () async {
@@ -205,6 +231,25 @@ void main() {
       expect(adapter.session.stops, 1);
     },
   );
+
+  test(
+    'stop does not wait for a pending platform start and disposes it later',
+    () async {
+      final _FakeBleAdapter adapter = _FakeBleAdapter(delayStart: true);
+      final BleControlGateway gateway = BleControlGateway(adapter: adapter);
+      final Future<void> starting = gateway.start(
+        BlePublication.fromInstanceId(localId),
+      );
+
+      await gateway.stop().timeout(const Duration(milliseconds: 100));
+      expect(gateway.isRunning, isFalse);
+
+      adapter.completeStart();
+      await starting;
+      expect(adapter.session.stops, 1);
+      expect(gateway.isRunning, isFalse);
+    },
+  );
 }
 
 class _FakeBleAdapter implements BlePlatformAdapter {
@@ -238,7 +283,7 @@ class _FakeBleSession implements BlePlatformSession {
   final int frameBytes;
   final Duration sendDelay;
   final StreamController<BlePlatformEvent> _events =
-      StreamController<BlePlatformEvent>.broadcast();
+      StreamController<BlePlatformEvent>();
   final List<Uint8List> sentFrames = <Uint8List>[];
   int stops = 0;
 

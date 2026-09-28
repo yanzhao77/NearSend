@@ -1,7 +1,7 @@
 # GitHub Actions 自动发版
 
-截至 2026-09-26 的最新预览发布基线：**[v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)**。
-该版本对应 `master` 合并提交 `e1cfb30541106a39a8aba2087bf6906dcbdf60a8`；它仍是内部预览，不是正式签名分发。
+截至 2026-09-29 的预览发布基线：**[v0.1.13](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.13)**。
+该版本对应 `master` 合并提交 `0af49a4a064c69fc50033f6718c30102d4d1b5ef`；它仍是内部预览，不是正式签名分发。
 
 ## 行为
 
