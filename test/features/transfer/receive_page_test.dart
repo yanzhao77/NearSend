@@ -42,6 +42,11 @@ void main() {
     Future<bool> Function(OfferSummary, ReceiveConfirmation)? onAccept,
     List<ServerOffer> pushOffers = const <ServerOffer>[],
     ServerReceivePhase pushPhase = ServerReceivePhase.waiting,
+    TransferProgress? pushProgress,
+    String? pushFileName,
+    int pushFileNumber = 0,
+    int pushFileCount = 0,
+    List<ReceiveFilePreview> pushActiveFiles = const <ReceiveFilePreview>[],
     SpaceVerdict? pushSpaceVerdict,
     String? pushFailureReason,
     List<String> pushSavedPaths = const <String>[],
@@ -71,6 +76,11 @@ void main() {
         savedFiles: savedFiles,
         pushOffers: pushOffers,
         pushPhase: pushPhase,
+        pushProgress: pushProgress,
+        pushFileName: pushFileName,
+        pushFileNumber: pushFileNumber,
+        pushFileCount: pushFileCount,
+        pushActiveFiles: pushActiveFiles,
         pushSpaceVerdict: pushSpaceVerdict,
         pushFailureReason: pushFailureReason,
         pushSavedPaths: pushSavedPaths,
@@ -82,7 +92,7 @@ void main() {
         onLocationConfirmed: onLocationConfirmed,
         requireLocationConfirmation: requireLocationConfirmation,
         onCheckPushSpace: onCheckPushSpace,
-        onAcceptPush: onAcceptPush,
+        onAcceptPush: onAcceptPush ?? (_, _) async => true,
         // Long enough that a test never trips it by accident; the polling behaviour has its own
         // case below.
         refreshInterval: const Duration(seconds: 30),
@@ -137,6 +147,59 @@ void main() {
     );
     expect(accept.onPressed, isNull);
 
+    await unmount(tester);
+  });
+
+  testWidgets('a pushed transfer shows its files and committed progress live', (
+    tester,
+  ) async {
+    const ServerOffer pushed = ServerOffer(
+      transferId: '33333333-4444-4555-8666-777777777777',
+      manifestDigest:
+          'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
+      direction: TransferDirection.clientToServer,
+      fileCount: 2,
+      totalBytes: 100,
+    );
+    final TransferProgress progress = TransferProgress.start(
+      totalBytes: 100,
+      atMillis: 1,
+    ).updated(transferredBytes: 40, atMillis: 2);
+
+    await pump(
+      tester,
+      phase: ReceivePhase.idle,
+      pushOffers: const <ServerOffer>[pushed],
+      pushPhase: ServerReceivePhase.receiving,
+      pushProgress: progress,
+      pushFileName: '正在接收的照片.jpg',
+      pushFileNumber: 1,
+      pushFileCount: 2,
+      pushActiveFiles: const <ReceiveFilePreview>[
+        ReceiveFilePreview(
+          fileId: 'image-id',
+          originalPath: '相册/正在接收的照片.jpg',
+          sizeBytes: 80,
+        ),
+        ReceiveFilePreview(
+          fileId: 'video-id',
+          originalPath: '视频.mp4',
+          sizeBytes: 20,
+        ),
+      ],
+    );
+
+    final ReceivePage page = tester.widget<ReceivePage>(
+      find.byType(ReceivePage),
+    );
+    expect(page.onAcceptPush, isNotNull);
+    expect(page.pushActiveFiles, hasLength(2));
+    expect(find.text('接收中'), findsWidgets);
+    expect(find.text(ReceivePage.emptyNote), findsNothing);
+    expect(find.text('视频.mp4'), findsOneWidget);
+    expect(find.text('已收 / 总量'), findsOneWidget);
+    expect(find.text('40 B / 100 B'), findsOneWidget);
+    expect(find.text('第 1 / 2 个文件'), findsOneWidget);
     await unmount(tester);
   });
 

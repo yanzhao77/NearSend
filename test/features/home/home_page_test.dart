@@ -91,6 +91,28 @@ void main() {
     expect(bluetoothRequested, isTrue);
   });
 
+  testWidgets('discovery can be cancelled while starting', (tester) async {
+    bool? requested;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(
+          bluetoothPhase: RadarReadinessPhase.starting,
+          onBluetoothReadyChanged: (bool value) => requested = value,
+        ),
+      ),
+    );
+
+    final Finder bluetoothSwitch = find.byKey(
+      const ValueKey<String>('bluetooth-discovery-switch'),
+    );
+    await tester.scrollUntilVisible(bluetoothSwitch, 300);
+    expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isTrue);
+    expect(tester.widget<SwitchListTile>(bluetoothSwitch).onChanged, isNotNull);
+
+    await tester.tap(bluetoothSwitch);
+    expect(requested, isFalse);
+  });
+
   testWidgets('only verified ready devices render a green status semantic', (
     tester,
   ) async {

@@ -104,6 +104,7 @@ class ServerReceivingFlow extends ChangeNotifier {
   TransferFlow? _flow;
   final List<String> _savedPaths = <String>[];
   final List<SavedFileReference> _savedFiles = <SavedFileReference>[];
+  List<ReceiveFilePreview> _activeFiles = const <ReceiveFilePreview>[];
   int _currentIndex = 0;
   int _fileCount = 0;
   SpaceVerdict? _spaceVerdict;
@@ -127,6 +128,15 @@ class ServerReceivingFlow extends ChangeNotifier {
   String? get failureReason => _failureReason;
 
   TransferProgress? get progress => _flow?.progress;
+
+  /// The frozen file list for the accepted push, shown while it is still arriving as well as after.
+  List<ReceiveFilePreview> get activeFiles =>
+      List<ReceiveFilePreview>.unmodifiable(_activeFiles);
+
+  String? get currentFileName => _activeFiles.isEmpty
+      ? null
+      : _activeFiles[_currentIndex.clamp(0, _activeFiles.length - 1).toInt()]
+            .suggestedName;
 
   List<String> get savedPaths => List<String>.unmodifiable(_savedPaths);
 
@@ -277,6 +287,14 @@ class ServerReceivingFlow extends ChangeNotifier {
         throw const ServerReceiveRefused('没有有效的保存位置，请重新选择后再接收。');
       }
       final List<ManifestFile> manifestFiles = _manifestOf(offer);
+      _activeFiles = <ReceiveFilePreview>[
+        for (final ManifestFile file in manifestFiles)
+          ReceiveFilePreview(
+            fileId: file.fileId,
+            originalPath: file.relativePath,
+            sizeBytes: file.sizeBytes,
+          ),
+      ];
       _createOutputPlans(
         transferId: offer.transferId,
         files: manifestFiles,
@@ -297,12 +315,24 @@ class ServerReceivingFlow extends ChangeNotifier {
         transferId: offer.transferId,
         context: acceptedContext,
       );
+      _pending = _pending
+          .where(
+            (ServerOffer pending) => pending.transferId != offer.transferId,
+          )
+          .toList(growable: false);
+      engine.transfers.transitionTask(
+        taskId: offer.transferId,
+        to: TransferState.transferring,
+      );
       _phase = ServerReceivePhase.receiving;
       _notify();
 
       final List<String> files = engine.transfers.fileIds(offer.transferId);
       _fileCount = files.length;
-      _flow = TransferFlow.unknownTotal(atMillis: now());
+      _flow = TransferFlow.forTotal(
+        totalBytes: offer.totalBytes,
+        atMillis: now(),
+      )..applyTaskState(TransferState.transferring, atMillis: now());
 
       final Stopwatch waited = Stopwatch()..start();
       while (!_allCommitted(files)) {
@@ -315,16 +345,18 @@ class ServerReceivingFlow extends ChangeNotifier {
         if (state == TransferState.cancelled || state == TransferState.failed) {
           throw const ServerReceiveRefused(interruptedReason);
         }
-        _flow?.applyReportedBytes(
-          engine.tasks.committedBytesForTask(offer.transferId),
-          atMillis: now(),
-        );
+        _updateReceivingProgress(offer, files);
         _notify();
         await Future<void>.delayed(commitPollInterval);
       }
 
       // Every chunk is committed, so the bytes are on this disk - and only now is there anything to
       // verify. §10's whole-file check is what decides whether they are the file the digest names.
+      _updateReceivingProgress(offer, files);
+      engine.transfers.transitionTask(
+        taskId: offer.transferId,
+        to: TransferState.verifying,
+      );
       _phase = ServerReceivePhase.verifying;
       _flow?.applyTaskState(TransferState.verifying, atMillis: now());
       _notify();
@@ -365,6 +397,21 @@ class ServerReceivingFlow extends ChangeNotifier {
       _notify();
       return false;
     }
+  }
+
+  void _updateReceivingProgress(ServerOffer offer, List<String> files) {
+    for (int index = 0; index < files.length; index++) {
+      if (engine.tasks.missingChunkIndices(files[index]).isNotEmpty) {
+        _currentIndex = index;
+        break;
+      }
+      _currentIndex = index;
+    }
+    _flow?.applyReportedBytes(
+      engine.tasks.committedBytesForTask(offer.transferId),
+      atMillis: now(),
+    );
+    _flow?.applyTaskState(TransferState.transferring, atMillis: now());
   }
 
   void _createOutputPlans({
@@ -499,15 +546,16 @@ class ServerReceivingFlow extends ChangeNotifier {
       TransferState.exporting,
       TransferState.completed,
     ]) {
-      if (engine.transfers.taskState(transferId) == TransferState.completed) {
+      final TransferState current = engine.transfers.taskState(transferId);
+      if (current == TransferState.completed) {
         return;
       }
-      try {
+      if (current != next) {
         engine.transfers.transitionTask(taskId: transferId, to: next);
-      } on Object {
-        // An edge this state machine does not define is not something to invent here: the bytes are
-        // already verified and saved, and the state is the protocol's bookkeeping of that.
       }
+    }
+    if (engine.transfers.taskState(transferId) != TransferState.completed) {
+      throw const ServerReceiveRefused('文件已保存，但传输完成状态未能持久化。');
     }
   }
 

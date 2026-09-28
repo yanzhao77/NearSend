@@ -109,6 +109,7 @@ enum TaskCatalogFilter { all, active, paused, recoverable, completed, failed }
 class TaskCatalogController extends ChangeNotifier {
   NearSendDatabase? _database;
   List<TaskOverview> _tasks = const <TaskOverview>[];
+  final Set<String> _hiddenTaskIds = <String>{};
   Object? _error;
 
   List<TaskOverview> get tasks => List.unmodifiable(_tasks);
@@ -188,8 +189,18 @@ ORDER BY t.updated_at DESC, f.rowid DESC;
   List<TaskOverview> filtered(TaskCatalogFilter filter) {
     return <TaskOverview>[
       for (final TaskOverview task in _tasks)
-        if (_matches(task, filter)) task,
+        if (!_hiddenTaskIds.contains(task.taskId) && _matches(task, filter))
+          task,
     ];
+  }
+
+  /// Hides the task rows that currently exist without deleting durable task data.
+  ///
+  /// New tasks remain visible. Hidden rows stay hidden across refreshes for this app
+  /// session and reappear after the controller is recreated (for example, on restart).
+  void clearDisplayedTasks() {
+    _hiddenTaskIds.addAll(_tasks.map((TaskOverview task) => task.taskId));
+    notifyListeners();
   }
 
   TaskDetail? detail(String taskId) {

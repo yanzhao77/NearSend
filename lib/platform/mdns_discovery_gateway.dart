@@ -294,6 +294,8 @@ class MdnsDiscoveryGateway {
   MdnsPlatformSession? _session;
   StreamSubscription<MdnsPlatformEvent>? _subscription;
   Future<void>? _startAttempt;
+  int _generation = 0;
+  int? _startAttemptGeneration;
   String? _localInstanceId;
   final Set<String> _visibleServices = <String>{};
 
@@ -305,14 +307,20 @@ class MdnsDiscoveryGateway {
     if (_session != null) return Future<void>.value();
     final Future<void>? inFlight = _startAttempt;
     if (inFlight != null) return inFlight;
-    final Future<void> attempt = _start(publication);
+    final int generation = _generation;
+    _startAttemptGeneration = generation;
+    final Future<void> attempt = _start(publication, generation);
     _startAttempt = attempt;
     return attempt;
   }
 
-  Future<void> _start(MdnsPublication publication) async {
+  Future<void> _start(MdnsPublication publication, int generation) async {
     try {
       final MdnsPlatformSession session = await _adapter.start(publication);
+      if (generation != _generation) {
+        await session.stop();
+        return;
+      }
       _localInstanceId = publication.instanceId;
       _session = session;
       _subscription = session.events.listen(
@@ -321,7 +329,10 @@ class MdnsDiscoveryGateway {
             _events.add(const MdnsDiscoveryIssue('mdns.eventStreamFailed')),
       );
     } finally {
-      _startAttempt = null;
+      if (_startAttemptGeneration == generation) {
+        _startAttempt = null;
+        _startAttemptGeneration = null;
+      }
     }
   }
 
@@ -347,8 +358,11 @@ class MdnsDiscoveryGateway {
   }
 
   Future<void> stop() async {
-    final Future<void>? inFlight = _startAttempt;
-    if (inFlight != null) await inFlight;
+    // Don't let a wedged platform start prevent the UI from stopping discovery.
+    // A session returned after this point is stale and disposed by _start.
+    _generation++;
+    _startAttempt = null;
+    _startAttemptGeneration = null;
     final StreamSubscription<MdnsPlatformEvent>? subscription = _subscription;
     final MdnsPlatformSession? session = _session;
     _subscription = null;

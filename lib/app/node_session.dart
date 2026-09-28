@@ -117,6 +117,8 @@ class NodeSession extends ChangeNotifier {
   bool _discoveryEnabled = false;
   String _discoveryDeviceName = 'NearSend';
   String _discoveryPlatform = 'unknown';
+  String _deviceName = 'NearSend';
+  String _platform = 'unknown';
   bool _disposed = false;
 
   NodePhase get phase => _phase;
@@ -165,6 +167,22 @@ class NodeSession extends ChangeNotifier {
 
   String? get discoveryFailureReason => _discoveryFailureReason;
 
+  /// Updates display-only metadata; it is not used to establish or validate identity.
+  Future<void> setLocalDeviceInfo({
+    required String deviceName,
+    required String platform,
+  }) async {
+    _deviceName = deviceName;
+    _platform = platform;
+    _discoveryDeviceName = deviceName;
+    _discoveryPlatform = platform;
+    final NodeRuntime? runtime = _runtime;
+    runtime?.setLocalDeviceInfo(deviceName: deviceName, platform: platform);
+    if (_discoveryEnabled && runtime != null) {
+      await refreshPairingCode();
+    }
+  }
+
   Stream<MdnsDiscoveryEvent> get discoveryEvents =>
       discovery?.events ?? const Stream<MdnsDiscoveryEvent>.empty();
 
@@ -201,6 +219,7 @@ class NodeSession extends ChangeNotifier {
         candidateAddresses: candidateAddresses,
         identityProvider: identityProvider,
       );
+      opened.setLocalDeviceInfo(deviceName: _deviceName, platform: _platform);
       final NearSendNode node = await opened.start();
       _runtime = opened;
       _payload = node.payload;
@@ -244,6 +263,8 @@ class NodeSession extends ChangeNotifier {
     if (enabled) {
       _discoveryDeviceName = deviceName;
       _discoveryPlatform = platform;
+      _deviceName = deviceName;
+      _platform = platform;
     }
     final MdnsDiscoveryGateway? mdns = discovery;
     if (mdns == null) return;

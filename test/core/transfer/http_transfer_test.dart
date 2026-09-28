@@ -182,6 +182,13 @@ void main() {
       reason:
           'the seal froze the manifest on the server and nothing has moved yet',
     );
+    expect(
+      await wire.offers(),
+      isEmpty,
+      reason:
+          'a client_to_server task was created by this client; echoing it through '
+          'GET /offers makes the sender mistake its own outgoing file for an incoming one',
+    );
 
     // --- the server, as receiver, accepts ---
     final Directory exports = Directory(

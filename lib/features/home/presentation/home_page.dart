@@ -106,7 +106,8 @@ class HomePage extends StatelessWidget {
                   startingMessage: '正在启动 Wi-Fi 局域网发现...',
                   stoppingMessage: '正在关闭 Wi-Fi 局域网发现...',
                   listTitle: '局域网设备',
-                  emptyMessage: '暂未在当前局域网发现其他设备',
+                  emptyMessage:
+                      '未发现其他正在运行 NearSend 并开启 Wi-Fi 发现的设备；普通联网设备不会显示。',
                   icon: Icons.wifi_outlined,
                   phase: wifiPhase,
                   failureReason: wifiFailureReason,
@@ -125,7 +126,7 @@ class HomePage extends StatelessWidget {
                   startingMessage: '正在启动蓝牙发现...',
                   stoppingMessage: '正在关闭蓝牙发现...',
                   listTitle: '蓝牙设备',
-                  emptyMessage: '暂未发现其他蓝牙设备',
+                  emptyMessage: '未发现正在广播 NearSend 蓝牙服务的设备。',
                   icon: Icons.bluetooth,
                   phase: bluetoothPhase,
                   failureReason: bluetoothFailureReason,
@@ -188,9 +189,8 @@ class _DiscoverySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool ready = phase == RadarReadinessPhase.ready;
-    final bool busy =
-        phase == RadarReadinessPhase.starting ||
-        phase == RadarReadinessPhase.stopping;
+    final bool starting = phase == RadarReadinessPhase.starting;
+    final bool stopping = phase == RadarReadinessPhase.stopping;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -199,15 +199,15 @@ class _DiscoverySection extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           secondary: Icon(icon),
           title: Text(title),
-          subtitle: Text(ready ? enabledMessage : disabledMessage),
-          value: ready,
-          onChanged: busy ? null : onReadyChanged,
+          subtitle: Text(ready || starting ? enabledMessage : disabledMessage),
+          value: ready || starting,
+          onChanged: stopping ? null : onReadyChanged,
         ),
-        if (busy || failureReason != null)
+        if (starting || stopping || failureReason != null)
           Padding(
             padding: const EdgeInsets.only(bottom: NearSendSpacing.sm),
             child: Text(
-              busy
+              starting || stopping
                   ? (phase == RadarReadinessPhase.stopping
                         ? stoppingMessage
                         : startingMessage)

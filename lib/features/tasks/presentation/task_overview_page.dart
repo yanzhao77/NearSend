@@ -27,6 +27,14 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
           appBar: AppBar(
             title: const Text('任务'),
             actions: <Widget>[
+              TextButton.icon(
+                onPressed:
+                    widget.controller.filtered(TaskCatalogFilter.all).isEmpty
+                    ? null
+                    : widget.controller.clearDisplayedTasks,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('清空任务'),
+              ),
               IconButton(
                 onPressed: widget.controller.refresh,
                 icon: const Icon(Icons.refresh),
@@ -80,9 +88,13 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
                 ),
                 const SizedBox(height: NearSendSpacing.md),
                 if (tasks.isEmpty)
-                  const NsEmptyState(
-                    title: '没有任务记录',
-                    message: '任务会在真实传输创建后出现在这里。',
+                  NsEmptyState(
+                    title: widget.controller.tasks.isEmpty
+                        ? '没有任务记录'
+                        : '任务显示已清空',
+                    message: widget.controller.tasks.isEmpty
+                        ? '任务会在真实传输创建后出现在这里。'
+                        : '本机任务记录和文件未删除；本次运行期间已隐藏现有任务。',
                     icon: Icons.swap_horizontal_circle_outlined,
                   )
                 else

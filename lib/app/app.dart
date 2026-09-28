@@ -46,6 +46,7 @@ import 'package:nearsend/platform/qr_image_gateway.dart';
 import 'package:nearsend/platform/storage_location.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
 import 'package:nearsend/platform/mdns_discovery_gateway.dart';
+import 'package:nearsend/platform/device_info_gateway.dart';
 
 /// NearSend application root.
 ///
@@ -81,6 +82,7 @@ class NearSendApp extends StatefulWidget {
     this.networkGateway,
     this.bleGateway,
     this.fileActions,
+    this.deviceInfoGateway,
     this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
   });
 
@@ -101,6 +103,7 @@ class NearSendApp extends StatefulWidget {
   final PlatformNetworkGateway? networkGateway;
   final BleControlGateway? bleGateway;
   final PlatformFileActions? fileActions;
+  final DeviceInfoGateway? deviceInfoGateway;
   final PlatformPermissionGateway permissionGateway;
 
   static const String homeRoute = '/';
@@ -167,6 +170,12 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   bool _outgoingRecent = false;
   final Stopwatch _outgoingAge = Stopwatch();
   String? _outgoingName;
+  String? _outgoingPlatform;
+  String? _publishedDeviceName;
+  LocalDeviceInfo _localDeviceInfo = const LocalDeviceInfo(
+    name: 'NearSend',
+    platformId: 'unknown',
+  );
   int _presenceTicks = 0;
 
   Future<void> _scanFromHome(BuildContext context) async {
@@ -229,6 +238,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   _outgoingRecent &&
                   _outgoingAge.elapsed.inSeconds < 30,
               isRevoked: false,
+              platform: _outgoingPlatform ?? '平台未知',
               discoveryMethod: '二维码配对',
             ),
     );
@@ -281,6 +291,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _radarBle = widget.bleGateway?.events.listen(_radar.handleBle);
+    _settings.addListener(_syncLocalDeviceName);
     // Not awaited: the first frame must not wait for a socket and a database, and the session
     // publishes its own phases for the screen to render in the meantime.
     unawaited(_openNode());
@@ -292,6 +303,25 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     if (session == null) {
       return;
     }
+    try {
+      _localDeviceInfo =
+          await (widget.deviceInfoGateway?.read() ??
+              Future<LocalDeviceInfo>.value(
+                LocalDeviceInfo(
+                  name: 'NearSend',
+                  platformId: platformIdFor(defaultTargetPlatform),
+                ),
+              ));
+    } on Object {
+      _localDeviceInfo = LocalDeviceInfo(
+        name: 'NearSend',
+        platformId: platformIdFor(defaultTargetPlatform),
+      );
+    }
+    await session.setLocalDeviceInfo(
+      deviceName: _localDeviceInfo.name,
+      platform: _localDeviceInfo.platformId,
+    );
     await session.start();
     final NearSendNode? node = session.node;
     if (node == null) {
@@ -303,7 +333,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
     _tasks.attach(node.database);
-    _settings.attach(AppSettingsRepository(node.database));
+    _settings.attach(
+      AppSettingsRepository(node.database),
+      defaultDeviceName: _localDeviceInfo.name,
+    );
+    _syncLocalDeviceName();
     _radar.attach(PeerRepository(node.database));
     _syncPairingPresence();
     _pairingPresenceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -514,6 +548,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     _incoming?.dispose();
     _tasks.dispose();
     _space.dispose();
+    _settings.removeListener(_syncLocalDeviceName);
     _settings.dispose();
     unawaited(_radarDiscovery?.cancel());
     unawaited(_radarBle?.cancel());
@@ -526,6 +561,18 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  void _syncLocalDeviceName() {
+    final String name = _settings.settings.deviceName;
+    if (name == _publishedDeviceName) return;
+    _publishedDeviceName = name;
+    unawaited(
+      widget.session?.setLocalDeviceInfo(
+        deviceName: name,
+        platform: _localDeviceInfo.platformId,
+      ),
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_disposing) return;
@@ -533,6 +580,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       _startOfferPolling();
       return;
     }
+    // `inactive` is also emitted for transient system UI (permission sheets,
+    // notification shade, focus changes). Keep discovery alive until the app is
+    // actually backgrounded; otherwise Android can briefly switch the toggles off
+    // while the user is still on this screen.
+    if (state == AppLifecycleState.inactive) return;
     _offerPollTimer?.cancel();
     if (_wifiDesired) {
       _requestWifiReady(false);
@@ -545,9 +597,9 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   void _requestWifiReady(bool value) {
     if (_disposing) return;
     _wifiDesired = value;
-    _wifiTransition = _wifiTransition
-        .catchError((Object _) {})
-        .then((_) => _applyWifiReady(value));
+    _wifiTransition = _wifiTransition.catchError((Object _) {}).then((_) async {
+      if (_wifiDesired == value) await _applyWifiReady(value);
+    });
   }
 
   Future<void> _applyWifiReady(bool value) async {
@@ -571,11 +623,13 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     }
     _radar.markWifiStarting();
     try {
-      await session.setDiscoveryEnabled(
-        true,
-        deviceName: _settings.settings.deviceName,
-        platform: defaultTargetPlatform.name,
-      );
+      await session
+          .setDiscoveryEnabled(
+            true,
+            deviceName: _settings.settings.deviceName,
+            platform: _localDeviceInfo.platformId,
+          )
+          .timeout(const Duration(seconds: 20));
     } on Object {
       if (!_disposing && _wifiDesired) {
         _radar.markWifiError('Wi-Fi 局域网发现不可用。');
@@ -593,9 +647,11 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   void _requestBluetoothReady(bool value) {
     if (_disposing) return;
     _bluetoothDesired = value;
-    _bluetoothTransition = _bluetoothTransition
-        .catchError((Object _) {})
-        .then((_) => _applyBluetoothReady(value));
+    _bluetoothTransition = _bluetoothTransition.catchError((Object _) {}).then((
+      _,
+    ) async {
+      if (_bluetoothDesired == value) await _applyBluetoothReady(value);
+    });
   }
 
   Future<void> _applyBluetoothReady(bool value) async {
@@ -621,18 +677,23 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     }
     _radar.markBluetoothStarting();
     try {
-      if (!await ble.requestAuthorization()) {
+      if (!await ble.requestAuthorization().timeout(
+        const Duration(seconds: 30),
+      )) {
         if (!_disposing && _bluetoothDesired) {
           _radar.markBluetoothError('蓝牙权限未授予。');
         }
         return;
       }
-      await ble.start(
-        BlePublication.fromInstanceId(
-          sessionId,
-          deviceName: _settings.settings.deviceName,
-        ),
-      );
+      if (_disposing || !_bluetoothDesired) return;
+      await ble
+          .start(
+            BlePublication.fromInstanceId(
+              sessionId,
+              deviceName: _settings.settings.deviceName,
+            ),
+          )
+          .timeout(const Duration(seconds: 20));
     } on Object {
       if (!_disposing && _bluetoothDesired) {
         _radar.markBluetoothError('蓝牙发现不可用。');
@@ -664,12 +725,13 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       displayLabel: _settings.settings.deviceName,
     );
     _outgoingRecent = connected;
+    _outgoingName = peer.client?.peerDeviceName ?? displayName;
+    _outgoingPlatform = peer.client?.peerPlatform;
     if (connected) {
       _outgoingAge
         ..reset()
         ..start();
     }
-    _outgoingName = displayName;
     _syncPairingPresence();
     final NearSendNode? node = widget.session?.node;
     if (!connected || node == null) {
@@ -1019,11 +1081,18 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                         ? ConnectionPage.continueLabelReceive
                         : ConnectionPage.continueLabelSend,
                     localDeviceName: _settings.settings.deviceName,
-                    localPlatform: defaultTargetPlatform.name,
-                    peerDeviceName: selectedDevice?.name ?? '对端设备名称未提供',
-                    peerPlatform: selectedDevice?.platform ?? '对端平台未提供',
+                    localPlatform: _localDeviceInfo.platformLabel,
+                    peerDeviceName:
+                        selectedDevice?.name ?? _outgoingName ?? '对端设备名称未提供',
+                    peerPlatform: selectedDevice == null
+                        ? _outgoingPlatform == null
+                              ? '对端平台未提供'
+                              : platformLabelForId(_outgoingPlatform!)
+                        : platformLabelForId(selectedDevice.platform),
                     selectedPeerName: selectedDevice?.name,
-                    selectedPeerPlatform: selectedDevice?.platform,
+                    selectedPeerPlatform: selectedDevice == null
+                        ? null
+                        : platformLabelForId(selectedDevice.platform),
                     selectedPeerDiscoveryMethod:
                         selectedDevice?.discoveryMethod,
                     selectedPeerDetail: selectedDevice?.detail,
@@ -1085,6 +1154,12 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                       false,
                   pushOffers: incoming?.pending ?? const <ServerOffer>[],
                   pushPhase: incoming?.phase ?? ServerReceivePhase.waiting,
+                  pushProgress: incoming?.progress,
+                  pushFileName: incoming?.currentFileName,
+                  pushFileNumber: incoming?.currentFileNumber ?? 0,
+                  pushFileCount: incoming?.fileCount ?? 0,
+                  pushActiveFiles:
+                      incoming?.activeFiles ?? const <ReceiveFilePreview>[],
                   pushSpaceVerdict: incoming?.spaceVerdict,
                   pushSpaceEstimate: incoming?.spaceEstimate,
                   pushFailureReason: incoming?.failureReason,

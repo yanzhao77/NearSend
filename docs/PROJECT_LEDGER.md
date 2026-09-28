@@ -1,6 +1,20 @@
 # NearSend 项目现状与进度台账
 
-更新日期：2026-09-27。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果、T12 UI 与近期首页/扫码 PR 合并状态。最新预览版仍为 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)，对应 `master` 合并提交 `e1cfb30541106a39a8aba2087bf6906dcbdf60a8`。本地验收分支 `fix/android-camera-initialization` 的 Android 相机实测进展见下方；这些改动尚未提交或合并，不能视为 v0.1.10 已更新。
+更新日期：2026-09-29。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果、T12 UI 与近期首页/扫码 PR 合并状态。当前预览版为 [v0.1.13](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.13)，对应 `master` 合并提交 `0af49a4a064c69fc50033f6718c30102d4d1b5ef`。本地验收分支 `fix/device-platform-display-name` 中的后续改动尚未提交或合并，不能视为 v0.1.13 已更新。
+
+## 本次分支增量（2026-09-29）：Wi-Fi / BLE 发现无设备排查
+
+- 首页列表只接受正在运行 NearSend 且开启相应发现开关的对端：Wi-Fi 需广播兼容 `_nearsend._tcp`；
+  BLE 需广播 NearSend 自定义服务和兼容协议数据。路由器在线客户端及普通蓝牙设备不会被列出。
+- Android mDNS 权限由锁定的 Bonsoir Android 插件 manifest 声明，插件通过 `WifiManager.MulticastLock`
+  执行浏览/广播；release 合并 manifest 已包含 `CHANGE_WIFI_MULTICAST_STATE`。未发现漏声明该权限的证据；
+  AP 客户端隔离或组播过滤仍需真机验证。
+- BLE 发现链路存在启动期竞态：适配器开始扫描后、会话返回并挂接上层监听前，早到的扫描结果可能被
+  broadcast stream 丢弃。平台会话改为可缓冲的单订阅流，并增加 BLE 启动期回归测试；mDNS 会话原本已
+  使用缓冲流。
+- 格式检查、`flutter analyze`、BLE/mDNS 定向测试 16 项及完整 Flutter 测试 1418 项通过。当前 ADB
+  无 Android 设备，真机权限状态、BLE 双机发现、mDNS 跨设备发现和 AP 组播行为仍未验证；本增量不代表
+  发现功能已通过实机验收。
 
 ## 本次验收增量（2026-09-27）：Android 扫码恢复与 Windows 接收请求
 

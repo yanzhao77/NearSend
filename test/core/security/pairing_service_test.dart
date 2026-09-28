@@ -32,6 +32,8 @@ void main() {
     now = 0;
     service = PairingService(
       serverFingerprint: pin,
+      deviceName: '测试手机',
+      platform: 'android',
       candidates: const <PairingCandidate>[
         PairingCandidate(host: '192.168.10.100', port: 8443),
       ],
@@ -141,6 +143,17 @@ void main() {
       final _PairResult result = pairIt(requestFor(payload));
 
       expect(result.status, 200);
+      expect(
+        utf8.decode(
+          decodeBase64UrlNoPaddingExact(
+            result.response.headers['x-nearsend-device-name'],
+            'x-nearsend-device-name',
+            expectedBytes: utf8.encode('测试手机').length,
+          ),
+        ),
+        '测试手机',
+      );
+      expect(result.response.headers['x-nearsend-platform'], 'android');
       final PairResponse parsed = PairResponse.parse(result.body);
       expect(parsed.protocolMajor, ProtocolLimits.protocolMajor);
       expect(

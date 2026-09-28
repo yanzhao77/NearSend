@@ -32,6 +32,8 @@
 /// both ends of this build are the same code, so they agree because neither claims anything.
 library;
 
+import 'dart:convert';
+
 export 'package:nearsend/core/security/pairing_token.dart' show randomUuidV4;
 
 import 'package:nearsend/core/network/control_authorization.dart';
@@ -53,6 +55,17 @@ import 'package:nearsend/core/security/pairing_token.dart';
 /// limit, which is the fail-closed direction. See [ControlRequest.peerAddress].
 const String unknownPairingSource = 'unknown-source';
 
+String _truncateUtf8(String value, int maxBytes) {
+  final StringBuffer bounded = StringBuffer();
+  for (final int rune in value.runes) {
+    final String candidate =
+        '${bounded.toString()}${String.fromCharCode(rune)}';
+    if (utf8.encode(candidate).length > maxBytes) break;
+    bounded.writeCharCode(rune);
+  }
+  return bounded.isEmpty ? 'NearSend' : bounded.toString();
+}
+
 /// Issues pairing sessions and resolves the session access tokens they produce.
 ///
 /// Implements [ControlAuthenticator] as well as serving the endpoint, because the two halves
@@ -63,6 +76,8 @@ class PairingService implements ControlAuthenticator {
   PairingService({
     required this.serverFingerprint,
     required this.candidates,
+    String deviceName = 'NearSend',
+    String platform = 'unknown',
     MonotonicMillis? clock,
     int? pairTokenTtlMillis,
     int? sessionTtlMillis,
@@ -70,6 +85,7 @@ class PairingService implements ControlAuthenticator {
        _sessionTtlMillis =
            sessionTtlMillis ??
            ProtocolLimits.sessionAccessTokenTtlSeconds * 1000 {
+    updateLocalDeviceInfo(deviceName: deviceName, platform: platform);
     _issuer = PairingTokenIssuer(
       clock: _clock,
       ttlMillis:
@@ -79,6 +95,25 @@ class PairingService implements ControlAuthenticator {
 
   /// The pin this server publishes: `SHA-256(leaf certificate DER)` (§2).
   final String serverFingerprint;
+
+  String _deviceName = 'NearSend';
+  String _platform = 'unknown';
+
+  /// Metadata is presentation-only and is returned only after successful pairing.
+  void updateLocalDeviceInfo({
+    required String deviceName,
+    required String platform,
+  }) {
+    final String name = deviceName.trim();
+    _deviceName =
+        name.isEmpty || name.runes.any((int r) => r < 0x20 || r == 0x7f)
+        ? 'NearSend'
+        : _truncateUtf8(name, 64);
+    final String id = platform.trim().toLowerCase();
+    _platform = RegExp(r'^[a-z0-9][a-z0-9._-]{0,23}$').hasMatch(id)
+        ? id
+        : 'unknown';
+  }
 
   /// The addresses the QR code offers, in order (§3).
   /// The addresses the QR code offers.
@@ -261,6 +296,14 @@ class PairingService implements ControlAuthenticator {
 
     return ControlResponse.json(
       status: 200,
+      headers: <String, String>{
+        // Base64url keeps arbitrary Unicode device names safe in HTTP headers. These values are
+        // display-only; the TLS pin remains the sole pairing identity.
+        'x-nearsend-device-name': encodeBase64UrlNoPadding(
+          utf8.encode(_deviceName),
+        ),
+        'x-nearsend-platform': _platform,
+      },
       body: PairResponse(
         sessionAccessToken: accessToken,
         // See the library comment: the vocabulary is undefined, so nothing is claimed.

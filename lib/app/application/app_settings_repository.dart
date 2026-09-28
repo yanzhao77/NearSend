@@ -11,6 +11,7 @@ enum AppThemePreference { system, light, dark }
 class AppSettings {
   const AppSettings({
     this.deviceName = 'NearSend',
+    this.deviceNameIsCustom = false,
     this.defaultReceiveLocation,
     this.themePreference = AppThemePreference.system,
     this.reduceMotion = false,
@@ -18,6 +19,7 @@ class AppSettings {
   });
 
   final String deviceName;
+  final bool deviceNameIsCustom;
   final StorageLocationRef? defaultReceiveLocation;
   final bool defaultReceiveLocationNeedsRepair;
   final AppThemePreference themePreference;
@@ -25,6 +27,7 @@ class AppSettings {
 
   AppSettings copyWith({
     String? deviceName,
+    bool? deviceNameIsCustom,
     StorageLocationRef? defaultReceiveLocation,
     bool clearDefaultReceiveLocation = false,
     AppThemePreference? themePreference,
@@ -33,6 +36,7 @@ class AppSettings {
   }) {
     return AppSettings(
       deviceName: deviceName ?? this.deviceName,
+      deviceNameIsCustom: deviceNameIsCustom ?? this.deviceNameIsCustom,
       defaultReceiveLocation: clearDefaultReceiveLocation
           ? null
           : defaultReceiveLocation ?? this.defaultReceiveLocation,
@@ -57,11 +61,12 @@ class AppSettingsRepository {
   static int _systemNow() => DateTime.now().millisecondsSinceEpoch;
 
   static const String _deviceName = 'device_name';
+  static const String _deviceNameIsCustom = 'device_name_is_custom';
   static const String _defaultReceiveLocation = 'default_receive_location';
   static const String _themePreference = 'theme_preference';
   static const String _reduceMotion = 'reduce_motion';
 
-  AppSettings read() {
+  AppSettings read({String defaultDeviceName = 'NearSend'}) {
     final Map<String, String> values = <String, String>{};
     final rows = database.db.select(
       'SELECT setting_key, setting_value FROM ${StorageSchema.appSettingsTable};',
@@ -75,6 +80,12 @@ class AppSettingsRepository {
     }
 
     final String name = values[_deviceName]?.trim() ?? '';
+    final String? customFlag = values[_deviceNameIsCustom];
+    // Before the custom flag existed, every non-placeholder name was user-entered. Treat the
+    // old NearSend placeholder as automatic so it can adopt the actual system device name.
+    final bool nameIsCustom =
+        customFlag == 'true' ||
+        (customFlag == null && name.isNotEmpty && name != 'NearSend');
     final AppThemePreference theme = switch (values[_themePreference]) {
       'light' => AppThemePreference.light,
       'dark' => AppThemePreference.dark,
@@ -94,7 +105,12 @@ class AppSettingsRepository {
       }
     }
     return AppSettings(
-      deviceName: name.isEmpty ? 'NearSend' : name,
+      deviceName: nameIsCustom && name.isNotEmpty
+          ? name
+          : defaultDeviceName.trim().isEmpty
+          ? 'NearSend'
+          : defaultDeviceName.trim(),
+      deviceNameIsCustom: nameIsCustom,
       defaultReceiveLocation: location,
       defaultReceiveLocationNeedsRepair: locationNeedsRepair,
       themePreference: theme,
@@ -116,6 +132,11 @@ class AppSettingsRepository {
     final int moment = now();
     database.transaction(() {
       _upsert(_deviceName, deviceName, moment);
+      _upsert(
+        _deviceNameIsCustom,
+        settings.deviceNameIsCustom.toString(),
+        moment,
+      );
       if (receiveLocation == null) {
         database.db.execute(
           'DELETE FROM ${StorageSchema.appSettingsTable} WHERE setting_key = ?;',
@@ -131,6 +152,7 @@ class AppSettingsRepository {
 
   static const Set<String> _allowedKeys = <String>{
     _deviceName,
+    _deviceNameIsCustom,
     _defaultReceiveLocation,
     _themePreference,
     _reduceMotion,

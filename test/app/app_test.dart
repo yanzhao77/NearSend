@@ -12,6 +12,7 @@ import 'package:nearsend/app/node_session.dart';
 import 'package:nearsend/app/peer_session.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/transfer_direction.dart';
+import 'package:nearsend/core/protocol/transfer_state.dart';
 import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/transfer/near_send_node.dart';
@@ -206,6 +207,11 @@ void main() {
     expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isTrue);
     expect(adapter.publication?.displayName, 'NearSend');
 
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(adapter.session.stops, 0);
+    expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isTrue);
+
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await settle(tester, () => adapter.session.stops == 1);
     expect(tester.widget<SwitchListTile>(bluetoothSwitch).value, isFalse);
@@ -393,6 +399,20 @@ void main() {
           return false;
         }
       }, attempts: 60);
+      // The sender's own authenticated client polls the peer for server offers too.
+      // Its just-proposed client_to_server task must not be echoed back as a receive
+      // prompt while the actual receiver is waiting for its local decision.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+      expect(
+        find.text('收到文件'),
+        findsNothing,
+        reason:
+            'the sender must not be prompted to accept its own outgoing file',
+      );
       peer.engine.acceptLocally(
         transferId: transferId,
         context: ReceiverStorageContext(
@@ -405,6 +425,10 @@ void main() {
           },
           saveLocationRef: exports.path,
         ),
+      );
+      peer.transfers.transitionTask(
+        taskId: transferId,
+        to: TransferState.transferring,
       );
 
       await settle(
@@ -433,9 +457,12 @@ void main() {
       // application generated it - the same random identifier a real run uses rather than one this
       // test chose.
       final String receivedFileId = peer.transfers.fileIds(transferId).single;
-      // Inside `runAsync`: verification and export are real disk work, and the test body's zone has
-      // virtual timers, so awaiting them directly would wait forever for a completion that cannot
-      // be delivered there.
+      // Inside `runAsync`: verification and export are real disk work, while the test body's zone
+      // virtualizes the sender's status-poll timer.
+      peer.transfers.transitionTask(
+        taskId: transferId,
+        to: TransferState.verifying,
+      );
       final ReceivedFileOutcome outcome = (await tester.runAsync(
         () => peer.engine.finishFile(
           fileId: receivedFileId,
@@ -443,6 +470,23 @@ void main() {
         ),
       ))!;
       expect(outcome.verification.wholeFileDigestMatches, isTrue);
+      peer.transfers.transitionTask(
+        taskId: transferId,
+        to: TransferState.exporting,
+      );
+      peer.transfers.transitionTask(
+        taskId: transferId,
+        to: TransferState.completed,
+      );
+      await settle(
+        tester,
+        () => visible(SendPage.phaseLabel(SendPhase.savedByPeer)),
+        realDelay: const Duration(milliseconds: 100),
+      );
+      expect(
+        find.text(SendPage.phaseLabel(SendPhase.savedByPeer)),
+        findsOneWidget,
+      );
       final File written = exports
           .listSync(recursive: true)
           .whereType<File>()

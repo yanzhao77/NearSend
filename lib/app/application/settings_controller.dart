@@ -5,6 +5,7 @@ import 'package:nearsend/platform/storage_location.dart';
 
 class SettingsController extends ChangeNotifier {
   AppSettingsRepository? _repository;
+  String _defaultDeviceName = 'NearSend';
   AppSettings _settings = const AppSettings();
   Object? _error;
 
@@ -12,8 +13,12 @@ class SettingsController extends ChangeNotifier {
   Object? get error => _error;
   bool get isPersisted => _repository != null;
 
-  void attach(AppSettingsRepository? repository) {
+  void attach(
+    AppSettingsRepository? repository, {
+    String defaultDeviceName = 'NearSend',
+  }) {
     _repository = repository;
+    _defaultDeviceName = defaultDeviceName;
     if (repository == null) {
       _settings = const AppSettings();
       _error = null;
@@ -38,7 +43,7 @@ class SettingsController extends ChangeNotifier {
   }
 
   void updateDeviceName(String value) =>
-      update(_settings.copyWith(deviceName: value));
+      update(_settings.copyWith(deviceName: value, deviceNameIsCustom: true));
 
   void updateDefaultReceiveLocation(StorageLocationRef? value) => update(
     value == null
@@ -48,7 +53,7 @@ class SettingsController extends ChangeNotifier {
 
   void _read() {
     try {
-      _settings = _repository!.read();
+      _settings = _repository!.read(defaultDeviceName: _defaultDeviceName);
       _error = null;
     } on Object catch (error) {
       _error = error;
