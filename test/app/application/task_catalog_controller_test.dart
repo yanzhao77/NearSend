@@ -4,6 +4,38 @@ import 'package:nearsend/app/application/task_catalog_controller.dart';
 import 'package:nearsend/core/storage/near_send_database.dart';
 
 void main() {
+  test('sender progress uses the sealed file list and peer observation', () {
+    final NearSendDatabase database = NearSendDatabase.open(
+      path: NearSendDatabase.inMemoryPath,
+    );
+    addTearDown(database.close);
+    database.db.execute('''
+INSERT INTO tasks (task_id, role, direction, state, protocol_major,
+  protocol_minor, lease_epoch, manifest_digest, created_at, updated_at)
+VALUES ('outgoing', 'sender', 'client_to_server', 'waitingAccept', 1, 0, 0, 'digest', 1, 2);
+''');
+    database.db.execute('''
+INSERT INTO manifest_staging (transfer_id, manifest_digest, protocol_major,
+  protocol_minor, created_at)
+VALUES ('outgoing', 'digest', 1, 0, 1);
+''');
+    database.db.execute('''
+INSERT INTO manifest_files (transfer_id, file_index, file_id, relative_path,
+  size_bytes, chunk_size_bytes, chunk_count, file_sha256, chunk_manifest_digest)
+VALUES ('outgoing', 0, 'first', 'first.bin', 4, 4, 1, 'sha', 'digest'),
+       ('outgoing', 1, 'second', 'second.bin', 8, 4, 2, 'sha', 'digest');
+''');
+    final TaskCatalogController controller = TaskCatalogController()
+      ..attach(database);
+    expect(controller.tasks.single.fileCount, 2);
+    expect(controller.tasks.single.totalBytes, 12);
+    controller.reportOutgoingProgress('outgoing', 4);
+    expect(controller.tasks.single.progress, closeTo(1 / 3, 0.001));
+    expect(controller.tasks.single.committedBytes, 0);
+    controller.reportOutgoingCompleted('outgoing');
+    expect(controller.tasks.single.status, TaskOverviewStatus.completed);
+  });
+
   test('reads task progress from committed chunks only', () {
     final NearSendDatabase database = NearSendDatabase.open(
       path: NearSendDatabase.inMemoryPath,

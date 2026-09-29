@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/task_catalog_controller.dart';
@@ -16,6 +18,23 @@ class TaskOverviewPage extends StatefulWidget {
 
 class _TaskOverviewPageState extends State<TaskOverviewPage> {
   TaskCatalogFilter _filter = TaskCatalogFilter.all;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.refresh();
+    _refreshTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => widget.controller.refresh(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

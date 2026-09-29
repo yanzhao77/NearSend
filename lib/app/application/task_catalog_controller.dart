@@ -301,8 +301,16 @@ SELECT
     WHERE a.transfer_id = t.task_id
     LIMIT 1
   ) AS peer_name,
-  (SELECT COUNT(*) FROM files f WHERE f.task_id = t.task_id) AS file_count,
-  (SELECT COALESCE(SUM(f.size_bytes), 0) FROM files f WHERE f.task_id = t.task_id) AS total_bytes,
+  COALESCE(NULLIF((SELECT COUNT(*) FROM files f WHERE f.task_id = t.task_id), 0),
+    NULLIF((SELECT COUNT(*) FROM ${StorageSchema.manifestFilesTable} mf
+      WHERE mf.transfer_id = t.task_id), 0),
+    (SELECT COUNT(*) FROM ${StorageSchema.taskSourcesTable} s
+      WHERE s.transfer_id = t.task_id), 0) AS file_count,
+  COALESCE((SELECT SUM(f.size_bytes) FROM files f WHERE f.task_id = t.task_id),
+    (SELECT SUM(mf.size_bytes) FROM ${StorageSchema.manifestFilesTable} mf
+      WHERE mf.transfer_id = t.task_id),
+    (SELECT SUM(s.size_bytes) FROM ${StorageSchema.taskSourcesTable} s
+      WHERE s.transfer_id = t.task_id), 0) AS total_bytes,
   (SELECT m.committed_bytes FROM ${StorageSchema.taskReceiverMirrorTable} m
     WHERE m.transfer_id = t.task_id) AS mirrored_bytes,
   (
