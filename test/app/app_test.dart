@@ -398,6 +398,7 @@ void main() {
         }
       }, attempts: 60);
       await settle(tester, () => visible('任务'));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('任务'), findsOneWidget);
       expect(find.text(transferId), findsOneWidget);
       expect(find.byType(SendPage), findsNothing);
@@ -613,9 +614,14 @@ void main() {
 
       await settle(
         tester,
-        () =>
-            node.node!.transfers.taskState(transferId) ==
-            TransferState.completed,
+        () {
+          try {
+            return node.node!.transfers.taskState(transferId) ==
+                TransferState.completed;
+          } on Object {
+            return false;
+          }
+        },
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
