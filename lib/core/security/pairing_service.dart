@@ -195,6 +195,15 @@ class PairingService implements ControlAuthenticator {
     return session.expiresAtMillis > now;
   }
 
+  /// Ends one incoming QR session and invalidates its access token immediately.
+  /// A display label or discovery address is never used as a revocation key.
+  bool disconnectClientSession(String sessionId) {
+    final String? digest = _digestBySession.remove(sessionId);
+    if (digest == null) return false;
+    _sessionsByDigest.remove(digest);
+    return true;
+  }
+
   /// Re-points the candidates at the port the socket actually bound.
   ///
   /// Called by the node once it is listening, and only then: a payload issued while the port was

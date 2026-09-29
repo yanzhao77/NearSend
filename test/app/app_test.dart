@@ -399,6 +399,9 @@ void main() {
           return false;
         }
       }, attempts: 60);
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text(transferId), findsOneWidget);
+      expect(find.byType(SendPage), findsNothing);
       // The sender's own authenticated client polls the peer for server offers too.
       // Its just-proposed client_to_server task must not be echoed back as a receive
       // prompt while the actual receiver is waiting for its local decision.
@@ -433,22 +436,26 @@ void main() {
 
       await settle(
         tester,
-        () => visible(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+        () {
+          try {
+            return peer.tasks.committedBytesForTask(transferId) ==
+                payload.length;
+          } on Object {
+            return false;
+          }
+        },
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
       expect(
-        find.text(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+        find.text('对端进度 ${payload.length} / ${payload.length} B'),
         findsOneWidget,
-        reason:
-            'the screen may only report that the bytes arrived, and must not claim the transfer is '
-            'finished: verifying and saving happen on the other device',
       );
       expect(
         find.text('已完成'),
         findsNothing,
         reason:
-            'nothing on this screen may say 已完成, including the remaining-time figure: that word '
+            'the sender may not say 已完成 until receiver verification and saving; that word '
             'belongs to the side that verified and saved the file',
       );
 
@@ -480,13 +487,10 @@ void main() {
       );
       await settle(
         tester,
-        () => visible(SendPage.phaseLabel(SendPhase.savedByPeer)),
+        () => visible('已完成'),
         realDelay: const Duration(milliseconds: 100),
       );
-      expect(
-        find.text(SendPage.phaseLabel(SendPhase.savedByPeer)),
-        findsOneWidget,
-      );
+      expect(find.text('已完成'), findsWidgets);
       final File written = exports
           .listSync(recursive: true)
           .whereType<File>()

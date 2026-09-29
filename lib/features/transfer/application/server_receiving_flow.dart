@@ -148,8 +148,24 @@ class ServerReceivingFlow extends ChangeNotifier {
   int get fileCount => _fileCount;
 
   bool get isBusy =>
+      _phase == ServerReceivePhase.accepting ||
       _phase == ServerReceivePhase.receiving ||
       _phase == ServerReceivePhase.verifying;
+
+  void prepareNewVisit() {
+    if (isBusy) return;
+    _phase = ServerReceivePhase.waiting;
+    _flow = null;
+    _activeFiles = const <ReceiveFilePreview>[];
+    _currentIndex = 0;
+    _fileCount = 0;
+    _failureReason = null;
+    _savedPaths.clear();
+    _savedFiles.clear();
+    _spaceVerdict = null;
+    _spaceEstimate = null;
+    _notify();
+  }
 
   /// Reads what is waiting for this device's answer.
   ///
@@ -266,6 +282,9 @@ class ServerReceivingFlow extends ChangeNotifier {
     _savedPaths.clear();
     _savedFiles.clear();
     _currentIndex = 0;
+    _flow = null;
+    _fileCount = 0;
+    _activeFiles = const <ReceiveFilePreview>[];
     _phase = ServerReceivePhase.accepting;
     _notify();
 

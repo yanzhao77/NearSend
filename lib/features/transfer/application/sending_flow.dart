@@ -124,6 +124,22 @@ class SendingFlow extends ChangeNotifier {
 
   SendPhase get phase => _phase;
 
+  String? get transferId => _plan?.transferId;
+
+  /// Live sender-side observation. This is display-only; it never overrides
+  /// the receiver's committed checkpoint when resuming a transfer.
+  int? get observedBytes {
+    final OutgoingPlan? plan = _plan;
+    final TransferProgress? figures = _flow?.progress;
+    if (plan == null || figures == null) return null;
+    if (_mode == SendMode.offer) return figures.transferredBytes;
+    int preceding = 0;
+    for (int index = 0; index < _currentIndex; index++) {
+      preceding += plan.manifest.files[index].sizeBytes;
+    }
+    return preceding + figures.transferredBytes;
+  }
+
   /// How this transfer is being moved: pushed by this device, or offered for the peer to pull.
   SendMode get mode => _mode;
 
@@ -203,13 +219,19 @@ class SendingFlow extends ChangeNotifier {
 
   /// Empties the selection.
   void clear() {
+    if (_phase == SendPhase.preparing ||
+        _phase == SendPhase.waitingForPeer ||
+        _phase == SendPhase.offeredToPeer ||
+        _phase == SendPhase.sending) {
+      return;
+    }
     _files.clear();
     _report = FileSelectionReport.of(const <SelectedFile>[]);
     _flow = null;
     _plan = null;
     _failureReason = null;
     _currentIndex = 0;
-    _notify();
+    _set(SendPhase.empty);
   }
 
   /// Runs the whole sequence, returning whether the transfer reached the peer.
@@ -268,8 +290,21 @@ class SendingFlow extends ChangeNotifier {
     while (waited.elapsed < peerFetchTimeout) {
       final ReceiverMirror? reported = mirror?.read(plan.transferId);
       if (reported != null) {
+        int remaining = reported.committedBytes;
+        for (int index = 0; index < plan.manifest.files.length; index++) {
+          _currentIndex = index;
+          if (index == plan.manifest.files.length - 1 ||
+              remaining < plan.manifest.files[index].sizeBytes) {
+            break;
+          }
+          remaining -= plan.manifest.files[index].sizeBytes;
+        }
         _flow?.applyReportedBytes(reported.committedBytes, atMillis: now());
-        _notify();
+        if (reported.committedBytes > 0 && _phase == SendPhase.offeredToPeer) {
+          _set(SendPhase.sending);
+        } else {
+          _notify();
+        }
       }
       final TransferState state = session.engine.transfers.taskState(
         plan.transferId,

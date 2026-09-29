@@ -69,6 +69,7 @@ class ReceivePage extends StatefulWidget {
     this.initialLocation,
     this.onAcceptPush,
     this.autoPromptTransferId,
+    this.onTaskSubmitted,
   });
 
   final ReceivePhase phase;
@@ -144,6 +145,7 @@ class ReceivePage extends StatefulWidget {
 
   /// Offer id selected by the app-level prompt; open the detailed save confirmation once it appears.
   final String? autoPromptTransferId;
+  final VoidCallback? onTaskSubmitted;
 
   static const String heading = '接收文件';
   static const String emptyNote = '对方还没有提供文件。保持连接，这里会自动刷新。';
@@ -734,7 +736,9 @@ class _ReceivePageState extends State<ReceivePage> {
       if (!mayAccept || !mounted) return;
       _selectedLocation = confirmation.location;
       _location.text = confirmation.location.displayName;
-      await accept(confirmation);
+      final Future<bool> operation = accept(confirmation);
+      widget.onTaskSubmitted?.call();
+      await operation;
     } on Object {
       if (mounted) {
         setState(() {

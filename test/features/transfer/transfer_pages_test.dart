@@ -215,6 +215,29 @@ void main() {
   });
 
   group('connection screen', () {
+    testWidgets('verified peer offers disconnect instead of pairing controls', (
+      tester,
+    ) async {
+      bool disconnected = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildNearSendTheme(Brightness.light),
+          home: ConnectionPage(
+            payload: null,
+            selectedPeerName: '已配对手机',
+            selectedPeerReady: true,
+            onDisconnect: () => disconnected = true,
+          ),
+        ),
+      );
+
+      expect(find.text('断开连接'), findsOneWidget);
+      expect(find.text(ConnectionPage.pasteHint), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      await tester.tap(find.text('断开连接'));
+      expect(disconnected, isTrue);
+    });
+
     testWidgets('says so when this device has published nothing', (
       tester,
     ) async {
