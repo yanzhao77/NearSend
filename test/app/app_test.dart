@@ -25,6 +25,7 @@ import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
 import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
@@ -87,6 +88,15 @@ void main() {
   }
 
   bool visible(String text) => find.text(text).evaluate().isNotEmpty;
+
+  String taskSnapshot(WidgetTester tester) {
+    final controller = tester
+        .widget<TaskOverviewPage>(find.byType(TaskOverviewPage))
+        .controller;
+    return 'error=${controller.error}, tasks=${[for (final task in controller.tasks) '${task.taskId}: ${task.state}/${task.status}, '
+          '${task.committedBytes}/${task.totalBytes}, '
+          'observed=${task.observedSentBytes}']}';
+  }
 
   /// Taps a control by its text, scrolling it into view first.
   ///
@@ -450,6 +460,7 @@ void main() {
       expect(
         find.text('对端进度 ${payload.length} / ${payload.length} B'),
         findsOneWidget,
+        reason: taskSnapshot(tester),
       );
       expect(
         find.text('已完成'),
@@ -632,7 +643,7 @@ void main() {
         findsOneWidget,
         reason:
             'on this side the word is earned: the whole file was verified against the frozen '
-            'manifest and written where the user said',
+            'manifest and written where the user said; ${taskSnapshot(tester)}',
       );
       final File written = saveTo
           .listSync(recursive: true)
