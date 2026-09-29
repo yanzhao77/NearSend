@@ -190,6 +190,26 @@ void main() {
     );
   });
 
+  test('does not prompt for its own client-to-server send', () async {
+    await guest.engine.prepareOutgoing(
+      transferId: transferId,
+      direction: TransferDirection.clientToServer,
+      choices: <OutgoingFileChoice>[
+        OutgoingFileChoice(
+          fileId: fileId,
+          relativePath: '推送接收.bin',
+          path: sourceFile().path,
+        ),
+      ],
+    );
+    final ServerReceivingFlow receiving = ServerReceivingFlow(
+      engine: guest.engine,
+      now: () => 1000,
+    );
+    await receiving.refresh();
+    expect(receiving.pending, isEmpty);
+  });
+
   test('a client push is accepted, received and saved by the server', () async {
     final SendingFlow sending = guestFlow();
     await sending.addPaths(<String>[sourceFile().path]);

@@ -179,6 +179,7 @@ class ServerReceivingFlow extends ChangeNotifier {
     for (final String transferId in engine.transfers.taskIdsInState(
       TransferState.waitingAccept,
     )) {
+      if (engine.transfers.taskRole(transferId) != 'receiver') continue;
       final TransferDeclaration? declaration = engine.transfers.readDeclaration(
         transferId,
       );

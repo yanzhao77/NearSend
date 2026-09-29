@@ -625,7 +625,7 @@ void main() {
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
-      await tester.pump();
+      await settle(tester, () => visible('已完成'));
       expect(find.text('任务'), findsOneWidget);
       expect(
         find.text('已完成'),
@@ -783,7 +783,7 @@ void main() {
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
-      await tester.pump();
+      await settle(tester, () => visible('已完成'));
       expect(find.text('任务'), findsOneWidget);
       expect(find.text('已完成'), findsOneWidget);
       // The sender finishes on its own schedule; waited for rather than assumed, so a failure there
