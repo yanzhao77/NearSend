@@ -457,6 +457,11 @@ void main() {
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
+      await settle(
+        tester,
+        () => visible('对端进度 ${payload.length} / ${payload.length} B'),
+        attempts: 100,
+      );
       expect(
         find.text('对端进度 ${payload.length} / ${payload.length} B'),
         findsOneWidget,

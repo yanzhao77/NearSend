@@ -152,6 +152,7 @@ void main() {
 
     expect(ok, isTrue, reason: 'accept failed: ${subject.failureReason}');
     expect(subject.phase, ReceivePhase.saved);
+    expect(client.transfers.taskState(transferId).wireName, 'COMPLETED');
     expect(observedPreAcceptancePlan, isTrue);
     expect(
       received,

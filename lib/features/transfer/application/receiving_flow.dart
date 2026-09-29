@@ -255,6 +255,25 @@ class ReceivingFlow extends ChangeNotifier {
       );
 
       engine.registerRemoteManifest(offer.transferId, manifest);
+      final TransferState current = engine.transfers.taskState(
+        offer.transferId,
+      );
+      if (current == TransferState.interrupted) {
+        engine.transfers.transitionTask(
+          taskId: offer.transferId,
+          to: TransferState.checkingResume,
+        );
+        engine.transfers.transitionTask(
+          taskId: offer.transferId,
+          to: TransferState.ready,
+        );
+      }
+      if (engine.transfers.taskState(offer.transferId) == TransferState.ready) {
+        engine.transfers.transitionTask(
+          taskId: offer.transferId,
+          to: TransferState.transferring,
+        );
+      }
       _fileCount = manifest.files.length;
       _set(ReceivePhase.receiving);
 
@@ -371,6 +390,15 @@ class ReceivingFlow extends ChangeNotifier {
         );
       }
 
+      for (final TransferState next in <TransferState>[
+        TransferState.verifying,
+        TransferState.exporting,
+        TransferState.completed,
+      ]) {
+        if (engine.transfers.taskState(offer.transferId) != next) {
+          engine.transfers.transitionTask(taskId: offer.transferId, to: next);
+        }
+      }
       _set(ReceivePhase.saved);
       return true;
     } on Object catch (error) {
