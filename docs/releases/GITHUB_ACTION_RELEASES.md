@@ -1,7 +1,7 @@
 # GitHub Actions 自动发版
 
-截至 2026-09-29 的预览发布基线：**[v0.1.13](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.13)**。
-该版本对应 `master` 合并提交 `0af49a4a064c69fc50033f6718c30102d4d1b5ef`；它仍是内部预览，不是正式签名分发。
+截至 2026-09-29 的预览发布基线：**[v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)**。
+该版本对应 `master` 提交 `dd90cb7d425a2d5af396d920a27b6ea60c1177d7`；CI 与发布工作流成功，但它仍是 prerelease，不是正式签名分发。PR #78 的 1418 项 Flutter 测试及 Android debug APK 构建通过；没有目标设备回归。
 
 ## 行为
 
@@ -13,7 +13,7 @@ GitHub Actions 页面手动 `workflow_dispatch`。手动触发必须输入完整
 - Windows：Windows `x64` ZIP。
 - macOS：macOS `.app` ZIP。
 
-发布 job 会等待四个平台全部构建成功后才创建标为 **prerelease** 的 GitHub Release。Release tag 使用
+发布 job 会等待四个平台全部构建成功后才创建标为 **prerelease** 的 GitHub Release。当前工作流没有 stable 发布路径，因此该自动化不能完成正式发版。Release tag 使用
 `vMAJOR.MINOR.PATCH`，以仓库已有最高版本 tag 为基线递增 patch；没有历史 release
 时以 `pubspec.yaml` 的版本为基线并递增 patch。Android、Windows、Linux、macOS
 构建都把相同的 Release 版本写入 Flutter build name，Android build number 使用
@@ -21,6 +21,14 @@ GitHub Actions run number。
 
 每个 Release 附带 `SHA256SUMS.txt`。发布说明由 GitHub 的自动生成 release notes
 接口生成，再追加构建 commit、Flutter 版本、Linux 架构和 Android 当前签名限制。
+
+## 最新发布流水线
+
+- CI：[run 36458681128](https://github.com/yanzhao77/NearSend/actions/runs/36458681128)
+- Release：[run 36459384791](https://github.com/yanzhao77/NearSend/actions/runs/36459384791)
+- Release 页面：[NearSend v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)
+- 目标提交：`dd90cb7d425a2d5af396d920a27b6ea60c1177d7`
+- 资产：Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包、`SHA256SUMS.txt`
 
 ## 已验证的发布
 
@@ -63,6 +71,6 @@ job 使用受保护 secret；私钥不能提交到仓库或写入普通日志。
 macOS 当前输出未签名 ZIP，Linux 输出面向 `amd64`。代码签名、notarization、
 多架构构建、Windows MSIX 和 Android Play/AAB 发布不属于本次自动化范围。
 
-此外，当前 Release 仍是预览构建。代码级双节点测试已经覆盖控制面、数据面和界面，
+此外，当前 Release 仍是预览构建。正式发布还需先完成 Android 正式签名、macOS 签名与公证（或明确平台支持范围）、stable 工作流/发布说明，以及最新版本的目标设备验收；不能仅把当前 prerelease 去掉标记来替代这些门槛。代码级双节点测试已经覆盖控制面、数据面和界面，
 但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 和 Windows 取件器
 仍需目标设备证据，不能因构建成功而标记产品验收完成。
