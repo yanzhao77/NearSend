@@ -166,6 +166,9 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   bool _showingOfferPrompt = false;
   bool _receiveLocationConfirmedThisLaunch = false;
   final Set<String> _promptedOfferIds = <String>{};
+  final Set<SendingFlow> _activeSendFlows = <SendingFlow>{};
+  final Set<ReceivingFlow> _activeReceivingFlows = <ReceivingFlow>{};
+  final Set<ServerReceivingFlow> _activeIncomingFlows = <ServerReceivingFlow>{};
   bool _probingPeer = false;
   bool _outgoingRecent = false;
   final Stopwatch _outgoingAge = Stopwatch();
@@ -242,6 +245,50 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               discoveryMethod: '二维码配对',
             ),
     );
+  }
+
+  void _disconnectRadarDevice(RadarDevice device) {
+    if (device.id.startsWith('qr-in:')) {
+      widget.session?.node?.pairing.disconnectClientSession(
+        device.id.substring('qr-in:'.length),
+      );
+    } else if (device.id.startsWith('qr-out:')) {
+      widget.peer?.disconnect();
+      _outgoingRecent = false;
+      _outgoingAge.stop();
+    }
+    _syncPairingPresence();
+    if (mounted) setState(() {});
+  }
+
+  void _refreshTasks() {
+    if (!_disposing) _tasks.refresh();
+  }
+
+  void _prepareReceiveEntry() {
+    final NearSendNode? node = widget.session?.node;
+    if (_receiving?.isBusy == true &&
+        node != null &&
+        widget.peer?.client != null) {
+      _receiving = ReceivingFlow(
+        engine: node.engine,
+        wire: widget.peer!.client!,
+        outputPlans: node.outputPlans,
+        now: () => DateTime.now().millisecondsSinceEpoch,
+      )..addListener(_refreshTasks);
+    } else {
+      _receiving?.prepareNewVisit();
+    }
+    if (_incoming?.isBusy == true && node != null) {
+      _incoming = ServerReceivingFlow(
+        engine: node.engine,
+        outputPlans: node.outputPlans,
+        now: () => DateTime.now().millisecondsSinceEpoch,
+      )..addListener(_refreshTasks);
+      unawaited(_incoming!.refresh());
+    } else {
+      _incoming?.prepareNewVisit();
+    }
   }
 
   Future<void> _probePairedPeer() async {
@@ -332,6 +379,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       outputPlans: node.outputPlans,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
+    _incoming!.addListener(_refreshTasks);
     _tasks.attach(node.database);
     _settings.attach(
       AppSettingsRepository(node.database),
@@ -518,6 +566,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       return;
     }
     if (accept == true) {
+      _prepareReceiveEntry();
       await navigator.pushNamed<void>(
         NearSendApp.receiveRoute,
         arguments: transferId,
@@ -543,9 +592,21 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       unawaited(session.stop().whenComplete(session.dispose));
     }
     widget.peer?.dispose();
-    _flow?.dispose();
-    _receiving?.dispose();
-    _incoming?.dispose();
+    if (_flow != null && !_activeSendFlows.contains(_flow)) _flow!.dispose();
+    for (final ReceivingFlow receiving in <ReceivingFlow>{
+      ?_receiving,
+      ..._activeReceivingFlows,
+    }) {
+      receiving.removeListener(_refreshTasks);
+      if (!_activeReceivingFlows.contains(receiving)) receiving.dispose();
+    }
+    for (final ServerReceivingFlow incoming in <ServerReceivingFlow>{
+      ?_incoming,
+      ..._activeIncomingFlows,
+    }) {
+      incoming.removeListener(_refreshTasks);
+      if (!_activeIncomingFlows.contains(incoming)) incoming.dispose();
+    }
     _tasks.dispose();
     _space.dispose();
     _settings.removeListener(_syncLocalDeviceName);
@@ -737,38 +798,80 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     if (!connected || node == null) {
       return false;
     }
-    _flow?.dispose();
-    // The session this device published: a peer that pairs with it becomes a client of this node,
-    // which is what makes an offer of ours visible to it (§6 lists offers to the bound session).
-    final String? ownSessionId = widget.session?.payload?.sessionId;
-    _flow = SendingFlow(
-      session: SendingSession(engine: node.engine, wire: peer.client!),
-      // The gateway is the platform's own, and null on a platform whose files are paths - which is
-      // what makes the send screen offer a path field there instead of a picker that cannot work.
-      selection: FileSelectionController(
-        gateway: widget.session?.gateway,
-        permissionGateway: widget.permissionGateway,
-      ),
-      now: () => DateTime.now().millisecondsSinceEpoch,
-      transferIdFactory: widget.transferIdFactory,
-      // Asked at send time, not now: the peer may pair with this device after this screen exists,
-      // and that is precisely the moment the answer changes.
-      ownSessionId: ownSessionId,
-      peerHasPaired: () =>
-          ownSessionId != null && node.pairing.hasPairedClient(ownSessionId),
-      mirror: node.mirror,
-    );
-    _receiving?.dispose();
+    if (_flow != null && !_activeSendFlows.contains(_flow)) _flow!.dispose();
+    _flow = _freshSendingFlow();
+    _receiving?.removeListener(_refreshTasks);
+    if (_receiving != null && !_activeReceivingFlows.contains(_receiving)) {
+      _receiving!.dispose();
+    }
     _receiving = ReceivingFlow(
       engine: node.engine,
       wire: peer.client!,
       outputPlans: node.outputPlans,
       now: () => DateTime.now().millisecondsSinceEpoch,
     );
+    _receiving!.addListener(_refreshTasks);
     if (mounted) {
       setState(() {});
     }
     return true;
+  }
+
+  SendingFlow? _freshSendingFlow() {
+    final NearSendNode? node = widget.session?.node;
+    final PeerSession? peer = widget.peer;
+    if (node == null || peer?.client == null || !peer!.isConnected) return null;
+    final String? ownSessionId = widget.session?.payload?.sessionId;
+    return SendingFlow(
+      session: SendingSession(engine: node.engine, wire: peer.client!),
+      selection: FileSelectionController(
+        gateway: widget.session?.gateway,
+        permissionGateway: widget.permissionGateway,
+      ),
+      now: () => DateTime.now().millisecondsSinceEpoch,
+      transferIdFactory: widget.transferIdFactory,
+      ownSessionId: ownSessionId,
+      peerHasPaired: () =>
+          ownSessionId != null && node.pairing.hasPairedClient(ownSessionId),
+      mirror: node.mirror,
+    );
+  }
+
+  void _submitSend(BuildContext context, SendingFlow flow) {
+    if (_activeSendFlows.contains(flow)) return;
+    bool openedTasks = false;
+    void onProgress() {
+      if (_disposing) return;
+      final String? id = flow.transferId;
+      final int? bytes = flow.observedBytes;
+      if (id != null && bytes != null) {
+        _tasks.reportOutgoingProgress(id, bytes);
+      } else {
+        _refreshTasks();
+      }
+      if (id != null && flow.phase == SendPhase.savedByPeer) {
+        _tasks.reportOutgoingCompleted(id);
+      }
+      if (!openedTasks &&
+          id != null &&
+          context.mounted &&
+          (flow.phase == SendPhase.waitingForPeer ||
+              flow.phase == SendPhase.offeredToPeer)) {
+        openedTasks = true;
+        Navigator.of(context).pushReplacementNamed(NearSendApp.tasksRoute);
+      }
+    }
+
+    flow.addListener(onProgress);
+    _activeSendFlows.add(flow);
+    unawaited(
+      flow.send().whenComplete(() {
+        flow.removeListener(onProgress);
+        _activeSendFlows.remove(flow);
+        _refreshTasks();
+        if (_disposing || _flow != flow) flow.dispose();
+      }),
+    );
   }
 
   Future<bool> connectBootstrap(BootstrapPairingPayload payload) async {
@@ -951,17 +1054,34 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   unawaited(_showNoConnectedDeviceDialog(context));
                   return;
                 }
+                if (_flow!.phase != SendPhase.empty &&
+                    _flow!.phase != SendPhase.ready) {
+                  final SendingFlow previous = _flow!;
+                  _flow = _freshSendingFlow();
+                  if (!_activeSendFlows.contains(previous)) previous.dispose();
+                }
                 Navigator.of(context).pushNamed(NearSendApp.sendRoute);
               },
-              onReceive: () =>
-                  Navigator.of(context).pushNamed(NearSendApp.receiveRoute),
+              onReceive: () {
+                _prepareReceiveEntry();
+                Navigator.of(context).pushNamed(NearSendApp.receiveRoute);
+              },
               onContinueTask: () =>
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
               onWifiReadyChanged: _requestWifiReady,
               onBluetoothReadyChanged: _requestBluetoothReady,
-              onRadarDevicePressed: (RadarDevice device) =>
-                  Navigator.of(context)
-                      .pushNamed(NearSendApp.connectRoute, arguments: device),
+              onRadarDevicePressed: (RadarDevice device) {
+                if (!device.isReady &&
+                    !device.id.startsWith('qr-in:') &&
+                    !device.id.startsWith('qr-out:')) {
+                  // Discovery metadata has no pairing token or trusted TLS pin.
+                  // Scan the selected device's QR before opening a connection.
+                  unawaited(_scanFromHome(context));
+                  return;
+                }
+                Navigator.of(context)
+                    .pushNamed(NearSendApp.connectRoute, arguments: device);
+              },
               onScanPairing:
                   defaultTargetPlatform == TargetPlatform.android ||
                       defaultTargetPlatform == TargetPlatform.iOS
@@ -1099,6 +1219,15 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                     selectedPeerConnectionDetail:
                         selectedDevice?.connectionDetail,
                     selectedPeerReady: selectedDevice?.isReady ?? false,
+                    onDisconnect:
+                        selectedDevice != null &&
+                            (selectedDevice.id.startsWith('qr-in:') ||
+                                selectedDevice.id.startsWith('qr-out:'))
+                        ? () {
+                            _disconnectRadarDevice(selectedDevice);
+                            Navigator.of(context).pop();
+                          }
+                        : null,
                     persistentLocalIdentity:
                         session?.hasPersistentIdentity ?? false,
                   );
@@ -1145,13 +1274,24 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   onPreview: (offer) async =>
                       await receiving?.preview(offer) ??
                       const <ReceiveFilePreview>[],
-                  onAccept: (offer, confirmation) async =>
-                      await receiving?.accept(
+                  onAccept: (offer, confirmation) async {
+                    if (receiving == null) return false;
+                    _activeReceivingFlows.add(receiving);
+                    try {
+                      return await receiving.accept(
                         offer,
                         saveLocationRef: confirmation.location.opaqueValue,
                         outputNames: confirmation.outputNames,
-                      ) ??
-                      false,
+                      );
+                    } finally {
+                      _activeReceivingFlows.remove(receiving);
+                      _refreshTasks();
+                      if (_receiving != receiving) {
+                        receiving.removeListener(_refreshTasks);
+                        receiving.dispose();
+                      }
+                    }
+                  },
                   pushOffers: incoming?.pending ?? const <ServerOffer>[],
                   pushPhase: incoming?.phase ?? ServerReceivePhase.waiting,
                   pushProgress: incoming?.progress,
@@ -1184,12 +1324,33 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   onLocationConfirmed: _confirmReceiveLocationForLaunch,
                   onAcceptPush: incoming == null
                       ? null
-                      : (offer, confirmation) async => incoming.accept(
-                          offer,
-                          context: await _storageContext(confirmation.location),
-                          targetRef: confirmation.location.opaqueValue,
-                          outputNames: confirmation.outputNames,
-                        ),
+                      : (offer, confirmation) async {
+                          _activeIncomingFlows.add(incoming);
+                          try {
+                            return await incoming.accept(
+                              offer,
+                              context: await _storageContext(
+                                confirmation.location,
+                              ),
+                              targetRef: confirmation.location.opaqueValue,
+                              outputNames: confirmation.outputNames,
+                            );
+                          } finally {
+                            _activeIncomingFlows.remove(incoming);
+                            _refreshTasks();
+                            if (_incoming != incoming) {
+                              incoming.removeListener(_refreshTasks);
+                              incoming.dispose();
+                            }
+                          }
+                        },
+                  onTaskSubmitted: () {
+                    _refreshTasks();
+                    if (context.mounted) {
+                      Navigator.of(context)
+                          .pushReplacementNamed(NearSendApp.tasksRoute);
+                    }
+                  },
                 ),
               );
             },
@@ -1220,7 +1381,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                     onAddPath: hasPicker
                         ? null
                         : (String path) => flow.addPaths(<String>[path]),
-                    onSend: flow.send,
+                    onSend: () => _submitSend(context, flow),
                     onClear: flow.clear,
                   );
                 },

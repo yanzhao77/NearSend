@@ -25,6 +25,7 @@ class TaskOverview {
     required this.fileCount,
     required this.totalBytes,
     required this.committedBytes,
+    this.observedSentBytes,
     required this.createdAtMillis,
     required this.updatedAtMillis,
   });
@@ -37,6 +38,9 @@ class TaskOverview {
   final int fileCount;
   final int totalBytes;
   final int committedBytes;
+
+  /// A live sender observation, kept separate from durable receiver bytes.
+  final int? observedSentBytes;
   final int createdAtMillis;
   final int updatedAtMillis;
 
@@ -44,8 +48,9 @@ class TaskOverview {
       status == TaskOverviewStatus.recoverable ||
       status == TaskOverviewStatus.paused;
 
-  double? get progress =>
-      totalBytes <= 0 ? null : (committedBytes / totalBytes).clamp(0.0, 1.0);
+  double? get progress => totalBytes <= 0
+      ? null
+      : ((observedSentBytes ?? committedBytes) / totalBytes).clamp(0.0, 1.0);
 }
 
 class TaskFileOverview {
@@ -110,6 +115,8 @@ class TaskCatalogController extends ChangeNotifier {
   NearSendDatabase? _database;
   List<TaskOverview> _tasks = const <TaskOverview>[];
   final Set<String> _hiddenTaskIds = <String>{};
+  final Map<String, int> _observedSentBytes = <String, int>{};
+  final Set<String> _confirmedOutgoingCompletions = <String>{};
   Object? _error;
 
   List<TaskOverview> get tasks => List.unmodifiable(_tasks);
@@ -177,13 +184,28 @@ ORDER BY t.updated_at DESC, f.rowid DESC;
       return;
     }
     try {
-      _tasks = _read(database);
+      _tasks = _read(
+        database,
+        _observedSentBytes,
+        _confirmedOutgoingCompletions,
+      );
       _error = null;
     } on Object catch (error) {
       _tasks = const <TaskOverview>[];
       _error = error;
     }
     notifyListeners();
+  }
+
+  void reportOutgoingProgress(String taskId, int bytes) {
+    if (_observedSentBytes[taskId] == bytes) return;
+    _observedSentBytes[taskId] = bytes;
+    refresh();
+  }
+
+  /// Only an authenticated receiver completion may set this display status.
+  void reportOutgoingCompleted(String taskId) {
+    if (_confirmedOutgoingCompletions.add(taskId)) refresh();
   }
 
   List<TaskOverview> filtered(TaskCatalogFilter filter) {
@@ -260,7 +282,11 @@ ORDER BY f.rowid;
     );
   }
 
-  static List<TaskOverview> _read(NearSendDatabase database) {
+  static List<TaskOverview> _read(
+    NearSendDatabase database,
+    Map<String, int> observedSentBytes,
+    Set<String> confirmedOutgoingCompletions,
+  ) {
     final rows = database.db.select('''
 SELECT
   t.task_id,
@@ -275,8 +301,18 @@ SELECT
     WHERE a.transfer_id = t.task_id
     LIMIT 1
   ) AS peer_name,
-  (SELECT COUNT(*) FROM files f WHERE f.task_id = t.task_id) AS file_count,
-  (SELECT COALESCE(SUM(f.size_bytes), 0) FROM files f WHERE f.task_id = t.task_id) AS total_bytes,
+  COALESCE(NULLIF((SELECT COUNT(*) FROM files f WHERE f.task_id = t.task_id), 0),
+    NULLIF((SELECT COUNT(*) FROM ${StorageSchema.manifestFilesTable} mf
+      WHERE mf.transfer_id = t.task_id), 0),
+    (SELECT COUNT(*) FROM ${StorageSchema.taskSourcesTable} s
+      WHERE s.transfer_id = t.task_id), 0) AS file_count,
+  COALESCE((SELECT SUM(f.size_bytes) FROM files f WHERE f.task_id = t.task_id),
+    (SELECT SUM(mf.size_bytes) FROM ${StorageSchema.manifestFilesTable} mf
+      WHERE mf.transfer_id = t.task_id),
+    (SELECT SUM(s.size_bytes) FROM ${StorageSchema.taskSourcesTable} s
+      WHERE s.transfer_id = t.task_id), 0) AS total_bytes,
+  (SELECT m.committed_bytes FROM ${StorageSchema.taskReceiverMirrorTable} m
+    WHERE m.transfer_id = t.task_id) AS mirrored_bytes,
   (
     SELECT COALESCE(SUM(c.length_bytes), 0)
     FROM files f
@@ -287,10 +323,21 @@ FROM tasks t
 ORDER BY t.updated_at DESC, t.task_id DESC;
 ''');
 
-    return <TaskOverview>[for (final row in rows) _fromRow(row)];
+    return <TaskOverview>[
+      for (final row in rows)
+        _fromRow(
+          row,
+          observedSentBytes[row['task_id'] as String],
+          confirmedOutgoingCompletions.contains(row['task_id'] as String),
+        ),
+    ];
   }
 
-  static TaskOverview _fromRow(dynamic row) {
+  static TaskOverview _fromRow(
+    dynamic row,
+    int? observedBytes,
+    bool confirmedOutgoingCompletion,
+  ) {
     final String taskId = row['task_id'] as String;
     final TransferDirection? direction = TransferDirection.fromWireValue(
       row['direction'] as String,
@@ -306,11 +353,14 @@ ORDER BY t.updated_at DESC, t.task_id DESC;
       taskId: taskId,
       direction: direction,
       state: state,
-      status: _statusFor(state),
+      status: confirmedOutgoingCompletion
+          ? TaskOverviewStatus.completed
+          : _statusFor(state),
       peerName: row['peer_name'] as String?,
       fileCount: row['file_count'] as int,
       totalBytes: row['total_bytes'] as int,
       committedBytes: row['committed_bytes'] as int,
+      observedSentBytes: observedBytes ?? row['mirrored_bytes'] as int?,
       createdAtMillis: row['created_at'] as int,
       updatedAtMillis: row['updated_at'] as int,
     );

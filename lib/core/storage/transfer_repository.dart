@@ -122,6 +122,15 @@ class TransferRepository {
     );
   }
 
+  /// Local role distinguishes an incoming offer from this node's own staged send.
+  String? taskRole(String taskId) {
+    final ResultSet rows = database.db.select(
+      'SELECT role FROM tasks WHERE task_id = ?;',
+      <Object?>[taskId],
+    );
+    return rows.isEmpty ? null : rows.first['role'] as String;
+  }
+
   /// The tasks currently in [state], oldest first.
   ///
   /// The receiving **server** needs this and nothing else could give it: a client that proposes a

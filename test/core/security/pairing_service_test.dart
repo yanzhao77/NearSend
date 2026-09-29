@@ -83,6 +83,19 @@ void main() {
     expect(service.pairedClients, isEmpty);
   });
 
+  test('disconnect revokes only the selected incoming session token', () {
+    final first = service.openSession();
+    final firstToken = sessionTokenFrom(pairIt(requestFor(first)));
+    final second = service.openSession();
+    final secondToken = sessionTokenFrom(pairIt(requestFor(second)));
+
+    expect(service.disconnectClientSession(first.sessionId), isTrue);
+    expect(service.authenticate(token: firstToken, nowMillis: now), isNull);
+    expect(service.authenticate(token: secondToken, nowMillis: now), isNotNull);
+    expect(service.disconnectClientSession(first.sessionId), isFalse);
+    expect(service.pairedClients, hasLength(1));
+  });
+
   test('refresh revokes the old QR but preserves an established session', () {
     final PairingPayload established = service.openSession();
     final String accessToken = sessionTokenFrom(

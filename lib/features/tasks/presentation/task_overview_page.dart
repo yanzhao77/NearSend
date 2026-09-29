@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/task_catalog_controller.dart';
@@ -16,6 +18,25 @@ class TaskOverviewPage extends StatefulWidget {
 
 class _TaskOverviewPageState extends State<TaskOverviewPage> {
   TaskCatalogFilter _filter = TaskCatalogFilter.all;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.controller.refresh();
+    });
+    _refreshTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => widget.controller.refresh(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,13 +48,16 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
           appBar: AppBar(
             title: const Text('任务'),
             actions: <Widget>[
-              TextButton.icon(
-                onPressed:
-                    widget.controller.filtered(TaskCatalogFilter.all).isEmpty
-                    ? null
-                    : widget.controller.clearDisplayedTasks,
-                icon: const Icon(Icons.delete_sweep_outlined),
-                label: const Text('清空任务'),
+              SizedBox(
+                width: 120,
+                child: TextButton.icon(
+                  onPressed:
+                      widget.controller.filtered(TaskCatalogFilter.all).isEmpty
+                      ? null
+                      : widget.controller.clearDisplayedTasks,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('清空任务'),
+                ),
               ),
               IconButton(
                 onPressed: widget.controller.refresh,
@@ -109,8 +133,9 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
                         status: _widgetStatus(task.status),
                         statusLabel: _statusLabel(task.status),
                         progress: task.progress,
-                        progressLabel:
-                            '${task.committedBytes} / ${task.totalBytes} B',
+                        progressLabel: task.observedSentBytes == null
+                            ? '已接收并提交 ${task.committedBytes} / ${task.totalBytes} B'
+                            : '对端进度 ${task.observedSentBytes} / ${task.totalBytes} B',
                         onPressed: () => Navigator.of(context)
                             .pushNamed('/task-detail', arguments: task.taskId),
                       ),
@@ -124,7 +149,9 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
   }
 
   static String _subtitle(TaskOverview task) {
-    final String direction = task.direction == TransferDirection.clientToServer
+    final String direction =
+        task.observedSentBytes != null ||
+            task.direction == TransferDirection.clientToServer
         ? '发送'
         : '接收';
     final String peer = task.peerName?.trim().isNotEmpty == true

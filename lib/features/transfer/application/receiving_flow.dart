@@ -104,6 +104,21 @@ class ReceivingFlow extends ChangeNotifier {
   bool get isBusy =>
       _phase == ReceivePhase.accepting || _phase == ReceivePhase.receiving;
 
+  /// Starts a new visit without touching durable transfer rows or an active receive.
+  void prepareNewVisit() {
+    if (isBusy) return;
+    _offer = null;
+    _flow = null;
+    _currentFileNames.clear();
+    _currentIndex = 0;
+    _fileCount = 0;
+    _failureReason = null;
+    _savedPaths.clear();
+    _savedFiles.clear();
+    _phase = _offers.isEmpty ? ReceivePhase.idle : ReceivePhase.offered;
+    _notify();
+  }
+
   /// Asks the peer what it is offering, and keeps the list for a screen to show.
   ///
   /// §6 lists offers to the session a transfer is bound to, so this is the receiving device's only
@@ -195,6 +210,10 @@ class ReceivingFlow extends ChangeNotifier {
     _savedFiles.clear();
     _currentFileNames.clear();
     _currentIndex = 0;
+    // A previous attempt may still have a progress object. Clear it before
+    // notifying the page, whose file-name getter indexes _currentFileNames.
+    _flow = null;
+    _fileCount = 0;
     _set(ReceivePhase.accepting);
 
     try {
@@ -236,6 +255,25 @@ class ReceivingFlow extends ChangeNotifier {
       );
 
       engine.registerRemoteManifest(offer.transferId, manifest);
+      final TransferState current = engine.transfers.taskState(
+        offer.transferId,
+      );
+      if (current == TransferState.interrupted) {
+        engine.transfers.transitionTask(
+          taskId: offer.transferId,
+          to: TransferState.checkingResume,
+        );
+        engine.transfers.transitionTask(
+          taskId: offer.transferId,
+          to: TransferState.ready,
+        );
+      }
+      if (engine.transfers.taskState(offer.transferId) == TransferState.ready) {
+        engine.transfers.transitionTask(
+          taskId: offer.transferId,
+          to: TransferState.transferring,
+        );
+      }
       _fileCount = manifest.files.length;
       _set(ReceivePhase.receiving);
 
@@ -284,6 +322,18 @@ class ReceivingFlow extends ChangeNotifier {
             index: chunkIndex,
             bytes: bytes,
             leaseEpoch: resumed.leaseEpoch,
+          );
+          // The receiver's committed rows are authoritative. Report only after
+          // the durable commit so the sender can show live progress without
+          // treating socket bytes as saved bytes.
+          await wire.reportCheckpoint(
+            transferId: offer.transferId,
+            manifestDigest: offer.manifestDigest,
+            leaseEpoch: resumed.leaseEpoch,
+            checkpointSeq: engine.tasks.checkpointSeq(offer.transferId),
+            committedBytes: engine.tasks.committedBytesForTask(
+              offer.transferId,
+            ),
           );
           received++;
           _flow?.applyChunkAcknowledged(
@@ -340,6 +390,15 @@ class ReceivingFlow extends ChangeNotifier {
         );
       }
 
+      for (final TransferState next in <TransferState>[
+        TransferState.verifying,
+        TransferState.exporting,
+        TransferState.completed,
+      ]) {
+        if (engine.transfers.taskState(offer.transferId) != next) {
+          engine.transfers.transitionTask(taskId: offer.transferId, to: next);
+        }
+      }
       _set(ReceivePhase.saved);
       return true;
     } on Object catch (error) {

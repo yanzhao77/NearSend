@@ -141,11 +141,18 @@ void main() {
       onFileProgress: (int count, int total) {
         received.add(count);
         expect(total, plan.manifest.files.single.chunkCount);
+        expect(
+          server.mirror.read(transferId)?.committedBytes,
+          client.tasks.committedBytesForTask(transferId),
+          reason:
+              'each durable chunk must be visible to the sender immediately',
+        );
       },
     );
 
     expect(ok, isTrue, reason: 'accept failed: ${subject.failureReason}');
     expect(subject.phase, ReceivePhase.saved);
+    expect(client.transfers.taskState(transferId).wireName, 'COMPLETED');
     expect(observedPreAcceptancePlan, isTrue);
     expect(
       received,
@@ -205,6 +212,17 @@ void main() {
           'the receiver rows are the authority on progress, and they hold every byte that was '
           'committed',
     );
+    subject.prepareNewVisit();
+    expect(subject.currentFileName, isNull);
+    expect(subject.progress, isNull);
+    final List<String?> observedNames = <String?>[];
+    subject.addListener(() => observedNames.add(subject.currentFileName));
+    expect(
+      await subject.accept(offers.single, saveLocationRef: exports.path),
+      isFalse,
+      reason: 'retrying a finished offer may fail, but must not crash the UI',
+    );
+    expect(observedNames, isNotEmpty);
   });
 
   test(

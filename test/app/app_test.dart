@@ -19,14 +19,13 @@ import 'package:nearsend/core/transfer/near_send_node.dart';
 import 'package:nearsend/core/transfer/transfer_client.dart';
 import 'package:nearsend/core/transfer/transfer_engine.dart';
 import 'package:nearsend/features/transfer/application/file_selection_controller.dart';
-import 'package:nearsend/features/transfer/application/receiving_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
-import 'package:nearsend/features/transfer/application/server_receiving_flow.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
+import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
 import 'package:nearsend/app/presentation/app_shell.dart';
 import 'package:nearsend/platform/android_file_gateway.dart';
 import 'package:nearsend/platform/ble_control_gateway.dart';
@@ -89,6 +88,15 @@ void main() {
   }
 
   bool visible(String text) => find.text(text).evaluate().isNotEmpty;
+
+  String taskSnapshot(WidgetTester tester) {
+    final controller = tester
+        .widget<TaskOverviewPage>(find.byType(TaskOverviewPage))
+        .controller;
+    return 'error=${controller.error}, tasks=${[for (final task in controller.tasks) '${task.taskId}: ${task.state}/${task.status}, '
+          '${task.committedBytes}/${task.totalBytes}, '
+          'observed=${task.observedSentBytes}']}';
+  }
 
   /// Taps a control by its text, scrolling it into view first.
   ///
@@ -399,6 +407,11 @@ void main() {
           return false;
         }
       }, attempts: 60);
+      await settle(tester, () => visible('任务'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text(transferId), findsOneWidget);
+      expect(find.byType(SendPage), findsNothing);
       // The sender's own authenticated client polls the peer for server offers too.
       // Its just-proposed client_to_server task must not be echoed back as a receive
       // prompt while the actual receiver is waiting for its local decision.
@@ -433,22 +446,32 @@ void main() {
 
       await settle(
         tester,
-        () => visible(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+        () {
+          try {
+            return peer.tasks.committedBytesForTask(transferId) ==
+                payload.length;
+          } on Object {
+            return false;
+          }
+        },
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
+      await settle(
+        tester,
+        () => visible('对端进度 ${payload.length} / ${payload.length} B'),
+        attempts: 100,
+      );
       expect(
-        find.text(SendPage.phaseLabel(SendPhase.awaitingVerification)),
+        find.text('对端进度 ${payload.length} / ${payload.length} B'),
         findsOneWidget,
-        reason:
-            'the screen may only report that the bytes arrived, and must not claim the transfer is '
-            'finished: verifying and saving happen on the other device',
+        reason: taskSnapshot(tester),
       );
       expect(
         find.text('已完成'),
         findsNothing,
         reason:
-            'nothing on this screen may say 已完成, including the remaining-time figure: that word '
+            'the sender may not say 已完成 until receiver verification and saving; that word '
             'belongs to the side that verified and saved the file',
       );
 
@@ -480,13 +503,10 @@ void main() {
       );
       await settle(
         tester,
-        () => visible(SendPage.phaseLabel(SendPhase.savedByPeer)),
+        () => visible('已完成'),
         realDelay: const Duration(milliseconds: 100),
       );
-      expect(
-        find.text(SendPage.phaseLabel(SendPhase.savedByPeer)),
-        findsOneWidget,
-      );
+      expect(find.text('已完成'), findsWidgets);
       final File written = exports
           .listSync(recursive: true)
           .whereType<File>()
@@ -610,24 +630,26 @@ void main() {
 
       await settle(
         tester,
-        () => visible(ReceivePage.phaseLabel(ReceivePhase.saved)),
+        () {
+          try {
+            return node.node!.transfers.taskState(transferId) ==
+                TransferState.completed;
+          } on Object {
+            return false;
+          }
+        },
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
+      await settle(tester, () => visible('已完成'));
+      expect(find.text('任务'), findsOneWidget);
       expect(
-        find.text(ReceivePage.phaseLabel(ReceivePhase.saved)),
+        find.text('已完成'),
         findsOneWidget,
         reason:
             'on this side the word is earned: the whole file was verified against the frozen '
-            'manifest and written where the user said',
+            'manifest and written where the user said; ${taskSnapshot(tester)}',
       );
-      expect(
-        find.textContaining('界面接收.bin'),
-        findsWidgets,
-        reason:
-            'the saved location names the file, which is how the user finds it',
-      );
-
       final File written = saveTo
           .listSync(recursive: true)
           .whereType<File>()
@@ -773,14 +795,13 @@ void main() {
 
       await settle(
         tester,
-        () => visible(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
+        () => app.transfers.taskState(transferId) == TransferState.completed,
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
-      expect(
-        find.text(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
-        findsWidgets,
-      );
+      await settle(tester, () => visible('已完成'));
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text('已完成'), findsOneWidget);
       // The sender finishes on its own schedule; waited for rather than assumed, so a failure there
       // is reported here instead of as a missing file below.
       await settle(tester, () => acknowledged != null, attempts: 60);

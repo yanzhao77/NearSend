@@ -115,6 +115,7 @@ class ConnectionPage extends StatefulWidget {
     this.selectedPeerDetail,
     this.selectedPeerConnectionDetail,
     this.selectedPeerReady = false,
+    this.onDisconnect,
     this.persistentLocalIdentity = false,
   });
 
@@ -177,6 +178,7 @@ class ConnectionPage extends StatefulWidget {
   final String? selectedPeerDetail;
   final String? selectedPeerConnectionDetail;
   final bool selectedPeerReady;
+  final VoidCallback? onDisconnect;
   final bool persistentLocalIdentity;
 
   static const String pasteHint = '粘贴对方设备显示的连接信息';
@@ -438,6 +440,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
     );
     final PairingPayload? payload = widget.payload;
     final ConnectionAttempt attempt = widget.connection;
+    final bool showingConnectedPeer =
+        widget.selectedPeerName != null && widget.onDisconnect != null;
     final bool canConnectImported =
         (_import.bootstrap == null && widget.onConnect != null) ||
         (_import.bootstrap != null && widget.onConnectBootstrap != null);
@@ -493,90 +497,100 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       persistentIdentity: widget.persistentLocalIdentity,
                     ),
                   const SizedBox(height: NearSendSpacing.xl),
-                  Text(
-                    ConnectionPage.pasteHint,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: NearSendSpacing.sm),
-                  TextField(
-                    controller: _controller,
-                    onChanged: _parse,
-                    maxLines: 4,
-                    minLines: 3,
-                    autofocus: false,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: '{"kind":"lft-pair", …}',
+                  if (!showingConnectedPeer) ...<Widget>[
+                    Text(
+                      ConnectionPage.pasteHint,
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
-                  ),
-                  const SizedBox(height: NearSendSpacing.sm),
-                  if (widget.enableCameraScanner ||
-                      widget.qrImageGateway != null)
-                    Wrap(
-                      spacing: NearSendSpacing.sm,
-                      runSpacing: NearSendSpacing.sm,
-                      children: <Widget>[
-                        if (widget.enableCameraScanner)
-                          OutlinedButton.icon(
-                            onPressed: _checkingCameraPermission ? null : _scan,
-                            icon: _checkingCameraPermission
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.qr_code_scanner),
-                            label: Text(
-                              _checkingCameraPermission ? '正在检查权限' : '扫描二维码',
-                            ),
-                          ),
-                        if (widget.qrImageGateway != null)
-                          SizedBox(
-                            width: 180,
-                            child: PairingImageImportButton(
-                              gateway: widget.qrImageGateway!,
-                              onDecoded: _acceptImportedText,
-                              permissionGateway: widget.permissionGateway,
-                            ),
-                          ),
-                      ],
-                    ),
-                  if (_cameraPermissionError != null) ...<Widget>[
                     const SizedBox(height: NearSendSpacing.sm),
-                    NsPermissionExplainer(
-                      title: '需要摄像头权限',
-                      message: _cameraPermissionError!,
-                    ),
-                  ],
-                  if (_import.error != null)
-                    _Notice(
-                      text: _import.error!,
-                      palette: palette,
-                      isError: true,
-                    ),
-                  if (!widget.connectImmediately &&
-                      _import.isAccepted &&
-                      canConnectImported)
-                    FilledButton.icon(
-                      onPressed: attempt.isBusy ? null : _connectImported,
-                      icon: const Icon(Icons.link),
-                      label: const Text('连接'),
-                    )
-                  else if (_import.isAccepted && !canConnectImported)
-                    _Notice(
-                      text: ConnectionPage.noConnectorNote,
-                      palette: palette,
-                    ),
-                  if (attempt.isBusy)
-                    Padding(
-                      padding: const EdgeInsets.only(top: NearSendSpacing.sm),
-                      child: _Notice(
-                        text: ConnectionPage.connectingNote,
-                        palette: palette,
+                    TextField(
+                      controller: _controller,
+                      onChanged: _parse,
+                      maxLines: 4,
+                      minLines: 3,
+                      autofocus: false,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: '{"kind":"lft-pair", …}',
                       ),
                     ),
-                  if (attempt.isConnected)
+                    const SizedBox(height: NearSendSpacing.sm),
+                    if (widget.enableCameraScanner ||
+                        widget.qrImageGateway != null)
+                      Wrap(
+                        spacing: NearSendSpacing.sm,
+                        runSpacing: NearSendSpacing.sm,
+                        children: <Widget>[
+                          if (widget.enableCameraScanner)
+                            OutlinedButton.icon(
+                              onPressed: _checkingCameraPermission
+                                  ? null
+                                  : _scan,
+                              icon: _checkingCameraPermission
+                                  ? const SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.qr_code_scanner),
+                              label: Text(
+                                _checkingCameraPermission ? '正在检查权限' : '扫描二维码',
+                              ),
+                            ),
+                          if (widget.qrImageGateway != null)
+                            SizedBox(
+                              width: 180,
+                              child: PairingImageImportButton(
+                                gateway: widget.qrImageGateway!,
+                                onDecoded: _acceptImportedText,
+                                permissionGateway: widget.permissionGateway,
+                              ),
+                            ),
+                        ],
+                      ),
+                    if (_cameraPermissionError != null) ...<Widget>[
+                      const SizedBox(height: NearSendSpacing.sm),
+                      NsPermissionExplainer(
+                        title: '需要摄像头权限',
+                        message: _cameraPermissionError!,
+                      ),
+                    ],
+                    if (_import.error != null)
+                      _Notice(
+                        text: _import.error!,
+                        palette: palette,
+                        isError: true,
+                      ),
+                    if (!widget.connectImmediately &&
+                        _import.isAccepted &&
+                        canConnectImported)
+                      FilledButton.icon(
+                        onPressed: attempt.isBusy ? null : _connectImported,
+                        icon: const Icon(Icons.link),
+                        label: const Text('连接'),
+                      )
+                    else if (_import.isAccepted && !canConnectImported)
+                      _Notice(
+                        text: ConnectionPage.noConnectorNote,
+                        palette: palette,
+                      ),
+                    if (attempt.isBusy)
+                      Padding(
+                        padding: const EdgeInsets.only(top: NearSendSpacing.sm),
+                        child: _Notice(
+                          text: ConnectionPage.connectingNote,
+                          palette: palette,
+                        ),
+                      ),
+                  ],
+                  if (showingConnectedPeer && widget.onDisconnect != null)
+                    FilledButton.icon(
+                      onPressed: widget.onDisconnect,
+                      icon: const Icon(Icons.link_off),
+                      label: const Text('断开连接'),
+                    ),
+                  if (!showingConnectedPeer && attempt.isConnected)
                     Padding(
                       padding: const EdgeInsets.only(top: NearSendSpacing.sm),
                       child: Column(
