@@ -1,9 +1,24 @@
 # NearSend 1.2 验收记录
 
-更新日期：2026-09-27
+更新日期：2026-09-29
 
 状态说明：`通过` 必须有命令或实机证据；`未执行` 表示没有证据；`受阻` 必须写明缺失条件。
 自动化测试不能替代实机网络、权限和生命周期验证。
+
+## 2026-09-29 master / v0.1.14 当前状态
+
+PR #75–#78 已合并至 `master`；最新提交 `dd90cb7d425a2d5af396d920a27b6ea60c1177d7` 已由 CI 与预览发布流水线构建，GitHub Release 为 [v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)。PR #78 验证包括格式检查、`flutter analyze`、1418 项 Flutter 测试及 Android debug APK 构建通过。该版本没有目标设备回归，因此构建与自动化结果不计作真机传输通过。
+
+| 检查 | 状态 | 证据 |
+|---|---|---|
+| v0.1.14 CI / 发布构建 | 通过（自动化） | [CI run 36458681128](https://github.com/yanzhao77/NearSend/actions/runs/36458681128)、[Release run 36459384791](https://github.com/yanzhao77/NearSend/actions/runs/36459384791)；四平台资产及 SHA-256 清单生成 |
+| PR #78 自动化验证 | 通过（自动化） | 格式检查、`flutter analyze`、1418 项 Flutter 测试、Android debug APK 构建；见 [PR #78](https://github.com/yanzhao77/NearSend/pull/78) |
+| v0.1.14 目标设备回归 | 未执行 | 无当前版本 Android/Windows 设备回归记录 |
+| 最新文件级真机传输证据 | 通过（限定范围） | v0.1.11，同一 5GHz Wi-Fi，Android→Windows 传输 6,683 字节文件并核对 SHA-256 匹配；不能外推到反向传输、v0.1.14、热点或跨网络 |
+| Windows→Android、热点、跨网络、大文件断点恢复、断网续传 | 未验证 | 尚无对应目标设备与文件哈希证据 |
+| 正式稳定版发布准备 | 受阻 | 工作流固定创建 prerelease；Android 为 debug signing，macOS 未签名/未 notarize；见[发布说明](../GITHUB_ACTION_RELEASES.md) |
+
+以下各节是按当时版本保存的历史验收记录，不能视作 v0.1.14 回归结果。
 
 ## 2026-09-27 扫码后台连接与已接收文件列表（自动化）
 
