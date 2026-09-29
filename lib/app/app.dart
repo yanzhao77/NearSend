@@ -594,14 +594,14 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     widget.peer?.dispose();
     if (_flow != null && !_activeSendFlows.contains(_flow)) _flow!.dispose();
     for (final ReceivingFlow receiving in <ReceivingFlow>{
-      if (_receiving != null) _receiving!,
+      ?_receiving,
       ..._activeReceivingFlows,
     }) {
       receiving.removeListener(_refreshTasks);
       if (!_activeReceivingFlows.contains(receiving)) receiving.dispose();
     }
     for (final ServerReceivingFlow incoming in <ServerReceivingFlow>{
-      if (_incoming != null) _incoming!,
+      ?_incoming,
       ..._activeIncomingFlows,
     }) {
       incoming.removeListener(_refreshTasks);
@@ -1224,7 +1224,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                             (selectedDevice.id.startsWith('qr-in:') ||
                                 selectedDevice.id.startsWith('qr-out:'))
                         ? () {
-                            _disconnectRadarDevice(selectedDevice!);
+                            _disconnectRadarDevice(selectedDevice);
                             Navigator.of(context).pop();
                           }
                         : null,
