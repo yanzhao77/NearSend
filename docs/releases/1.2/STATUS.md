@@ -1,3 +1,5 @@
+> **历史快照（2026-09-24）**：本文件描述 `feat/v1.2-upgrade` 分支及当时的 `master` 基线，不代表当前主干。当前主干已合并 PR #75–#78，最新预览版为 [v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)（commit `dd90cb7d425a2d5af396d920a27b6ea60c1177d7`）。最新验收状态请看[项目台账](../../PROJECT_LEDGER.md)和[验收记录](ACCEPTANCE.md)。
+
 # NearSend 1.2 开发状态
 
 更新日期：2026-09-24
