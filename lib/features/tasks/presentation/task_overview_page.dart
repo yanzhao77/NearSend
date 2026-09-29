@@ -27,13 +27,16 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
           appBar: AppBar(
             title: const Text('任务'),
             actions: <Widget>[
-              TextButton.icon(
-                onPressed:
-                    widget.controller.filtered(TaskCatalogFilter.all).isEmpty
-                    ? null
-                    : widget.controller.clearDisplayedTasks,
-                icon: const Icon(Icons.delete_sweep_outlined),
-                label: const Text('清空任务'),
+              SizedBox(
+                width: 120,
+                child: TextButton.icon(
+                  onPressed:
+                      widget.controller.filtered(TaskCatalogFilter.all).isEmpty
+                      ? null
+                      : widget.controller.clearDisplayedTasks,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('清空任务'),
+                ),
               ),
               IconButton(
                 onPressed: widget.controller.refresh,

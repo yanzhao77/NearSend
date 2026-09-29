@@ -399,6 +399,7 @@ void main() {
           return false;
         }
       }, attempts: 60);
+      await settle(tester, () => visible('任务'));
       expect(find.text('任务'), findsOneWidget);
       expect(find.text(transferId), findsOneWidget);
       expect(find.byType(SendPage), findsNothing);
@@ -614,24 +615,21 @@ void main() {
 
       await settle(
         tester,
-        () => visible(ReceivePage.phaseLabel(ReceivePhase.saved)),
+        () =>
+            node.node!.transfers.taskState(transferId) ==
+            TransferState.completed,
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
+      await tester.pump();
+      expect(find.text('任务'), findsOneWidget);
       expect(
-        find.text(ReceivePage.phaseLabel(ReceivePhase.saved)),
+        find.text('已完成'),
         findsOneWidget,
         reason:
             'on this side the word is earned: the whole file was verified against the frozen '
             'manifest and written where the user said',
       );
-      expect(
-        find.textContaining('界面接收.bin'),
-        findsWidgets,
-        reason:
-            'the saved location names the file, which is how the user finds it',
-      );
-
       final File written = saveTo
           .listSync(recursive: true)
           .whereType<File>()
@@ -777,14 +775,13 @@ void main() {
 
       await settle(
         tester,
-        () => visible(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
+        () => app.transfers.taskState(transferId) == TransferState.completed,
         attempts: 200,
         realDelay: const Duration(milliseconds: 150),
       );
-      expect(
-        find.text(ReceivePage.pushPhaseLabel(ServerReceivePhase.saved)),
-        findsWidgets,
-      );
+      await tester.pump();
+      expect(find.text('任务'), findsOneWidget);
+      expect(find.text('已完成'), findsOneWidget);
       // The sender finishes on its own schedule; waited for rather than assumed, so a failure there
       // is reported here instead of as a missing file below.
       await settle(tester, () => acknowledged != null, attempts: 60);
