@@ -23,7 +23,9 @@ class _TaskOverviewPageState extends State<TaskOverviewPage> {
   @override
   void initState() {
     super.initState();
-    widget.controller.refresh();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.controller.refresh();
+    });
     _refreshTimer = Timer.periodic(
       const Duration(milliseconds: 500),
       (_) => widget.controller.refresh(),
