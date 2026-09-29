@@ -1,8 +1,8 @@
 # NearSend 项目现状与进度台账
 
-更新日期：2026-09-29。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格、GitHub Actions 发布结果、T12 UI 与近期首页/扫码 PR 合并状态。当前预览版为 [v0.1.13](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.13)，对应 `master` 合并提交 `0af49a4a064c69fc50033f6718c30102d4d1b5ef`。本地验收分支 `fix/device-platform-display-name` 中的后续改动尚未提交或合并，不能视为 v0.1.13 已更新。
+更新日期：2026-09-29。范围：技术方案V2.1、协议草案、S0参考实验、研发治理、实施规格及当前主干/发布状态。当前预览版为 [v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)，对应 `master` 提交 `dd90cb7d425a2d5af396d920a27b6ea60c1177d7`。该版本仍为 prerelease，CI/自动化验证已通过，但没有 v0.1.14 目标设备验收；正式签名分发仍未就绪。
 
-## 本次分支增量（2026-09-29）：Wi-Fi / BLE 发现无设备排查
+## PR #78 相关验收增量（2026-09-29）：Wi-Fi / BLE 发现无设备排查
 
 - 首页列表只接受正在运行 NearSend 且开启相应发现开关的对端：Wi-Fi 需广播兼容 `_nearsend._tcp`；
   BLE 需广播 NearSend 自定义服务和兼容协议数据。路由器在线客户端及普通蓝牙设备不会被列出。
@@ -16,7 +16,7 @@
   无 Android 设备，真机权限状态、BLE 双机发现、mDNS 跨设备发现和 AP 组播行为仍未验证；本增量不代表
   发现功能已通过实机验收。
 
-## 本次验收增量（2026-09-27）：Android 扫码恢复与 Windows 接收请求
+## 历史验收快照（2026-09-27）：Android 扫码与 Windows 接收请求（已被后续版本取代）
 
 状态：**扫码与配对已通过；实际文件落盘尚未通过。** 在 `fix/android-camera-initialization` 将 `mobile_scanner` 从 7.1.3 更新到 7.4.2 后，以本地 Android release APK 在 Xiaomi 25102RKBEC / Android 17（API 37）启动相机成功；手机扫描 Windows NearSend 的连接二维码后，Android 页面显示已实时验证并就绪，Windows 首页也显示本次扫码会话已连接。Android 选择仅用于验收的合成文件 `acceptance-1m.bin`（1 MiB）并发送后，Windows“接收文件”页出现待确认请求；用户提供截图显示已选 `windows-received`，但空间预检仍卡在“待完成”，接收按钮未显示。验收文件未落盘，尚不能声称文件传输成功。未执行反向传输、大文件续传或断网重连。
 
@@ -40,7 +40,9 @@
 
 ## 一句话现状
 
-**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`；设备首页/传输导航、首页扫一扫入口及扫码权限与失败返回分别由 PR #71、#73、#74 合并进入 `master`，最新预览版仍为 [v0.1.10](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10)（`e1cfb30`）。2026-09-27 本地验收分支已证明 Android release 相机启动、扫描 Windows 连接码及自动建立已验证会话可用；但 Android→Windows 1 MiB 请求尚未完成 Windows 接收、哈希核对，反向传输、大文件恢复和断网重连仍未完成。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
+截至 2026-09-29，master 为 `dd90cb7d425a2d5af396d920a27b6ea60c1177d7`，最新预览版 [v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14) 已发布；PR #75–#78 均已合并。v0.1.14 的 CI 与自动化测试通过（1418 项 Flutter 测试及 Android debug APK 构建），但没有目标设备回归。最新文件级真机证据仍为 v0.1.11：同一 5GHz Wi-Fi 下 Android→Windows 传输 6,683 字节文件并通过 SHA-256 核对；反向、热点、跨网络、大文件恢复和断网续传尚未验证。当前自动发布工作流只创建 prerelease，Android debug signing、macOS 签名/notarization 及正式版设备验收尚未完成。以下详细台账中的批次记录按原日期保留，属于历史快照。
+
+**S0进行中：产品方向、实施架构、端侧分层、UI/UX、质量门禁和 Agent 工作流已形成设计基线；Android/Windows/iOS Flutter 工程、CI 门禁、Dart 协议模型、配对与授权逻辑、SQLite schema v9、manifest staging、接收输出计划、终检与导出编排、以及 `chunk` 数据面（`PUT`/`GET`）均已有实现和测试。T12 UI 全平台改造已通过 PR #61 squash 合并到 `master`；设备首页/传输导航、首页扫一扫入口及扫码权限与失败返回分别由 PR #71、#73、#74 合并进入 `master`，最新预览版为 [v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)（`dd90cb7`），PR #75–#78 已合并。v0.1.14 自动化测试通过但未做目标设备回归；最新已记录的文件级实机成功仍是 v0.1.11 同 Wi-Fi Android→Windows 小文件 SHA-256 核对。反向传输、大文件恢复和断网重连仍未通过实机验证。当前 17 个协议端点已有实现（`pair`、`transfers`、`manifest` 读写、`seal`、`decision`、`authorization`、`authorization/receipt`、`resume`、`status`、`putChunk`、`getChunk`、`checkpoint`、`pause`、`complete`、`cancel`、`control`、`control/receipt`），`offers` 亦已实现。两个真实节点加真实 TLS 的代码级测试已经覆盖控制面、数据面和界面流程，但 Android ↔ Windows 的真实设备双向传输、大文件恢复、Android SAF 与 Windows 取件器，以及 Windows/iOS UI 平台证据仍缺目标环境记录，因此**还不能声称跨平台产品闭环已验收**。Android debug signing、macOS 未签名、Linux amd64、协议未冻结和双机验收缺口仍是明确限制。**
 
 ## 1. 状态口径
 
@@ -74,7 +76,7 @@
 | D11 | 质量与验收策略 | 已完成：设计 | [质量策略](testing/QUALITY_AND_ACCEPTANCE.md) | 设备阈值待目标端基线形成后冻结 |
 | D12 | Agent 任务手册 | 已完成：治理 | [任务手册](AGENT_TASK_PLAYBOOK.md) | 任务卡统一放在 [docs/tasks/](tasks/README.md)，见 ADR-0001 |
 | R01 | Flutter客户端与原生适配 | 部分完成：工程、核心层、UI 基线与代码级业务链路 | [T01-01](tasks/T01-01.md)、[T03-01](tasks/T03-01.md)、[T04-01](tasks/T04-01.md)、[T06-01](tasks/T06-01.md)、[T12-10](tasks/T12-10.md) | T12 UI 基线已由 PR #61 合并；真实设备文件端口、恢复编排、Windows 取件器、Flutter SDK 复测和完整 UI 平台验收仍未完成 |
-| R02 | 安装包、签名构建及发布CI | 部分完成：预览版自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.10 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；最新 v0.1.10 标记为 prerelease，手动发布目标也核验 master CI；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
+| R02 | 安装包、签名构建及发布CI | 部分完成：预览版自动发版已验证 | [发布说明](releases/GITHUB_ACTION_RELEASES.md)、[v0.1.14 Release](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.10) | GitHub Actions 已构建 Android/Windows/macOS/Linux 并生成校验清单；最新 v0.1.14 标记为 prerelease，手动发布目标也核验 master CI；Android 正式签名、macOS 签名与 notarization、Linux 多架构、Windows MSIX、Android Play/AAB 仍未完成 |
 | R03 | CI 门禁与工具链固定 | 已完成 | [T01-02](tasks/T01-02.md)、[运行汇总](testing/evidence/2026-09-20/t01-02-01/summary.md) | CI 门禁和发布流水线均已在 GitHub Actions 验证；发布签名与正式分发仍属 T10 |
 | R04 | 接收方持久化层 | 部分完成：schema v9 与核心实现已测试 | [T04-01](tasks/T04-01.md)、[ADR-0004](decisions/ADR-0004-staging持久化与恢复权威.md)、[存储证据](testing/evidence/2026-09-20/t04-01-05/summary.md)、[v1→v2 证据](testing/evidence/2026-09-20/t06-01-04/summary.md)、[v2→v3 证据](testing/evidence/2026-09-20/t03-01-08/summary.md)、[1.2 状态](releases/1.2/STATUS.md) | schema v1→v9、块权威、租约、幂等、manifest staging、任务凭证、来源引用、非机密设置（v7）、接收输出计划（v8）及公开身份元数据/peer 历史（v9）均已实现并测试；真实 OS `ENOSPC`、真机 `syncData`、平台权限撤销与断电耐久性仍未验证 |
 
@@ -113,7 +115,7 @@
 | T07 Android热点集成 | 阻塞于B01/B02 | 无互联网、无路由器端到端完成 |
 | T08 反向/多文件 | 待开始 | 角色矩阵、部分失败、小文件队列通过 |
 | T09 iOS集成 | 待开始，早期探针阻塞 | 六方向与iOS生命周期通过 |
-| T10 安装升级与发布 | **进行中**：GitHub Actions 预览发版至 `v0.1.10` 已完成；正式签名、升级、迁移兼容和用户独立试用待完成 | 迁移、兼容、签名与用户独立试用通过 |
+| T10 安装升级与发布 | **进行中**：GitHub Actions 预览发版至 `v0.1.14` 已完成；正式签名、升级、迁移兼容和用户独立试用待完成 | 迁移、兼容、签名与用户独立试用通过 |
 
 ### 4.1 首批可领取任务
 
