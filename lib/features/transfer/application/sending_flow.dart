@@ -314,7 +314,8 @@ class SendingFlow extends ChangeNotifier {
         _set(SendPhase.savedByPeer);
         return true;
       }
-      if (state == TransferState.cancelled ||
+      if (state == TransferState.interrupted ||
+          state == TransferState.cancelled ||
           state == TransferState.failed ||
           state == TransferState.partiallyCompleted) {
         throw SendingRefused('对方没有完成这次传输（${state.wireName}）。');
@@ -398,7 +399,8 @@ class SendingFlow extends ChangeNotifier {
           _set(SendPhase.savedByPeer);
           return;
         }
-        if (status.state == TransferState.cancelled ||
+        if (status.state == TransferState.interrupted ||
+            status.state == TransferState.cancelled ||
             status.state == TransferState.failed ||
             status.state == TransferState.partiallyCompleted) {
           throw SendingRefused('对方没有完成这次传输（${status.state.wireName}）。');

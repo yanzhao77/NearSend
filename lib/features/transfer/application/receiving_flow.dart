@@ -309,6 +309,10 @@ class ReceivingFlow extends ChangeNotifier {
         final List<int> missing = engine.missingChunks(file.fileId);
         int received = file.chunkCount - missing.length;
         for (final int chunkIndex in missing) {
+          if (engine.transfers.taskState(offer.transferId) ==
+              TransferState.interrupted) {
+            throw ReceivingRefused('连接已断开，已接收数据保留在本机。');
+          }
           final bytes = await wire.getChunk(
             transferId: offer.transferId,
             fileId: file.fileId,

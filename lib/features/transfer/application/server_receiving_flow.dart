@@ -362,7 +362,9 @@ class ServerReceivingFlow extends ChangeNotifier {
         final TransferState state = engine.transfers.taskState(
           offer.transferId,
         );
-        if (state == TransferState.cancelled || state == TransferState.failed) {
+        if (state == TransferState.interrupted ||
+            state == TransferState.cancelled ||
+            state == TransferState.failed) {
           throw const ServerReceiveRefused(interruptedReason);
         }
         _updateReceivingProgress(offer, files);

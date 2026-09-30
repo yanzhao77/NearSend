@@ -297,6 +297,15 @@ class TaskCredentialRepository {
     return TaskAccessLookup(transferId: row['transfer_id'] as String);
   }
 
+  /// Stops current data access while preserving the credentials needed to resume.
+  void revokeAccessToken(String taskId) {
+    database.db.execute(
+      'DELETE FROM ${StorageSchema.taskCredentialsTable} '
+      'WHERE transfer_id = ? AND kind = ?;',
+      <Object?>[taskId, StorageSchema.credentialKindTaskAccess],
+    );
+  }
+
   /// Removes every credential of [taskId], for a cancel or a terminal failure.
   void revokeAll(String taskId) {
     database.transaction(() {

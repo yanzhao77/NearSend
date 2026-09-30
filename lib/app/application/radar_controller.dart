@@ -10,6 +10,19 @@ import 'package:nearsend/platform/mdns_discovery_gateway.dart';
 
 enum RadarReadinessPhase { off, starting, ready, stopping, error }
 
+enum DeviceConnectionKind {
+  candidate,
+  incomingSession,
+  outgoingSession,
+  history,
+}
+
+class DeviceConnectionRef {
+  const DeviceConnectionRef(this.kind, this.id);
+  final DeviceConnectionKind kind;
+  final String id;
+}
+
 class RadarDevice {
   const RadarDevice({
     required this.id,
@@ -21,6 +34,7 @@ class RadarDevice {
     this.platform = '平台未知',
     this.discoveryMethod = '发现方式未知',
     this.connectionDetail,
+    this.connectionRef,
   });
 
   final String id;
@@ -32,6 +46,7 @@ class RadarDevice {
   final String platform;
   final String discoveryMethod;
   final String? connectionDetail;
+  final DeviceConnectionRef? connectionRef;
 }
 
 class RadarController extends ChangeNotifier {
@@ -55,6 +70,10 @@ class RadarController extends ChangeNotifier {
       for (final client in incoming)
         RadarDevice(
           id: 'qr-in:${client.sessionId}',
+          connectionRef: DeviceConnectionRef(
+            DeviceConnectionKind.incomingSession,
+            client.sessionId,
+          ),
           name: client.label.isEmpty ? '扫码连接设备' : client.label,
           detail: '二维码配对 · 本次会话',
           isKnown: false,
@@ -240,6 +259,10 @@ class RadarController extends ChangeNotifier {
       out.add(
         RadarDevice(
           id: peer.peerId,
+          connectionRef: DeviceConnectionRef(
+            DeviceConnectionKind.history,
+            peer.peerId,
+          ),
           name: peer.displayName ?? '已配对设备',
           detail: peer.platform ?? '平台未知',
           isKnown: true,

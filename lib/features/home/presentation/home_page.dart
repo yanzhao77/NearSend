@@ -51,7 +51,6 @@ class HomePage extends StatelessWidget {
   final ValueChanged<RadarDevice>? onRadarDevicePressed;
   final VoidCallback? onScanPairing;
 
-  static const String connectRoute = '/connect';
   static const String transferRoute = '/transfer';
   static const String emptyStateExplanation = '无需互联网，设备之间仍需建立本地 Wi-Fi 连接。';
   static const String baselineNotice =
@@ -89,7 +88,11 @@ class HomePage extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: onScanPairing,
                     icon: const Icon(Icons.center_focus_weak),
-                    label: const Text('扫一扫连接设备'),
+                    label: Text(
+                      Theme.of(context).platform == TargetPlatform.windows
+                          ? '导入二维码连接设备'
+                          : '扫一扫连接设备',
+                    ),
                   ),
                 const SizedBox(height: NearSendSpacing.md),
                 const NsInfoBanner(
