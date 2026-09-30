@@ -235,6 +235,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
               ),
               const SizedBox(height: NearSendSpacing.lg),
+              ListTile(
+                title: const Text('高级连接'),
+                subtitle: const Text('手动粘贴连接信息或导入二维码图片'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    Navigator.of(context)
+                        .pushNamed('/settings/advanced-connection'),
+              ),
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).pushNamed('/about'),
                 icon: const Icon(Icons.info_outline),

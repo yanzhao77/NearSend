@@ -100,6 +100,8 @@ class PeerSession extends ChangeNotifier {
   bool _pinMismatched = false;
   String? _presentedFingerprint;
   bool _disposed = false;
+  int _generation = 0;
+  TransferClient? _pendingClient;
 
   PeerPhase get phase => _phase;
 
@@ -131,10 +133,12 @@ class PeerSession extends ChangeNotifier {
   /// Returns whether a connection was established; the phase says the same thing, so a caller may
   /// use whichever reads better.
   Future<bool> connect(PairingPayload payload, {String? displayLabel}) async {
-    if (_phase == PeerPhase.connecting) {
+    if (_disposed || _phase == PeerPhase.connecting) {
       return false;
     }
     _reset();
+    final int generation = ++_generation;
+    bool current() => !_disposed && generation == _generation;
     _set(
       phase: PeerPhase.connecting,
       failureReason: null,
@@ -153,21 +157,30 @@ class PeerSession extends ChangeNotifier {
           port: candidate.port,
           onCertificateSeen:
               (PinnedConnectionOutcome outcome, String fingerprint) {
-                if (outcome == PinnedConnectionOutcome.pinMismatched) {
+                if (current() &&
+                    outcome == PinnedConnectionOutcome.pinMismatched) {
                   sawMismatch = true;
                   presented = fingerprint;
                 }
               },
         );
+        _pendingClient = client;
         await client
             .pairFrom(payload, clientLabel: displayLabel ?? clientLabel)
             .timeout(connectTimeout);
+        if (!current()) {
+          client.close();
+          return false;
+        }
+        _pendingClient = null;
         _client = client;
         _peer = payload;
         _set(phase: PeerPhase.connected, failureReason: null);
         return true;
       } on Object {
         client?.close();
+        if (!current()) return false;
+        _pendingClient = null;
         if (sawMismatch) {
           // §2: a mismatch is a statement about the peer's identity, not about this address, so
           // the remaining candidates are not tried. Retrying would be asking the same question of
@@ -186,6 +199,15 @@ class PeerSession extends ChangeNotifier {
     return false;
   }
 
+  /// Invalidates a pending handshake without closing a previously established session.
+  void cancelPending() {
+    if (_phase != PeerPhase.connecting) return;
+    ++_generation;
+    _pendingClient?.close();
+    _pendingClient = null;
+    _set(phase: PeerPhase.idle, failureReason: null);
+  }
+
   /// Drops the connection, if there is one.
   void disconnect() {
     _reset();
@@ -200,6 +222,9 @@ class PeerSession extends ChangeNotifier {
   }
 
   void _reset() {
+    ++_generation;
+    _pendingClient?.close();
+    _pendingClient = null;
     _client?.close();
     _client = null;
     _peer = null;

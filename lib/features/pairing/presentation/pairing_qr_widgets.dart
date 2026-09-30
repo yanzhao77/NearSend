@@ -50,13 +50,15 @@ class MobilePairingScannerPage extends StatefulWidget {
       _MobilePairingScannerPageState();
 }
 
-class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
+class _MobilePairingScannerPageState extends State<MobilePairingScannerPage>
+    with WidgetsBindingObserver {
   late final MobileScannerController _controller;
   bool _handled = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = MobileScannerController(
       formats: const <BarcodeFormat>[BarcodeFormat.qrCode],
       detectionSpeed: DetectionSpeed.noDuplicates,
@@ -65,8 +67,18 @@ class _MobilePairingScannerPageState extends State<MobilePairingScannerPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused && !_handled) {
+      _handled = true;
+      _controller.stop();
+      if (mounted) Navigator.of(context).pop<Object?>();
+    }
   }
 
   void _detected(BarcodeCapture capture) {
@@ -189,7 +201,7 @@ class _PairingImageImportButtonState extends State<PairingImageImportButton> {
       if (bytes == null) return;
       final String value = await decodeQrImage(bytes);
       ScannedPairingPayload.parse(value);
-      widget.onDecoded(value);
+      if (mounted) widget.onDecoded(value);
     } on Object {
       if (mounted) setState(() => _error = '图片中没有可用的 NearSend 配对码。');
     } finally {

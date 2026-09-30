@@ -111,6 +111,8 @@ class NodeSession extends ChangeNotifier {
   NodePhase _phase = NodePhase.stopped;
   NodeRuntime? _runtime;
   PairingPayload? _payload;
+  DateTime? _payloadIssuedAt;
+  DateTime? get payloadIssuedAt => _payloadIssuedAt;
   String? _failureReason;
   String? _discoveryFailureReason;
   Future<void>? _attempt;
@@ -142,6 +144,7 @@ class NodeSession extends ChangeNotifier {
     final current = node;
     if (current == null || _phase != NodePhase.ready) return;
     _payload = current.refreshPairingSession();
+    _payloadIssuedAt = DateTime.now();
     final MdnsDiscoveryGateway? mdns = discovery;
     if (_discoveryEnabled && mdns != null) {
       try {
@@ -223,6 +226,7 @@ class NodeSession extends ChangeNotifier {
       final NearSendNode node = await opened.start();
       _runtime = opened;
       _payload = node.payload;
+      _payloadIssuedAt = DateTime.now();
       _discoveryFailureReason = null;
       final MdnsDiscoveryGateway? mdns = discovery;
       final PairingPayload? payload = node.payload;
@@ -304,6 +308,7 @@ class NodeSession extends ChangeNotifier {
     final NodeRuntime? running = _runtime;
     _runtime = null;
     _payload = null;
+    _payloadIssuedAt = null;
     _discoveryEnabled = false;
     _discoveryFailureReason = null;
     try {

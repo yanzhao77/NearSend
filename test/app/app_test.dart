@@ -4,6 +4,9 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride, TargetPlatform;
+import 'package:nearsend/platform/platform_permission_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nearsend/app/app.dart';
@@ -23,7 +26,8 @@ import 'package:nearsend/features/transfer/application/sending_flow.dart';
 import 'package:nearsend/features/transfer/application/sending_session.dart';
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
-import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
+import 'package:nearsend/features/pairing/presentation/pairing_qr_widgets.dart';
+import 'package:nearsend/features/pairing/presentation/connection_surfaces.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
 import 'package:nearsend/features/tasks/presentation/task_overview_page.dart';
 import 'package:nearsend/app/presentation/app_shell.dart';
@@ -109,6 +113,113 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('home scanner pairs over real TLS without a connection form', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final node = session();
+    final peer = PeerSession();
+    NearSendNode? remote;
+    try {
+      remote = await tester.runAsync(() async {
+        final value = await NearSendNode.open(
+          directory: '${root.path}${Platform.pathSeparator}scanner-peer',
+          candidateAddresses: const ['127.0.0.1'],
+          deviceName: '真实扫码对端',
+        );
+        await value.start();
+        value.openPairingSession();
+        return value;
+      });
+      await tester.runAsync(() => node.start());
+      int scannerBuilds = 0;
+      await tester.pumpWidget(
+        NearSendApp(
+          session: node,
+          peer: peer,
+          permissionGateway: _GrantedPermission(),
+          cameraScannerPageBuilder: (_) {
+            scannerBuilds++;
+            return Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () =>
+                      Navigator.of(context).pop(remote!.payload!.encode()),
+                  child: const Text('返回已扫描载荷'),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+      await tester.ensureVisible(find.text('扫一扫连接设备'));
+      tester
+          .widget<NearSendAppShell>(find.byType(NearSendAppShell))
+          .onRadarDevicePressed!(
+        const RadarDevice(
+          id: 'unverified-candidate',
+          name: '未验证的发现名称',
+          detail: '候选',
+          isKnown: false,
+          isReady: false,
+          isRevoked: false,
+          discoveryMethod: '蓝牙发现',
+        ),
+      );
+      tester
+          .widget<NearSendAppShell>(find.byType(NearSendAppShell))
+          .onRadarDevicePressed!(
+        const RadarDevice(
+          id: 'unverified-candidate',
+          name: '未验证的发现名称',
+          detail: '候选',
+          isKnown: false,
+          isReady: false,
+          isRevoked: false,
+          discoveryMethod: '蓝牙发现',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('蓝牙用于发现设备'), findsOneWidget);
+      expect(peer.isConnected, isFalse);
+      expect(scannerBuilds, 0);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      final scan = tester
+          .widget<NearSendAppShell>(find.byType(NearSendAppShell))
+          .onScanPairing!;
+      scan();
+      scan();
+      await tester.pumpAndSettle();
+      expect(scannerBuilds, 1);
+      await tester.tap(find.text('返回已扫描载荷'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await settle(tester, () => peer.isConnected);
+      expect(peer.isConnected, isTrue, reason: peer.failureReason);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(AdvancedConnectionPage), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('真实扫码对端'), findsOneWidget);
+      expect(find.text('未验证的发现名称'), findsNothing);
+      expect(
+        remote!.pairing.hasPairedClient(remote.payload!.sessionId),
+        isTrue,
+      );
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      await settle(tester, () => node.phase == NodePhase.stopped);
+      await tester.runAsync(() async {
+        await remote?.stop();
+        remote?.close();
+      });
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('local QR pairing appears on home without discovery enabled', (
     tester,
   ) async {
@@ -118,7 +229,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('本机设备'));
     await tester.pumpAndSettle();
-    expect(find.text('本机二维码'), findsOneWidget);
+    expect(find.text('我的连接二维码'), findsOneWidget);
     final payload = node.payload!;
     final client = TransferClient(
       pin: payload.serverFingerprint,
@@ -129,66 +240,103 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('设备已连接'), findsOneWidget);
     await tester.pageBack();
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('扫码手机'), findsOneWidget);
     expect(find.text('已连接 · 二维码配对 · 本次会话'), findsOneWidget);
+    await tester.tap(find.text('扫码手机'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('设备连接'), findsOneWidget);
+    expect(find.text('断开连接'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    await tester.tap(find.text('关闭'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(node.node!.pairing.hasPairedClient(payload.sessionId), isTrue);
+    final otherPayload = node.node!.openPairingSession();
+    final otherClient = TransferClient(
+      pin: otherPayload.serverFingerprint,
+      host: '127.0.0.1',
+      port: node.node!.server.boundPort,
+    );
+    await tester.runAsync(
+      () => otherClient.pairFrom(otherPayload, clientLabel: '另一台手机'),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(node.node!.pairing.hasPairedClient(otherPayload.sessionId), isTrue);
+    const activeTask = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    node.node!.database.db.execute(
+      '''INSERT INTO tasks (task_id, role, direction, state, protocol_major, protocol_minor, lease_epoch, created_at, updated_at) VALUES (?, 'receiver', 'client_to_server', 'transferring', 1, 0, 1, 1, 1);''',
+      [activeTask],
+    );
+    node.node!.ownership.assign(activeTask, payload.sessionId);
+    await tester.tap(find.text('扫码手机'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    final disconnect = tester
+        .widget<ConnectedDeviceCard>(find.byType(ConnectedDeviceCard))
+        .onDisconnect!;
+    disconnect();
+    disconnect();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('中断传输并断开？'), findsOneWidget);
+    await tester.tap(find.text('继续传输'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(node.node!.pairing.hasPairedClient(payload.sessionId), isTrue);
+    expect(
+      node.node!.transfers.taskState(activeTask),
+      TransferState.transferring,
+    );
+    await tester.tap(find.text('断开连接'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('断开连接'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      node.node!.transfers.taskState(activeTask),
+      TransferState.interrupted,
+    );
+    expect(node.node!.pairing.hasPairedClient(payload.sessionId), isFalse);
+    expect(node.phase, NodePhase.ready);
+    expect(node.node!.pairing.hasPairedClient(otherPayload.sessionId), isTrue);
+    expect(find.text('另一台手机'), findsOneWidget);
+    expect(find.text('扫码手机'), findsNothing);
+    otherClient.close();
     client.close();
     await tester.pumpWidget(const SizedBox());
     await settle(tester, () => node.phase == NodePhase.stopped);
   });
 
-  testWidgets('the connection screen shows the running node\'s own pin', (
+  testWidgets('local QR uses the live invitation without refreshing on open', (
     tester,
   ) async {
-    final NodeSession node = session();
-    final PeerSession peer = PeerSession();
-
-    // Opened before the widget mounts, because opening it needs real I/O and the widget would
-    // otherwise start it inside a zone where that cannot finish.
+    final node = session();
     await tester.runAsync(() => node.start());
-    expect(node.phase, NodePhase.ready);
-
-    await tester.pumpWidget(NearSendApp(session: node, peer: peer));
-    await tester.pump();
-    Navigator.of(
-      tester.element(find.byType(NearSendAppShell)),
-    ).pushNamed(NearSendApp.connectRoute, arguments: NearSendApp.sendArgument);
+    final payload = node.payload!;
+    await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
+    await tester.tap(find.text('本机设备'));
     await tester.pumpAndSettle();
-
-    final String pin = node.payload!.serverFingerprint;
     expect(
-      find.text(pin),
-      findsOneWidget,
-      reason:
-          'the pin a peer must compare against has to be this device\'s real one, not a '
-          'placeholder and not an empty state',
+      tester.widget<PairingQrView>(find.byType(PairingQrView)).payload,
+      payload.encode(),
     );
-    expect(
-      find.text('127.0.0.1:${node.node!.server.boundPort}'),
-      findsOneWidget,
-      reason:
-          'the published address has to name the port that is listening, or the peer is handed '
-          'an address nothing answers on',
-    );
-    expect(
-      find.textContaining('无法跨重启保留'),
-      findsOneWidget,
-      reason:
-          'identity persistence is an open item, so a user must be told this pin will change; '
-          'without that note the screen says something about their peer that is not true',
-    );
-
-    // Unmounting is what ends the application: the widget owns the session, so the node is closed
-    // and the database released without any other caller having to remember to do it.
+    expect(node.payload, same(payload));
+    expect(find.byType(TextField), findsNothing);
+    await tester.pageBack();
+    await tester.pump();
+    expect(node.phase, NodePhase.ready);
     await tester.pumpWidget(const SizedBox());
     await settle(tester, () => node.phase == NodePhase.stopped);
-    expect(
-      node.phase,
-      NodePhase.stopped,
-      reason:
-          'a session handed to the application is the application\'s to close; a node left '
-          'listening after the frame that owned it is gone has no owner at all',
-    );
   });
 
   testWidgets('backgrounding turns off Bluetooth resources', (tester) async {
@@ -240,7 +388,7 @@ void main() {
 
       expect(find.text('目前没有设备连接'), findsOneWidget);
       expect(find.text('本机连接信息'), findsNothing);
-      expect(find.text(ConnectionPage.emptySessionNote), findsNothing);
+      expect(find.text('本机尚未开启配对会话，因此还没有可出示的连接信息。'), findsNothing);
     },
   );
 
@@ -255,35 +403,22 @@ void main() {
 
     expect(find.text('本机节点尚未就绪，无法接收。'), findsOneWidget);
     expect(find.text('本机连接信息'), findsNothing);
-    expect(find.text(ConnectionPage.emptySessionNote), findsNothing);
+    expect(find.text('本机尚未开启配对会话，因此还没有可出示的连接信息。'), findsNothing);
   });
 
-  testWidgets('a radar device route shows the selected peer, not local info', (
+  testWidgets('advanced connection is separate and has no local invitation', (
     tester,
   ) async {
     await tester.pumpWidget(const NearSendApp());
-
-    Navigator.of(tester.element(find.byType(NearSendAppShell))).pushNamed(
-      NearSendApp.connectRoute,
-      arguments: const RadarDevice(
-        id: 'remote-session',
-        name: '客厅手机',
-        detail: 'android · 局域网候选 · 1 个地址',
-        isKnown: false,
-        isReady: false,
-        isRevoked: false,
-        platform: 'android',
-        discoveryMethod: '局域网发现',
-        connectionDetail: '192.168.1.8:8443',
-      ),
-    );
+    Navigator.of(tester.element(find.byType(NearSendAppShell)))
+        .pushNamed(NearSendApp.advancedConnectionRoute);
     await tester.pumpAndSettle();
-
-    expect(find.text('对方连接信息'), findsNWidgets(2));
-    expect(find.text('客厅手机'), findsOneWidget);
-    expect(find.text('192.168.1.8:8443'), findsOneWidget);
-    expect(find.text('发现信息尚未验证'), findsOneWidget);
-    expect(find.text('本机连接信息'), findsNothing);
+    expect(find.text('高级连接'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(PairingQrView), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('首页'), findsWidgets);
   });
 
   testWidgets(
@@ -363,10 +498,8 @@ void main() {
         ),
       );
       await tester.pump();
-      Navigator.of(tester.element(find.byType(NearSendAppShell))).pushNamed(
-        NearSendApp.connectRoute,
-        arguments: NearSendApp.sendArgument,
-      );
+      Navigator.of(tester.element(find.byType(NearSendAppShell)))
+          .pushNamed(NearSendApp.advancedConnectionRoute);
       await tester.pumpAndSettle();
 
       // The connection information the other device publishes, pasted the way a user who cannot use
@@ -374,16 +507,13 @@ void main() {
       await tester.enterText(find.byType(TextField), offer.encode());
       await tester.pump();
       await tapText(tester, '连接');
-      await settle(tester, () => visible(ConnectionPage.connectedNote));
-      expect(
-        find.text(ConnectionPage.connectedNote),
-        findsOneWidget,
-        reason:
-            'the connection is only reported as established after the peer proved the identity in '
-            'that payload',
+      await settle(
+        tester,
+        () => find.byType(AdvancedConnectionPage).evaluate().isEmpty,
       );
-
-      await tapText(tester, ConnectionPage.continueLabelSend);
+      expect(find.byType(AdvancedConnectionPage), findsNothing);
+      await tapText(tester, '传输');
+      await tapText(tester, '发送文件');
       await tester.pumpAndSettle();
       expect(find.text(SendPage.emptyNote), findsOneWidget);
 
@@ -589,17 +719,18 @@ void main() {
 
       await tester.pumpWidget(NearSendApp(session: node, peer: PeerSession()));
       await tester.pump();
-      Navigator.of(tester.element(find.byType(NearSendAppShell))).pushNamed(
-        NearSendApp.connectRoute,
-        arguments: NearSendApp.receiveArgument,
-      );
+      Navigator.of(tester.element(find.byType(NearSendAppShell)))
+          .pushNamed(NearSendApp.advancedConnectionRoute);
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), offer.encode());
       await tester.pump();
       await tapText(tester, '连接');
-      await settle(tester, () => visible(ConnectionPage.connectedNote));
-      expect(find.text(ConnectionPage.connectedNote), findsOneWidget);
+      await settle(
+        tester,
+        () => find.byType(AdvancedConnectionPage).evaluate().isEmpty,
+      );
+      expect(find.byType(AdvancedConnectionPage), findsNothing);
 
       // The app-level inbox surfaces the peer's offer while this device is still on the connection
       // screen; accepting the prompt then opens the existing save-location confirmation.
@@ -873,4 +1004,15 @@ class _LifecycleBleSession implements BlePlatformSession {
   Future<void> stop() async {
     stops++;
   }
+}
+
+class _GrantedPermission implements PlatformPermissionGateway {
+  @override
+  Future<PlatformPermissionState> check(
+    PlatformPermissionKind permission,
+  ) async => PlatformPermissionState.granted;
+  @override
+  Future<PlatformPermissionState> request(
+    PlatformPermissionKind permission,
+  ) async => PlatformPermissionState.granted;
 }

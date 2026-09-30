@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:nearsend/app/application/app_settings_repository.dart';
+import 'package:nearsend/app/application/pairing_coordinator.dart';
+import 'package:nearsend/features/pairing/presentation/connection_surfaces.dart';
+import 'package:nearsend/app/application/connection_task_lifecycle.dart';
 import 'package:nearsend/app/application/radar_controller.dart';
 import 'package:nearsend/app/application/settings_controller.dart';
 import 'package:nearsend/app/application/space_overview_controller.dart';
@@ -18,7 +21,6 @@ import 'package:nearsend/app/widgets/near_send_widgets.dart';
 import 'package:nearsend/core/network/task_authorization_endpoint.dart';
 import 'package:nearsend/core/protocol/api_responses.dart';
 import 'package:nearsend/core/security/bootstrap_pairing_payload.dart';
-import 'package:nearsend/core/security/pairing_payload.dart';
 import 'package:nearsend/core/storage/space_plan.dart';
 import 'package:nearsend/core/storage/peer_repository.dart';
 import 'package:nearsend/core/storage/task_authorization_repository.dart';
@@ -37,7 +39,6 @@ import 'package:nearsend/features/transfer/application/server_receiving_flow.dar
 import 'package:nearsend/features/transfer/presentation/receive_page.dart';
 import 'package:nearsend/features/transfer/presentation/send_page.dart';
 import 'package:nearsend/features/transfer/presentation/transfer_progress.dart';
-import 'package:nearsend/features/transfer/presentation/transfer_pages.dart';
 import 'package:nearsend/platform/platform_storage_gateway.dart';
 import 'package:nearsend/platform/platform_network_gateway.dart';
 import 'package:nearsend/platform/platform_file_actions.dart';
@@ -53,12 +54,6 @@ import 'package:nearsend/platform/device_info_gateway.dart';
 /// Owns only cross-cutting presentation concerns: theme, routing, the localized app title, and the
 /// two sessions that have to outlive any one screen. No business rule may live here — see
 /// `docs/architecture/SYSTEM_ARCHITECTURE.md` §3.
-///
-/// ## Why the connection route takes an argument
-///
-/// The route remains the explicit pairing surface for QR scans and discovered peers. Its argument
-/// distinguishes a pairing-only visit from an action-specific visit, so it can return to the right
-/// flow without making the send and receive buttons themselves display local connection details.
 ///
 /// ## Why the sessions are here and are owned here
 ///
@@ -83,6 +78,8 @@ class NearSendApp extends StatefulWidget {
     this.bleGateway,
     this.fileActions,
     this.deviceInfoGateway,
+    this.cameraScannerPageBuilder,
+    this.qrImageGateway,
     this.permissionGateway = const MethodChannelPlatformPermissionGateway(),
   });
 
@@ -104,11 +101,13 @@ class NearSendApp extends StatefulWidget {
   final BleControlGateway? bleGateway;
   final PlatformFileActions? fileActions;
   final DeviceInfoGateway? deviceInfoGateway;
+  final WidgetBuilder? cameraScannerPageBuilder;
+  final QrImageGateway? qrImageGateway;
   final PlatformPermissionGateway permissionGateway;
 
   static const String homeRoute = '/';
   static const String aboutRoute = '/about';
-  static const String connectRoute = '/connect';
+  static const String advancedConnectionRoute = '/settings/advanced-connection';
   static const String transferRoute = '/transfer';
 
   /// Where a chosen selection is sent from. Its own route rather than a dialog, because the flow it
@@ -118,12 +117,6 @@ class NearSendApp extends StatefulWidget {
   /// Where an offer from the peer is answered. Its own route for the same reason, and because
   /// receiving a file the user did not ask for must be a screen they chose to be on.
   static const String receiveRoute = '/receive';
-
-  /// The argument `HomePage` passes to the connection screen, so that one screen can serve both
-  /// actions and still lead somewhere different afterwards.
-  static const String sendArgument = 'send';
-  static const String receiveArgument = 'receive';
-  static const String scanArgument = 'scan';
 
   /// The receive confirmation, which `docs/ui/UI_UX_SPEC.md` §5 keeps as its own step so the
   /// space check cannot be skipped by accepting on the connection screen.
@@ -159,7 +152,15 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
               defaultTargetPlatform == TargetPlatform.windows)
           ? MethodChannelPlatformNetworkGateway()
           : const UnavailablePlatformNetworkGateway());
-  JoinedWifiLease? _joinedWifi;
+  late final PairingCoordinator _pairing = PairingCoordinator(
+    peer: widget.peer,
+    network: _networkGateway,
+  );
+  bool _pairingEntryBusy = false;
+  bool _backgrounded = false;
+  int _pairingEntryGeneration = 0;
+  VoidCallback? _cancelPairingUi;
+  final Map<String, DeviceConnectionRef> _taskConnections = {};
   Timer? _pairingPresenceTimer;
   Timer? _offerPollTimer;
   bool _pollingOffers = false;
@@ -181,18 +182,24 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   );
   int _presenceTicks = 0;
 
-  Future<void> _scanFromHome(BuildContext context) async {
-    final Object? result = await Navigator.of(context).pushNamed<Object?>(
-      NearSendApp.connectRoute,
-      arguments: NearSendApp.scanArgument,
-    );
-    if (!context.mounted || result is! PairingScanFailure) return;
+  bool get _mobileScanner =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  QrImageGateway? get _qrImageGateway =>
+      widget.qrImageGateway ??
+      (defaultTargetPlatform == TargetPlatform.windows
+          ? MethodChannelQrImageGateway()
+          : null);
+
+  Future<void> _showPairingError(BuildContext context, String message) async {
+    if (!context.mounted || _disposing || _backgrounded) return;
     await showDialog<void>(
       context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('扫一扫失败'),
-        content: Text(result.message),
-        actions: <Widget>[
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('连接未完成'),
+        content: Text(message),
+        actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('确定'),
@@ -200,6 +207,128 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  Future<void> _scanFromHome(BuildContext context) async {
+    if (_pairingEntryBusy || _pairing.isBusy || _disposing) return;
+    _pairingEntryBusy = true;
+    final entry = ++_pairingEntryGeneration;
+    bool current() =>
+        context.mounted &&
+        !_disposing &&
+        !_backgrounded &&
+        entry == _pairingEntryGeneration;
+    try {
+      Object? result;
+      if (_mobileScanner) {
+        var permission = await ensurePlatformPermission(
+          widget.permissionGateway,
+          PlatformPermissionKind.camera,
+        );
+        if (permission.allowsUse) {
+          permission = await widget.permissionGateway.check(
+            PlatformPermissionKind.camera,
+          );
+        }
+        if (!context.mounted || !current()) return;
+        if (!permission.allowsUse) {
+          await _showPairingError(
+            context,
+            '需要相机权限才能扫描二维码，请在系统设置中允许 NearSend 使用相机。',
+          );
+          return;
+        }
+        result = await Navigator.of(context).push<Object?>(
+          MaterialPageRoute<Object?>(
+            settings: const RouteSettings(name: '/pairing/scan'),
+            builder:
+                widget.cameraScannerPageBuilder ??
+                (_) => const MobilePairingScannerPage(),
+          ),
+        );
+      } else if (_qrImageGateway != null) {
+        final permission = await ensurePlatformPermission(
+          widget.permissionGateway,
+          PlatformPermissionKind.files,
+        );
+        if (!context.mounted || !current()) return;
+        if (!permission.allowsUse) {
+          await _showPairingError(context, '无法访问系统图片选择器，请检查文件权限。');
+          return;
+        }
+        final bytes = await _qrImageGateway!.pickImage();
+        if (bytes == null) return;
+        result = await decodeQrImage(bytes);
+      } else {
+        await _showPairingError(context, '当前平台无法扫描或导入二维码，请使用设置中的高级连接。');
+        return;
+      }
+      if (!context.mounted || !current() || result == null) {
+        return;
+      }
+      if (result is PairingScanFailure) {
+        await _showPairingError(context, result.message);
+        return;
+      }
+      if (result is! String) return;
+      final payload = ScannedPairingPayload.parse(result);
+      final connected = await _runConnection(context, payload);
+      if (!connected &&
+          context.mounted &&
+          current() &&
+          _pairing.reason != null) {
+        await _showPairingError(context, _pairing.reason!);
+      }
+    } on FormatException {
+      if (context.mounted && current()) {
+        await _showPairingError(context, '二维码不是有效的 NearSend 配对码，请重新扫描。');
+      }
+    } on Object {
+      if (context.mounted && current()) {
+        await _showPairingError(context, '扫码或图片导入未能完成，请重试。');
+      }
+    } finally {
+      _pairingEntryBusy = false;
+    }
+  }
+
+  Future<bool> _runConnection(
+    BuildContext context,
+    ScannedPairingPayload payload,
+  ) async {
+    if (_pairing.isBusy || _disposing || !context.mounted) return false;
+    final navigator = Navigator.of(context);
+    final cancellation = Completer<bool>();
+    late final DialogRoute<void> route;
+    void cancel() {
+      _pairing.cancelAttempt();
+      if (!cancellation.isCompleted) cancellation.complete(false);
+      if (route.isActive) navigator.removeRoute(route);
+    }
+
+    route = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          PairingProgressDialog(coordinator: _pairing, onCancel: cancel),
+    );
+    _cancelPairingUi = cancel;
+    unawaited(navigator.push(route));
+    bool connected;
+    try {
+      connected = await Future.any<bool>([
+        _connectPayload(payload),
+        cancellation.future,
+      ]);
+    } finally {
+      if (_cancelPairingUi == cancel) _cancelPairingUi = null;
+      if (route.isActive) navigator.removeRoute(route);
+    }
+    if (connected && context.mounted && !_disposing) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('设备已连接')));
+    }
+    return connected;
   }
 
   Future<void> _showNoConnectedDeviceDialog(BuildContext context) async {
@@ -233,6 +362,10 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
           ? null
           : RadarDevice(
               id: 'qr-out:${payload.serverFingerprint}',
+              connectionRef: DeviceConnectionRef(
+                DeviceConnectionKind.outgoingSession,
+                payload.sessionId,
+              ),
               name: _outgoingName ?? '已扫码设备',
               detail: '二维码配对 · 本次会话',
               isKnown: false,
@@ -247,18 +380,202 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     );
   }
 
-  void _disconnectRadarDevice(RadarDevice device) {
-    if (device.id.startsWith('qr-in:')) {
-      widget.session?.node?.pairing.disconnectClientSession(
-        device.id.substring('qr-in:'.length),
-      );
-    } else if (device.id.startsWith('qr-out:')) {
-      widget.peer?.disconnect();
+  DeviceConnectionRef? get _outgoingRef {
+    final payload = widget.peer?.peer;
+    return payload == null
+        ? null
+        : DeviceConnectionRef(
+            DeviceConnectionKind.outgoingSession,
+            payload.sessionId,
+          );
+  }
+
+  List<String> _connectionTasks(DeviceConnectionRef ref) {
+    final node = widget.session?.node;
+    if (node == null) return [];
+    final ids = <String>{
+      if (ref.kind == DeviceConnectionKind.incomingSession)
+        ...node.ownership.assignedTransfers(ref.id),
+      for (final entry in _taskConnections.entries)
+        if (entry.value.kind == ref.kind && entry.value.id == ref.id) entry.key,
+    };
+    return ids
+        .where((id) => !node.engine.transfers.taskState(id).isTerminal)
+        .toList();
+  }
+
+  bool _hasConnection(DeviceConnectionRef? ref) => switch (ref?.kind) {
+    DeviceConnectionKind.incomingSession =>
+      widget.session?.node?.pairing.hasPairedClient(ref!.id) ?? false,
+    DeviceConnectionKind.outgoingSession =>
+      widget.peer?.isConnected == true &&
+          widget.peer?.peer?.sessionId == ref!.id,
+    _ => false,
+  };
+
+  Future<void> _disconnectDevice(DeviceConnectionRef ref) async {
+    final node = widget.session?.node;
+    final ids = _connectionTasks(ref);
+    if (ref.kind == DeviceConnectionKind.incomingSession) {
+      node?.pairing.disconnectClientSession(ref.id);
+    } else if (ref.kind == DeviceConnectionKind.outgoingSession &&
+        _hasConnection(ref)) {
+      await _pairing.disconnect();
       _outgoingRecent = false;
       _outgoingAge.stop();
     }
+    if (node != null) {
+      interruptConnectionTasks(
+        taskIds: ids,
+        transfers: node.engine.transfers,
+        credentials: node.engine.credentials,
+      );
+    }
     _syncPairingPresence();
+    _refreshTasks();
     if (mounted) setState(() {});
+  }
+
+  bool _deviceUiBusy = false;
+
+  Future<void> _showDevice(BuildContext context, RadarDevice device) async {
+    if (_deviceUiBusy ||
+        _pairingEntryBusy ||
+        _pairing.isBusy ||
+        _backgrounded ||
+        _disposing) {
+      return;
+    }
+    _deviceUiBusy = true;
+    try {
+      await _showDeviceContents(context, device);
+    } finally {
+      _deviceUiBusy = false;
+    }
+  }
+
+  Future<void> _showDeviceContents(
+    BuildContext context,
+    RadarDevice device,
+  ) async {
+    final ref = device.connectionRef;
+    if (ref == null || ref.kind == DeviceConnectionKind.candidate) {
+      final action = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('与${device.name}配对'),
+          content: Text(
+            device.discoveryMethod == '蓝牙发现'
+                ? '蓝牙用于发现设备，传文件仍需要本地 Wi-Fi。请扫描对方的 NearSend 二维码验证身份。'
+                : '发现信息尚未验证。请扫描对方的 NearSend 二维码完成安全配对。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(_mobileScanner ? '扫码配对' : '导入二维码配对'),
+            ),
+          ],
+        ),
+      );
+      if (action == true && context.mounted) await _scanFromHome(context);
+      return;
+    }
+    bool disconnecting = false;
+    Widget card(BuildContext cardContext) => ListenableBuilder(
+      listenable: Listenable.merge([
+        _radar,
+        _tasks,
+        widget.peer,
+        widget.session,
+      ]),
+      builder: (_, _) {
+        final connected = _hasConnection(ref);
+        final current = _radar.devices
+            .where((item) => item.id == device.id)
+            .firstOrNull;
+        final recent = current?.isReady ?? false;
+        final count = _connectionTasks(ref).length;
+        return ConnectedDeviceCard(
+          name: current?.name ?? device.name,
+          status: connected
+              ? (recent ? '身份已验证 · 当前连接可用' : '已建立授权会话 · 当前可达性待确认')
+              : ref.kind == DeviceConnectionKind.history
+              ? '历史配对设备 · 当前离线'
+              : '连接已断开',
+          activeTasks: count,
+          onCheck: connected && ref.kind == DeviceConnectionKind.outgoingSession
+              ? () => unawaited(_probePairedPeer())
+              : null,
+          onPair: connected
+              ? null
+              : () {
+                  Navigator.of(cardContext).pop();
+                  unawaited(_scanFromHome(context));
+                },
+          onDisconnect: !connected
+              ? null
+              : () async {
+                  if (disconnecting) return;
+                  disconnecting = true;
+                  final cardRoute = ModalRoute.of(cardContext);
+                  final navigator = Navigator.of(cardContext);
+                  try {
+                    if (count > 0) {
+                      final confirmed = await showDialog<bool>(
+                        context: cardContext,
+                        builder: (confirmContext) => AlertDialog(
+                          title: const Text('中断传输并断开？'),
+                          content: Text(
+                            '该设备有 $count 个活动任务。断开会中断传输，已接收数据会保留；是否可继续以任务状态为准。',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmContext).pop(false),
+                              child: const Text('继续传输'),
+                            ),
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmContext).pop(true),
+                              child: const Text('断开连接'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+                    }
+                    await _disconnectDevice(ref);
+                    if (cardRoute != null && cardRoute.isActive) {
+                      navigator.removeRoute(cardRoute);
+                    }
+                  } finally {
+                    disconnecting = false;
+                  }
+                },
+        );
+      },
+    );
+    if (_mobileScanner) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: card,
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (cardContext) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: card(cardContext),
+          ),
+        ),
+      );
+    }
   }
 
   void _refreshTasks() {
@@ -428,7 +745,10 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
         for (final OfferSummary offer in pulled) offer.transferId,
       };
       _promptedOfferIds.removeWhere((String id) => !currentIds.contains(id));
-      if (_showingOfferPrompt ||
+      if (_pairingEntryBusy ||
+          _pairing.isBusy ||
+          _backgrounded ||
+          _showingOfferPrompt ||
           _incoming?.isBusy == true ||
           _receiving?.isBusy == true) {
         return;
@@ -579,6 +899,8 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     _disposing = true;
+    ++_pairingEntryGeneration;
+    _cancelPairingUi?.call();
     _pairingPresenceTimer?.cancel();
     _offerPollTimer?.cancel();
     _wifiDesired = false;
@@ -591,6 +913,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       // would leave the node listening with no owner.
       unawaited(session.stop().whenComplete(session.dispose));
     }
+    _pairing.dispose();
     widget.peer?.dispose();
     if (_flow != null && !_activeSendFlows.contains(_flow)) _flow!.dispose();
     for (final ReceivingFlow receiving in <ReceivingFlow>{
@@ -615,10 +938,6 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     unawaited(_radarBle?.cancel());
     unawaited(widget.bleGateway?.stop());
     _radar.dispose();
-    final JoinedWifiLease? joinedWifi = _joinedWifi;
-    if (joinedWifi != null) {
-      unawaited(_releaseJoinedWifi(joinedWifi));
-    }
     super.dispose();
   }
 
@@ -638,6 +957,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (_disposing) return;
     if (state == AppLifecycleState.resumed) {
+      _backgrounded = false;
       _startOfferPolling();
       return;
     }
@@ -646,6 +966,10 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     // actually backgrounded; otherwise Android can briefly switch the toggles off
     // while the user is still on this screen.
     if (state == AppLifecycleState.inactive) return;
+    _backgrounded = true;
+    ++_pairingEntryGeneration;
+    _cancelPairingUi?.call();
+    _pairing.cancelAttempt();
     _offerPollTimer?.cancel();
     if (_wifiDesired) {
       _requestWifiReady(false);
@@ -775,24 +1099,23 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
   /// not exist, and `PeerSession` is what guarantees it does not. Which of them a screen uses is the
   /// user's choice - the same connection serves sending and receiving, which is why they are made
   /// together rather than on the way into a screen.
-  Future<bool> connect(PairingPayload payload, {String? displayName}) async {
-    final PeerSession? peer = widget.peer;
-    if (peer == null) {
+  Future<bool> _connectPayload(ScannedPairingPayload payload) async {
+    if (widget.session?.node == null) {
+      _pairing.refuseUnavailableNode();
       return false;
     }
-    _outgoingRecent = false;
-    final bool connected = await peer.connect(
+    final PeerSession? peer = widget.peer;
+    final bool connected = await _pairing.connect(
       payload,
-      displayLabel: _settings.settings.deviceName,
+      localName: _settings.settings.deviceName,
     );
-    _outgoingRecent = connected;
-    _outgoingName = peer.client?.peerDeviceName ?? displayName;
-    _outgoingPlatform = peer.client?.peerPlatform;
-    if (connected) {
-      _outgoingAge
-        ..reset()
-        ..start();
-    }
+    if (_disposing || !connected || peer?.client == null) return false;
+    _outgoingRecent = true;
+    _outgoingName = peer!.client!.peerDeviceName;
+    _outgoingPlatform = peer.client!.peerPlatform;
+    _outgoingAge
+      ..reset()
+      ..start();
     _syncPairingPresence();
     final NearSendNode? node = widget.session?.node;
     if (!connected || node == null) {
@@ -839,11 +1162,15 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
 
   void _submitSend(BuildContext context, SendingFlow flow) {
     if (_activeSendFlows.contains(flow)) return;
+    final connectionRef = _outgoingRef;
     bool openedTasks = false;
     void onProgress() {
       if (_disposing) return;
       final String? id = flow.transferId;
       final int? bytes = flow.observedBytes;
+      if (id != null && connectionRef != null) {
+        _taskConnections[id] = connectionRef;
+      }
       if (id != null && bytes != null) {
         _tasks.reportOutgoingProgress(id, bytes);
       } else {
@@ -873,57 +1200,6 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       }),
     );
   }
-
-  Future<bool> connectBootstrap(BootstrapPairingPayload payload) async {
-    JoinedWifiLease? joined;
-    final BootstrapWifiOffer? wifi = payload.wifi;
-    try {
-      if (wifi != null) {
-        final JoinedWifiLease? previous = _joinedWifi;
-        if (previous != null) {
-          await _releaseJoinedWifi(previous);
-        }
-        joined = await _networkGateway.joinWifi(
-          ssid: wifi.ssid,
-          passphrase: wifi.passphrase,
-          security: wifi.security == 'wpa3'
-              ? WifiSecurity.wpa3
-              : WifiSecurity.wpa2,
-        );
-        _joinedWifi = joined;
-      }
-      final bool connected = await connect(payload.pairing);
-      if (!connected && joined != null) {
-        await _releaseJoinedWifi(joined);
-      }
-      return connected;
-    } on Object {
-      if (joined != null) {
-        await _releaseJoinedWifi(joined);
-      }
-      return false;
-    }
-  }
-
-  Future<void> _releaseJoinedWifi(JoinedWifiLease lease) async {
-    try {
-      await _networkGateway.releaseJoinedWifi(lease.leaseId);
-    } on Object {
-      // Cleanup is best effort. The platform also owns lifecycle cleanup.
-    } finally {
-      if (_joinedWifi?.leaseId == lease.leaseId) _joinedWifi = null;
-    }
-  }
-
-  /// Where the connection screen leads once the peer has proved its identity.
-  ///
-  /// Null when the flow that screen would need has not been built, which is the same rule the
-  /// connect button follows: a control that cannot act is not rendered.
-  String? _continueTarget(bool receiving) => receiving
-      ? (_receiving == null && _incoming == null
-            ? null
-            : NearSendApp.receiveRoute)
-      : (_flow == null ? null : NearSendApp.sendRoute);
 
   String get _connectionLabel => switch (widget.session?.phase) {
     NodePhase.ready => '本机已就绪',
@@ -993,34 +1269,6 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
     return incoming.estimateFor(offer, context);
   }
 
-  /// The peer state, as the connection screen renders it.
-  ///
-  /// A mapping rather than passing the session through: the screen is a renderer, and the two
-  /// enums exist so that neither layer has to know the other's type.
-  ConnectionAttempt get attempt {
-    final PeerSession? peer = widget.peer;
-    if (peer == null) {
-      return const ConnectionAttempt();
-    }
-    switch (peer.phase) {
-      case PeerPhase.idle:
-        return const ConnectionAttempt();
-      case PeerPhase.connecting:
-        return const ConnectionAttempt(
-          phase: ConnectionAttemptPhase.connecting,
-        );
-      case PeerPhase.connected:
-        return const ConnectionAttempt(phase: ConnectionAttemptPhase.connected);
-      case PeerPhase.failed:
-        return ConnectionAttempt(
-          phase: ConnectionAttemptPhase.failed,
-          reason: peer.failureReason,
-          peerFingerprint: peer.presentedFingerprint,
-          pinMismatched: peer.pinMismatched,
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -1070,21 +1318,9 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   Navigator.of(context).pushNamed(NearSendApp.tasksRoute),
               onWifiReadyChanged: _requestWifiReady,
               onBluetoothReadyChanged: _requestBluetoothReady,
-              onRadarDevicePressed: (RadarDevice device) {
-                if (!device.isReady &&
-                    !device.id.startsWith('qr-in:') &&
-                    !device.id.startsWith('qr-out:')) {
-                  // Discovery metadata has no pairing token or trusted TLS pin.
-                  // Scan the selected device's QR before opening a connection.
-                  unawaited(_scanFromHome(context));
-                  return;
-                }
-                Navigator.of(context)
-                    .pushNamed(NearSendApp.connectRoute, arguments: device);
-              },
-              onScanPairing:
-                  defaultTargetPlatform == TargetPlatform.android ||
-                      defaultTargetPlatform == TargetPlatform.iOS
+              onRadarDevicePressed: (device) =>
+                  unawaited(_showDevice(context, device)),
+              onScanPairing: _mobileScanner || _qrImageGateway != null
                   ? () => unawaited(_scanFromHome(context))
                   : null,
             ),
@@ -1120,120 +1356,13 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                 fileActions: widget.fileActions,
               );
             },
-            NearSendApp.connectRoute: (BuildContext context) {
-              // Which action the user came here for, so one connection screen can lead to the send flow
-              // or the receive flow without duplicating itself.
-              final Object? routeArgument = ModalRoute.of(context)
-                  ?.settings
-                  .arguments;
-              final bool receiving =
-                  routeArgument == NearSendApp.receiveArgument;
-              final bool pairingOnly =
-                  routeArgument == 'pair' ||
-                  routeArgument == NearSendApp.scanArgument ||
-                  routeArgument is RadarDevice;
-              final bool startWithCamera =
-                  routeArgument == NearSendApp.scanArgument &&
-                  (defaultTargetPlatform == TargetPlatform.android ||
-                      defaultTargetPlatform == TargetPlatform.iOS);
-              final RadarDevice? selectedDevice = routeArgument is RadarDevice
-                  ? routeArgument
-                  : null;
-              return ListenableBuilder(
-                // Both sessions: the published payload arrives asynchronously, and a connection attempt
-                // changes without any navigation happening.
-                listenable: Listenable.merge(<Listenable?>[
-                  widget.session,
-                  widget.peer,
-                ]),
-                builder: (BuildContext context, Widget? _) {
-                  final NodeSession? session = widget.session;
-                  return ConnectionPage(
-                    payload: session?.payload,
-                    starting: session?.phase == NodePhase.starting,
-                    // Only a *failed* node has a reason to state. A node that is starting has none, and a
-                    // build with no node at all has nothing to say beyond the empty-session note.
-                    unavailableReason: session?.phase == NodePhase.failed
-                        ? session!.failureReason
-                        : null,
-                    connection: attempt,
-                    onConnect: widget.peer == null
-                        ? null
-                        : (payload) => connect(
-                            payload,
-                            displayName: selectedDevice?.name,
-                          ),
-                    onConnectBootstrap: widget.peer == null
-                        ? null
-                        : (payload) {
-                            unawaited(connectBootstrap(payload));
-                          },
-                    onScannedConnect: widget.peer == null
-                        ? null
-                        : (payload) => connect(
-                            payload,
-                            displayName: selectedDevice?.name,
-                          ),
-                    onScannedConnectBootstrap: widget.peer == null
-                        ? null
-                        : connectBootstrap,
-                    enableCameraScanner:
-                        defaultTargetPlatform == TargetPlatform.android ||
-                        defaultTargetPlatform == TargetPlatform.iOS,
-                    startWithCamera: startWithCamera,
-                    connectImmediately:
-                        routeArgument == NearSendApp.scanArgument,
-                    qrImageGateway:
-                        defaultTargetPlatform == TargetPlatform.windows
-                        ? MethodChannelQrImageGateway()
-                        : null,
-                    permissionGateway: widget.permissionGateway,
-                    onContinue: pairingOnly && attempt.isConnected
-                        ? () => Navigator.of(context).pop()
-                        : _continueTarget(receiving) == null
-                        ? null
-                        : () =>
-                              Navigator.of(context)
-                                  .pushNamed(_continueTarget(receiving)!),
-                    continueLabel: pairingOnly
-                        ? '返回首页'
-                        : receiving
-                        ? ConnectionPage.continueLabelReceive
-                        : ConnectionPage.continueLabelSend,
-                    localDeviceName: _settings.settings.deviceName,
-                    localPlatform: _localDeviceInfo.platformLabel,
-                    peerDeviceName:
-                        selectedDevice?.name ?? _outgoingName ?? '对端设备名称未提供',
-                    peerPlatform: selectedDevice == null
-                        ? _outgoingPlatform == null
-                              ? '对端平台未提供'
-                              : platformLabelForId(_outgoingPlatform!)
-                        : platformLabelForId(selectedDevice.platform),
-                    selectedPeerName: selectedDevice?.name,
-                    selectedPeerPlatform: selectedDevice == null
-                        ? null
-                        : platformLabelForId(selectedDevice.platform),
-                    selectedPeerDiscoveryMethod:
-                        selectedDevice?.discoveryMethod,
-                    selectedPeerDetail: selectedDevice?.detail,
-                    selectedPeerConnectionDetail:
-                        selectedDevice?.connectionDetail,
-                    selectedPeerReady: selectedDevice?.isReady ?? false,
-                    onDisconnect:
-                        selectedDevice != null &&
-                            (selectedDevice.id.startsWith('qr-in:') ||
-                                selectedDevice.id.startsWith('qr-out:'))
-                        ? () {
-                            _disconnectRadarDevice(selectedDevice);
-                            Navigator.of(context).pop();
-                          }
-                        : null,
-                    persistentLocalIdentity:
-                        session?.hasPersistentIdentity ?? false,
-                  );
-                },
-              );
-            },
+            NearSendApp.advancedConnectionRoute: (context) =>
+                AdvancedConnectionPage(
+                  onConnect: _runConnection,
+                  failureReason: () => _pairing.reason,
+                  qrImageGateway: _qrImageGateway,
+                  permissionGateway: widget.permissionGateway,
+                ),
             NearSendApp.receiveRoute: (BuildContext context) {
               final Object? routeArgument = ModalRoute.of(context)
                   ?.settings
@@ -1276,6 +1405,8 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                       const <ReceiveFilePreview>[],
                   onAccept: (offer, confirmation) async {
                     if (receiving == null) return false;
+                    final ref = _outgoingRef;
+                    if (ref != null) _taskConnections[offer.transferId] = ref;
                     _activeReceivingFlows.add(receiving);
                     try {
                       return await receiving.accept(
@@ -1325,6 +1456,15 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
                   onAcceptPush: incoming == null
                       ? null
                       : (offer, confirmation) async {
+                          final peerId = widget.session?.node?.ownership
+                              .assignedPeer(offer.transferId);
+                          if (peerId != null) {
+                            _taskConnections[offer.transferId] =
+                                DeviceConnectionRef(
+                                  DeviceConnectionKind.incomingSession,
+                                  peerId,
+                                );
+                          }
                           _activeIncomingFlows.add(incoming);
                           try {
                             return await incoming.accept(

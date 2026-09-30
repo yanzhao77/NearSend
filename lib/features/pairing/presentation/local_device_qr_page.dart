@@ -23,32 +23,29 @@ class LocalDeviceQrPage extends StatefulWidget {
 
 class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
   Timer? _timer;
-  final Stopwatch _age = Stopwatch();
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_refresh());
-    });
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
 
   Future<void> _refresh() async {
-    await widget.session?.refreshPairingCode();
-    if (!mounted) return;
-    _age
-      ..reset()
-      ..start();
-    setState(() {});
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await widget.session?.refreshPairingCode();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _age.stop();
     super.dispose();
   }
 
@@ -69,9 +66,14 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
               ) ??
               false);
       final expired =
-          payload != null && _age.elapsed.inSeconds >= payload.expiresInSeconds;
+          payload != null &&
+          widget.session?.payloadIssuedAt != null &&
+          DateTime.now()
+                  .difference(widget.session!.payloadIssuedAt!)
+                  .inSeconds >=
+              payload.expiresInSeconds;
       return Scaffold(
-        appBar: AppBar(title: const Text('本机二维码')),
+        appBar: AppBar(title: const Text('我的连接二维码')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
@@ -96,7 +98,7 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
                     subtitle: Text('返回首页可查看本次扫码会话，在“传输”栏发送或接收文件。'),
                   )
                 else if (paired)
-                  const Text('设备已配对，当前未连接。请检查对方设备和本地网络。')
+                  const Text('设备已配对，当前可达性待确认。请在首页检查连接。')
                 else if (expired)
                   const Text('二维码已过期，请刷新后重新扫描。')
                 else if (payload != null)
@@ -108,10 +110,13 @@ class _LocalDeviceQrPageState extends State<LocalDeviceQrPage> {
                 else
                   Text(widget.session?.failureReason ?? '正在准备本机连接信息，请稍候。'),
                 const SizedBox(height: NearSendSpacing.md),
+                if (widget.session?.hasPersistentIdentity != true)
+                  const Text('本机身份会在重新启动后变化，本次扫码会话无法跨重启保留。'),
                 const Text('设备之间需要可用的本地 Wi-Fi 连接，无需互联网。二维码仅用于本次安全配对，请勿公开分享。'),
                 const SizedBox(height: NearSendSpacing.md),
                 OutlinedButton.icon(
-                  onPressed: widget.session?.phase == NodePhase.ready
+                  onPressed:
+                      !_refreshing && widget.session?.phase == NodePhase.ready
                       ? _refresh
                       : null,
                   icon: const Icon(Icons.refresh),

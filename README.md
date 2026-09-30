@@ -5,7 +5,7 @@
 ### 不经过互联网，让手机与电脑在本地 Wi-Fi 上安全传输大文件。
 
 [![Project Status](https://img.shields.io/badge/status-S0%20active%20%7C%20preview-F5A623?style=for-the-badge)](#项目状态)
-[![Latest Preview](https://img.shields.io/badge/latest%20preview-v0.1.14-orange?style=for-the-badge)](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)
+[![Latest Preview](https://img.shields.io/badge/latest%20preview-v0.1.17-orange?style=for-the-badge)](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.17)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.5-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-536DFE?style=for-the-badge)](#现在就下载)
 [![License](https://img.shields.io/badge/license-MIT-2EA44F?style=for-the-badge)](LICENSE)
@@ -18,17 +18,17 @@
 
 ## 现在就下载
 
-截至 2026-09-29，最新 GitHub 预览版是 **[v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14)**，对应 `master` 提交 `dd90cb7d425a2d5af396d920a27b6ea60c1177d7`。这是预览构建，不是正式稳定版；自动发布只接受 `master` 成功 CI 的精确提交。
+截至 2026-09-30，最新 GitHub 预览版是 **[v0.1.17](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.17)**，对应 `master` 提交 `64a2582cfab137a1735d0e8f07cecbebff253095`。这是预览构建，不是正式稳定版；自动发布只接受 `master` 成功 CI 的精确提交。
 
 | 平台 | 安装包 | 说明 |
 | --- | --- | --- |
-| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.14/NearSend-0.1.14-android.apk) | 当前使用 debug signing，仅供内部测试；不能作为正式升级链 |
-| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.14/NearSend-0.1.14-windows-x64.zip) | 解压后运行桌面程序 |
-| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.14/NearSend-0.1.14-macos.zip) | 未签名、未 notarization |
-| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.14/NearSend-0.1.14-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.14/NearSend-0.1.14-linux-x64.tar.gz) | 当前只构建 amd64 |
-| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.14/SHA256SUMS.txt) | 发布流水线自动生成 |
+| Android | [APK](https://github.com/yanzhao77/NearSend/releases/download/v0.1.17/NearSend-0.1.17-android.apk) | 当前使用 debug signing，仅供内部测试；不能作为正式升级链 |
+| Windows x64 | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.17/NearSend-0.1.17-windows-x64.zip) | 解压后运行桌面程序 |
+| macOS | [ZIP](https://github.com/yanzhao77/NearSend/releases/download/v0.1.17/NearSend-0.1.17-macos.zip) | 未签名、未 notarization |
+| Linux amd64 | [DEB](https://github.com/yanzhao77/NearSend/releases/download/v0.1.17/NearSend-0.1.17-linux-amd64.deb) · [便携包](https://github.com/yanzhao77/NearSend/releases/download/v0.1.17/NearSend-0.1.17-linux-x64.tar.gz) | 当前只构建 amd64 |
+| 校验 | [SHA256SUMS.txt](https://github.com/yanzhao77/NearSend/releases/download/v0.1.17/SHA256SUMS.txt) | 发布流水线自动生成 |
 
-> **预览版本边界**：v0.1.14 的 CI、1418 项 Flutter 测试及 Android debug APK 构建通过，但没有该版本的目标设备验收。最新可引用的文件级真机证据仍是 v0.1.11：同一 5GHz Wi-Fi 下 Android→Windows 传输一个 6,683 字节文件并核对 SHA-256 成功。Windows→Android、热点、跨网络、断点恢复和大文件传输尚无通过证据。当前产物仅供预览测试，不是正式稳定发行包。
+> **预览版本边界**：v0.1.17 的 CI、1422 项 Flutter 测试及 Android debug APK 构建通过，但没有该版本的目标设备验收。最新可引用的文件级真机证据仍是 v0.1.11：同一 5GHz Wi-Fi 下 Android→Windows 传输一个 6,683 字节文件并核对 SHA-256 成功。Windows→Android、热点、跨网络、断点恢复和大文件传输尚无通过证据。当前产物仅供预览测试，不是正式稳定发行包。
 
 ## NearSend 是什么？
 
@@ -38,6 +38,12 @@ NearSend 是一款面向手机与电脑的跨平台离线文件互传工具。�
 
 NearSend 的重点是可靠性：文件通过流式读写和有界缓冲处理，按块校验并把接收方已提交的 checkpoint 作为恢复依据，让网络中断、进程退出和设备重启后的恢复行为可验证、可诊断。
 
+## 连接交互重构（2026-09-30 分支增量）
+
+普通路径已拆分为本机二维码、首页专用扫码/Windows 导图、连接进度和设备操作卡片；手动粘贴入口移到设置中的高级连接。旧混合 `ConnectionPage` 与 `/connect` 路由已移除。关闭卡片保留会话，显式断开只撤销所选连接并保留 checkpoint、恢复凭证与已导出文件。发现设备仍需扫码验证身份。
+
+本节描述待审阅分支的改动，尚不包含在上方 v0.1.17 安装包中。自动化与真机状态分别记录，见[开发方案](docs/architecture/CONNECTION_UX_REFACTOR_PLAN.md)和[实施验收记录](docs/testing/evidence/2026-09-30/connection-ux/summary.md)。
+
 ## 当前能做什么
 
 | 方向 | 当前状态 |
@@ -45,7 +51,7 @@ NearSend 的重点是可靠性：文件通过流式读写和有界缓冲处理�
 | 协议与数据模型 | `LFTM1` / `LFTC1` 清单编码、状态模型、错误模型和固定向量已有 Dart 独立实现；协议仍是草案，尚未冻结 |
 | 安全控制面 | TLS 1.3 下限、证书指纹绑定、一次性配对令牌、会话授权和控制端点已有实现与测试 |
 | 数据面 | SQLite manifest staging、授权、分块读写、终检与导出编排已有代码级测试；断点恢复的应用层编排仍在进行 |
-| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；PR #75–#78 已合并，包含发现/传输流程改进。v0.1.14 自动化测试和构建通过，但尚无该版本真机验证。当前有记录的文件级设备证据为 v0.1.11 同一 Wi-Fi 下 Android→Windows 小文件传输并通过 SHA-256 核对；反向传输、热点、跨网络、大文件恢复和断网续传仍未验证 |
+| Flutter 应用 | Android、Windows、iOS 工程和 T12 共享 UI 基线已建立；PR #75–#81 已合并，包含发现/传输流程改进。v0.1.17 自动化测试和构建通过，但尚无该版本真机验证。当前有记录的文件级设备证据为 v0.1.11 同一 Wi-Fi 下 Android→Windows 小文件传输并通过 SHA-256 核对；反向传输、热点、跨网络、大文件恢复和断网续传仍未验证 |
 | 自动化发布 | `master` 的 CI 成功后自动构建 Android、Windows、macOS、Linux 并创建 GitHub Release，附带 release notes 与 SHA-256 清单 |
 
 **当前没有承诺的能力**：互联网远程传输、云端中转、BLE 文件承载、目录实时同步、后台无限运行、Windows MSIX、Android Play/AAB、正式代码签名和 iOS 发布。
@@ -93,10 +99,10 @@ flowchart TB
 
 NearSend 当前处于 **S0 技术验证和协议细化阶段**。仓库已有协议、配对、存储、分块、终检、UI 装配和 GitHub 发布流水线的可审阅实现；但这些实现必须和对应证据一起阅读，不能把“代码存在”“单元测试通过”或“CI 构建成功”当作完整产品验收。
 
-截至 **2026-09-29**：
+截至 **2026-09-30**：
 
-- 最新预览版 [v0.1.14](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.14) 已由 GitHub Actions 发布，目标提交为 `dd90cb7d425a2d5af396d920a27b6ea60c1177d7`；CI 和 release 工作流成功，含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 SHA-256 清单。该版本仍为 prerelease。
-- [PR #75](https://github.com/yanzhao77/NearSend/pull/75)、[#76](https://github.com/yanzhao77/NearSend/pull/76)、[#77](https://github.com/yanzhao77/NearSend/pull/77) 和 [#78](https://github.com/yanzhao77/NearSend/pull/78) 已合并；PR #78 的发现与传输工作流改进已进入 v0.1.14。CI 跑完 1418 项 Flutter 测试并构建 Android debug APK，但没有目标设备回归。
+- 最新预览版 [v0.1.17](https://github.com/yanzhao77/NearSend/releases/tag/v0.1.17) 已由 GitHub Actions 发布，目标提交为 `64a2582cfab137a1735d0e8f07cecbebff253095`；CI 和 release 工作流成功，含 Android APK、Windows x64 ZIP、macOS ZIP、Linux amd64 DEB/便携包和 SHA-256 清单。该版本仍为 prerelease。
+- [PR #75](https://github.com/yanzhao77/NearSend/pull/75)、[#76](https://github.com/yanzhao77/NearSend/pull/76)、[#77](https://github.com/yanzhao77/NearSend/pull/77) 和 [#78](https://github.com/yanzhao77/NearSend/pull/78) 已合并；PR #81 的连接进度和任务修复也已进入 v0.1.17。CI 跑完 1422 项 Flutter 测试并构建 Android debug APK，但没有目标设备回归。
 - 最新文件级真机证据仍为 v0.1.11：同一 5GHz Wi-Fi 下 Android→Windows 传输 6,683 字节文件，接收文件 SHA-256 匹配。Windows→Android、热点、跨网络、大文件断点恢复和断网重连尚未通过实机验收；详见[验收记录](docs/releases/1.2/ACCEPTANCE.md)。
 - T12 UI 全平台改造已通过 [PR #61](https://github.com/yanzhao77/NearSend/pull/61) 合并到 `master`；代码级测试与 CI 构建不能替代 Windows/iOS 平台及双机实测，当前仍不能宣称跨平台产品闭环已验收。
 - 正式发版仍受阻：Android 使用 debug signing，macOS 未签名且未 notarize，release 工作流固定创建 prerelease；Linux 仅构建 amd64。切换 stable 前需完成受保护环境签名配置、工作流稳定发布路径及目标设备验收。

@@ -30,6 +30,11 @@ void main() {
         PairedClientPresence(sessionId: 'qr', label: 'Phone', isRecent: false),
       ]);
       expect(radar.qrSessionDevices.single.isReady, isFalse);
+      expect(
+        radar.qrSessionDevices.single.connectionRef!.kind,
+        DeviceConnectionKind.incomingSession,
+      );
+      expect(radar.qrSessionDevices.single.connectionRef!.id, 'qr');
       radar.syncQrSessions(const []);
       expect(radar.qrSessionDevices, isEmpty);
     },
