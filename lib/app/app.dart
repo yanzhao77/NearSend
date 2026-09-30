@@ -484,6 +484,7 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
       if (action == true && context.mounted) await _scanFromHome(context);
       return;
     }
+    bool disconnecting = false;
     Widget card(BuildContext cardContext) => ListenableBuilder(
       listenable: Listenable.merge([
         _radar,
@@ -518,32 +519,42 @@ class _NearSendAppState extends State<NearSendApp> with WidgetsBindingObserver {
           onDisconnect: !connected
               ? null
               : () async {
-                  if (count > 0) {
-                    final confirmed = await showDialog<bool>(
-                      context: cardContext,
-                      builder: (confirmContext) => AlertDialog(
-                        title: const Text('中断传输并断开？'),
-                        content: Text(
-                          '该设备有 $count 个活动任务。断开会中断传输，已接收数据会保留；是否可继续以任务状态为准。',
+                  if (disconnecting) return;
+                  disconnecting = true;
+                  final cardRoute = ModalRoute.of(cardContext);
+                  final navigator = Navigator.of(cardContext);
+                  try {
+                    if (count > 0) {
+                      final confirmed = await showDialog<bool>(
+                        context: cardContext,
+                        builder: (confirmContext) => AlertDialog(
+                          title: const Text('中断传输并断开？'),
+                          content: Text(
+                            '该设备有 $count 个活动任务。断开会中断传输，已接收数据会保留；是否可继续以任务状态为准。',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmContext).pop(false),
+                              child: const Text('继续传输'),
+                            ),
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(confirmContext).pop(true),
+                              child: const Text('断开连接'),
+                            ),
+                          ],
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.of(confirmContext).pop(false),
-                            child: const Text('继续传输'),
-                          ),
-                          FilledButton(
-                            onPressed: () =>
-                                Navigator.of(confirmContext).pop(true),
-                            child: const Text('断开连接'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed != true) return;
+                      );
+                      if (confirmed != true) return;
+                    }
+                    await _disconnectDevice(ref);
+                    if (cardRoute != null && cardRoute.isActive) {
+                      navigator.removeRoute(cardRoute);
+                    }
+                  } finally {
+                    disconnecting = false;
                   }
-                  await _disconnectDevice(ref);
-                  if (cardContext.mounted) Navigator.of(cardContext).pop();
                 },
         );
       },

@@ -265,12 +265,47 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
     expect(node.node!.pairing.hasPairedClient(otherPayload.sessionId), isTrue);
+    const activeTask = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    node.node!.database.db.execute(
+      '''INSERT INTO tasks (task_id, role, direction, state, protocol_major, protocol_minor, lease_epoch, created_at, updated_at) VALUES (?, 'receiver', 'client_to_server', 'transferring', 1, 0, 1, 1, 1);''',
+      [activeTask],
+    );
+    node.node!.ownership.assign(activeTask, payload.sessionId);
     await tester.tap(find.text('扫码手机'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    final disconnect = tester
+        .widget<ConnectedDeviceCard>(find.byType(ConnectedDeviceCard))
+        .onDisconnect!;
+    disconnect();
+    disconnect();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('中断传输并断开？'), findsOneWidget);
+    await tester.tap(find.text('继续传输'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(node.node!.pairing.hasPairedClient(payload.sessionId), isTrue);
+    expect(
+      node.node!.transfers.taskState(activeTask),
+      TransferState.transferring,
+    );
     await tester.tap(find.text('断开连接'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('断开连接'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      node.node!.transfers.taskState(activeTask),
+      TransferState.interrupted,
+    );
     expect(node.node!.pairing.hasPairedClient(payload.sessionId), isFalse);
     expect(node.phase, NodePhase.ready);
     expect(node.node!.pairing.hasPairedClient(otherPayload.sessionId), isTrue);
